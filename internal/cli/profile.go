@@ -14,7 +14,7 @@ func newProfileCmd() *cobra.Command {
 		Short: "Manage named workspace profiles",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Profile commands don't need a DB
-			return nil
+			return runGuard(cmd)
 		},
 	}
 	cmd.AddCommand(

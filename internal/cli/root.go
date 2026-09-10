@@ -45,8 +45,45 @@ var (
 
 var app = &App{}
 
+// guard körs innan ett kommando får öppna databasen. backlog-pm sätter den
+// för att aldrig kunna köra mot vardagsdatabasen. Nil i vanliga backlog.
+var guard func(cmd *cobra.Command) error
+
+// SetGuard registrerar en spärr som körs före varje kommando utom version,
+// completion och help.
+func SetGuard(g func(cmd *cobra.Command) error) { guard = g }
+
 func Execute() error {
 	return newRootCmd().Execute()
+}
+
+// NewRoot bygger rotkommandot under ett eget namn och med extra
+// underkommandon. Används av backlog-pm.
+func NewRoot(use string, extra ...*cobra.Command) *cobra.Command {
+	root := newRootCmd()
+	if use != "" {
+		root.Use = use
+	}
+	root.AddCommand(extra...)
+	return root
+}
+
+// ExecuteRoot kör ett rotkommando byggt av NewRoot.
+func ExecuteRoot(use string, extra ...*cobra.Command) error {
+	return NewRoot(use, extra...).Execute()
+}
+
+// runGuard kör den registrerade spärren. Anropas från rotens och profilens
+// PersistentPreRunE - cobra kör bara den närmaste i kedjan.
+func runGuard(cmd *cobra.Command) error {
+	if guard == nil {
+		return nil
+	}
+	switch cmd.Name() {
+	case "version", "completion", "help", "__complete":
+		return nil
+	}
+	return guard(cmd)
 }
 
 func newRootCmd() *cobra.Command {
@@ -55,6 +92,9 @@ func newRootCmd() *cobra.Command {
 		Short: "A local-first, agent-friendly task backlog",
 		Long:  "Backlog is a fast CLI for managing tasks, plans, and backlogs — designed for humans and AI agents.",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := runGuard(cmd); err != nil {
+				return err
+			}
 			// Commands that don't need a DB
 			switch cmd.Name() {
 			case "version", "profile", "completion", "init", "install-skills":
@@ -212,7 +252,7 @@ func newVersionCmd() *cobra.Command {
 			if v != "dev" && !strings.HasPrefix(v, "v") {
 				v = "v" + v
 			}
-			fmt.Printf("backlog %s\n", v)
+			fmt.Printf("%s %s\n", cmd.Root().Name(), v)
 			return nil
 		},
 	}

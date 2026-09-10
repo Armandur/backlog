@@ -1,12 +1,16 @@
 BIN        := backlog
+PM_BIN     := backlog-pm
 BUILD_DIR  := .
 VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS    := -ldflags "-X main.version=$(VERSION)"
 
-.PHONY: build test test-verbose test-race test-e2e fmt vet lint cover install clean snapshot tidy
+.PHONY: build build-pm test test-verbose test-race test-e2e fmt vet lint cover install clean snapshot tidy
 
 build:
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BIN) ./cmd/backlog
+
+build-pm:
+	go build $(LDFLAGS) -o $(BUILD_DIR)/$(PM_BIN) ./cmd/backlog-pm
 
 install:
 	go install $(LDFLAGS) ./cmd/backlog
@@ -47,7 +51,7 @@ snapshot:
 	goreleaser release --snapshot --clean
 
 clean:
-	rm -f $(BIN) coverage.out
+	rm -f $(BIN) $(PM_BIN) coverage.out
 	rm -rf dist/
 
 .DEFAULT_GOAL := build
