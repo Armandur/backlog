@@ -1,10 +1,12 @@
 package pmweb
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -27,7 +29,27 @@ func NewWebCmd(hamtaRegister func() (*pm.AgentRegister, error)) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			srv := New(cli.DB(), cli.CurrentActor(), reg)
+			konfig, err := pm.LasKonfig(cli.WorkDir())
+			if err != nil {
+				return err
+			}
+			utdelare := pm.NewUtdelare(cli.DB(), konfig, reg)
+			workspace := cli.WorkDir()
+			profil := profilNamn()
+			srv := New(cli.DB(), cli.CurrentActor(), reg).MedUtdelare(
+				func(taskID, agent string) string {
+					// Körningen lever längre än HTTP-anropet.
+					go func() {
+						_, err := utdelare.DelaUt(context.Background(), pm.UtdelInput{
+							TaskID: taskID, Overstyrning: agent,
+							WorkspaceDir: workspace, Profil: profil, PMBinar: pm.PMBinar(),
+						})
+						if err != nil {
+							fmt.Fprintf(os.Stderr, "utdelning misslyckades: %v\n", err)
+						}
+					}()
+					return "körningen startad, följ den under pågående körningar"
+				})
 			addr := net.JoinHostPort(bind, fmt.Sprintf("%d", port))
 			vard, felVard := os.Hostname()
 			if felVard != nil || vard == "" {
@@ -46,4 +68,18 @@ func NewWebCmd(hamtaRegister func() (*pm.AgentRegister, error)) *cobra.Command {
 	cmd.Flags().IntVar(&port, "port", 6060, "port att lyssna på")
 	cmd.Flags().StringVar(&bind, "bind", "", "adress att binda till, tom betyder alla gränssnitt")
 	return cmd
+}
+
+// profilNamn läser --profile ur argumenten, så körningar och MCP pekar på
+// samma workspace som webben.
+func profilNamn() string {
+	for i, a := range os.Args {
+		if a == "--profile" && i+1 < len(os.Args) {
+			return os.Args[i+1]
+		}
+		if strings.HasPrefix(a, "--profile=") {
+			return strings.TrimPrefix(a, "--profile=")
+		}
+	}
+	return ""
 }

@@ -133,12 +133,12 @@ func TestTradVyOchUpstreamFinnsKvar(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/pm/demo", nil))
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "samtal.js") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "pm.js") {
 		t.Fatalf("tråd-vyn gav %d: %s", w.Code, w.Body.String())
 	}
 
 	cw := httptest.NewRecorder()
-	srv.ServeHTTP(cw, httptest.NewRequest(http.MethodGet, "/pm-static/samtal.js", nil))
+	srv.ServeHTTP(cw, httptest.NewRequest(http.MethodGet, "/pm-static/pm.js", nil))
 	if cw.Code != http.StatusOK {
 		t.Fatalf("statisk fil gav %d", cw.Code)
 	}
@@ -147,5 +147,132 @@ func TestTradVyOchUpstreamFinnsKvar(t *testing.T) {
 	srv.ServeHTTP(uw, httptest.NewRequest(http.MethodGet, "/api/projects", nil))
 	if uw.Code != http.StatusOK || !strings.Contains(uw.Body.String(), "demo") {
 		t.Fatalf("upstreams projekt-API gav %d: %s", uw.Code, uw.Body.String())
+	}
+}
+
+func TestOversiktsroutenGerSektionerna(t *testing.T) {
+	srv, db := testServer(t)
+	nu := timeutil.Now()
+	var projectID string
+	if err := db.QueryRow(`SELECT id FROM projects WHERE alias='demo'`).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+	taskID := ids.New()
+	if _, err := db.Exec(`INSERT INTO tasks(id, project_id, title, description, type, status, priority, task_seq, created_at, updated_at)
+	                      VALUES(?,?,?,?,'task','todo',1,42,?,?)`, taskID, projectID, "Öppna P1-tasken", "text", nu, nu); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/oversikt", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("oversikt gav %d: %s", w.Code, w.Body.String())
+	}
+	var o Oversikt
+	if err := json.NewDecoder(w.Body).Decode(&o); err != nil {
+		t.Fatalf("kunde inte läsa svaret: %v", err)
+	}
+	if o.Projekt == nil || o.Projekt.Alias != "demo" {
+		t.Fatalf("projektet saknas i svaret: %+v", o.Projekt)
+	}
+	if len(o.Tasks) != 1 || o.Tasks[0].Ref != "TASK-42" {
+		t.Fatalf("tasklistan är fel: %+v", o.Tasks)
+	}
+	// En öppen P1-task utan körning ska ligga under "väntar på mig".
+	if len(o.Vantar) != 1 || o.Vantar[0].Sort != "beslut" {
+		t.Fatalf("väntar-listan är fel: %+v", o.Vantar)
+	}
+
+	nw := httptest.NewRecorder()
+	srv.ServeHTTP(nw, httptest.NewRequest(http.MethodGet, "/api/projects/finns-inte/oversikt", nil))
+	if nw.Code != http.StatusNotFound {
+		t.Fatalf("okänt projekt gav %d", nw.Code)
+	}
+}
+
+// Ett obesvarat agentinlägg i tråden ska visas som en fråga.
+func TestOversiktVisarObesvaradAgentfraga(t *testing.T) {
+	srv, db := testServer(t)
+	var projectID string
+	if err := db.QueryRow(`SELECT id FROM projects WHERE alias='demo'`).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pm.NewSamtalStore(db).Add(context.Background(), projectID, "",
+		models.Actor{Kind: models.ActorKindAI, Name: "fake-modell"}, "Ska jag hoppa över containern?"); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/oversikt", nil))
+	var o Oversikt
+	if err := json.NewDecoder(w.Body).Decode(&o); err != nil {
+		t.Fatal(err)
+	}
+	hittad := false
+	for _, v := range o.Vantar {
+		if v.Sort == "fraga" && strings.Contains(v.Text, "hoppa över containern") {
+			hittad = true
+		}
+	}
+	if !hittad {
+		t.Fatalf("den obesvarade frågan saknas: %+v", o.Vantar)
+	}
+}
+
+func TestDelaUtRoutenStartarKorningen(t *testing.T) {
+	srv, db := testServer(t)
+	nu := timeutil.Now()
+	var projectID string
+	if err := db.QueryRow(`SELECT id FROM projects WHERE alias='demo'`).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO tasks(id, project_id, title, description, type, status, priority, task_seq, created_at, updated_at)
+	                      VALUES(?,?,?,?,'task','todo',3,43,?,?)`, ids.New(), projectID, "Task att dela ut", "text", nu, nu); err != nil {
+		t.Fatal(err)
+	}
+
+	startade := make(chan string, 1)
+	srv.MedUtdelare(func(taskID, agent string) string {
+		startade <- agent
+		return "startad"
+	})
+
+	kropp := bytes.NewBufferString(`{"task":"TASK-43","agent":"fake-modell"}`)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/dela-ut", kropp))
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("dela-ut gav %d: %s", w.Code, w.Body.String())
+	}
+	select {
+	case agent := <-startade:
+		if agent != "fake-modell" {
+			t.Fatalf("fel agent skickades vidare: %q", agent)
+		}
+	default:
+		t.Fatal("utdelaren anropades aldrig")
+	}
+
+	// Okänd agent ska avvisas innan något startas.
+	aw := httptest.NewRecorder()
+	srv.ServeHTTP(aw, httptest.NewRequest(http.MethodPost, "/api/projects/demo/dela-ut",
+		bytes.NewBufferString(`{"task":"TASK-43","agent":"finns-inte"}`)))
+	if aw.Code != http.StatusBadRequest {
+		t.Fatalf("okänd agent gav %d", aw.Code)
+	}
+	// Okänd task ska ge 404.
+	tw := httptest.NewRecorder()
+	srv.ServeHTTP(tw, httptest.NewRequest(http.MethodPost, "/api/projects/demo/dela-ut",
+		bytes.NewBufferString(`{"task":"TASK-9999"}`)))
+	if tw.Code != http.StatusNotFound {
+		t.Fatalf("okänd task gav %d", tw.Code)
+	}
+}
+
+func TestDelaUtUtanUtdelareGer503(t *testing.T) {
+	srv, _ := testServer(t)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/dela-ut",
+		bytes.NewBufferString(`{"task":"TASK-1"}`)))
+	if w.Code != http.StatusNotFound && w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("utan utdelare väntade 404 eller 503, fick %d", w.Code)
 	}
 }

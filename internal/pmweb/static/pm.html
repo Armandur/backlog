@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>backlog-pm</title>
+<link rel="stylesheet" href="/pm-static/pm.css">
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="brand">backlog-pm</div>
+    <div class="proj"><span id="projnamn"></span> <a href="/" class="upstream">backlog-UI</a></div>
+  </header>
+
+  <nav class="rail" id="nav">
+    <button data-v="projekt" class="on">Projekt</button>
+    <button data-v="samtal">Samtal</button>
+    <button data-v="korningar">Körningar <span class="n" id="nRun"></span></button>
+  </nav>
+
+  <main>
+    <section class="view on" id="v-projekt">
+      <h1 id="ptitel">Projekt</h1>
+      <p class="lead" id="pdesc"></p>
+      <div class="grid">
+        <div class="stack">
+          <section>
+            <h2>Pågående körningar <span class="n" id="nPagaende"></span></h2>
+            <div class="list" id="pagaende"></div>
+          </section>
+          <section>
+            <h2>Tasks <span class="n" id="nTasks"></span></h2>
+            <div class="list" id="tasks"></div>
+          </section>
+        </div>
+        <div class="stack">
+          <section>
+            <h2>Väntar på mig <span class="n" id="nVantar"></span></h2>
+            <div class="list" id="vantar"></div>
+          </section>
+          <section>
+            <h2>Blockerat <span class="n" id="nBlockerat"></span></h2>
+            <div class="list" id="blockerat"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="v-samtal">
+      <h1>Samtal</h1>
+      <p class="lead">Tråden är projektets minne mellan sessioner. Agenten svarar med öppna tasks och projektminnet som kontext.</p>
+      <ol id="trad" class="trad" aria-live="polite"></ol>
+      <form id="skrivform" class="skriv">
+        <label for="text" class="dold">Ditt inlägg</label>
+        <textarea id="text" name="text" rows="3" placeholder="Skriv ett inlägg..." required></textarea>
+        <div class="rad">
+          <label for="aktor" class="dold">Aktör</label>
+          <input id="aktor" name="aktor" value="human:rasmus" spellcheck="false">
+          <label class="kryss"><input type="checkbox" id="fraga"> Fråga agenten</label>
+          <button type="submit" id="skicka" class="btn pri">Skicka</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="view" id="v-korningar">
+      <h1>Körningar</h1>
+      <p class="lead">Varje utdelning blir en körning med agent, status, exitkod och logg.</p>
+      <div class="list" id="korningar"></div>
+      <div id="loggruta" hidden>
+        <h2 id="loggtitel"></h2>
+        <pre class="logg" id="logg"></pre>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Dela ut task">
+  <header><h3>Dela ut</h3><button class="x" id="stang" aria-label="Stäng">×</button></header>
+  <div class="bd">
+    <div class="falt"><label>Task</label><div class="val" id="dTask"></div></div>
+    <div class="falt">
+      <label for="dAgent">Agent</label>
+      <select id="dAgent"></select>
+      <p class="regel" id="dRegel">Tomt val betyder att regelfilen väljer agent.</p>
+    </div>
+    <div class="falt"><label>Så här går det till</label>
+      <p class="brief">Briefen bär taskens beskrivning, projektminnet och de senaste samtalsinläggen. Tasken flyttas till <code>doing</code> vid start, och resultatet landar som kommentar från <code>ai:&lt;agent&gt;</code>. Exitkod 0 ger <code>done</code>, annars går tasken tillbaka till <code>todo</code>.</p>
+    </div>
+    <p class="notis" id="dNotis" hidden></p>
+  </div>
+  <footer>
+    <button class="btn" id="dAvbryt">Avbryt</button>
+    <button class="btn pri" id="dStarta">Starta körning</button>
+  </footer>
+</aside>
+<div class="toast" id="toast"></div>
+
+<script src="/pm-static/pm.js"></script>
+</body>
+</html>

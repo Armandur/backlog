@@ -15,6 +15,7 @@ import (
 
 	"github.com/mazen160/backlog/internal/models"
 	"github.com/mazen160/backlog/internal/pm"
+	"github.com/mazen160/backlog/internal/service"
 	"github.com/mazen160/backlog/internal/web"
 )
 
@@ -22,16 +23,27 @@ import (
 var staticFiles embed.FS
 
 // Server hanterar PM-rutterna och skickar resten vidare till upstream.
+// Utdelarfunktion startar en körning i bakgrunden och ger ett kvitto att
+// visa i UI:t. Servern äger inte utdelningen, web-kommandot kopplar in den.
+type Utdelarfunktion func(taskID, agent string) string
+
 type Server struct {
 	db       *sql.DB
 	aktor    models.Actor
 	register *pm.AgentRegister
+	utdelare Utdelarfunktion
 	mux      *http.ServeMux
 }
 
 func New(db *sql.DB, aktor models.Actor, register *pm.AgentRegister) *Server {
 	s := &Server{db: db, aktor: aktor, register: register, mux: http.NewServeMux()}
 	s.rutter(web.New(db, aktor))
+	return s
+}
+
+// MedUtdelare kopplar in utdelningen. Utan den svarar dela-ut med 503.
+func (s *Server) MedUtdelare(f Utdelarfunktion) *Server {
+	s.utdelare = f
 	return s
 }
 
@@ -45,8 +57,11 @@ func (s *Server) rutter(upstream http.Handler) {
 		w.Header().Set("Allow", "GET, POST")
 		svaraFel(w, fmt.Errorf("metoden %s stöds inte på samtalsrouten", r.Method), http.StatusMethodNotAllowed)
 	})
+	s.mux.HandleFunc("GET /api/projects/{alias}/oversikt", s.hamtaOversikt)
+	s.mux.HandleFunc("POST /api/projects/{alias}/dela-ut", s.delaUt)
 	s.mux.HandleFunc("GET /api/projects/{alias}/korningar", s.hamtaKorningar)
 	s.mux.HandleFunc("GET /api/korningar/{id}", s.hamtaKorning)
+	s.mux.HandleFunc("GET /api/agenter", s.hamtaAgenter)
 	s.mux.HandleFunc("GET /pm/{alias}", s.tradVy)
 	s.mux.HandleFunc("GET /pm/", s.tradVy)
 
@@ -58,7 +73,7 @@ func (s *Server) rutter(upstream http.Handler) {
 }
 
 func (s *Server) tradVy(w http.ResponseWriter, r *http.Request) {
-	data, err := staticFiles.ReadFile("static/samtal.html")
+	data, err := staticFiles.ReadFile("static/pm.html")
 	if err != nil {
 		http.Error(w, "sidan saknas", http.StatusInternalServerError)
 		return
@@ -145,6 +160,59 @@ func (s *Server) skrivSamtal(w http.ResponseWriter, r *http.Request) {
 	svaraJSON(w, http.StatusCreated, post)
 }
 
+func (s *Server) hamtaOversikt(w http.ResponseWriter, r *http.Request) {
+	o, err := byggOversikt(r.Context(), s.db, r.PathValue("alias"))
+	if err != nil {
+		svaraFel(w, err, http.StatusNotFound)
+		return
+	}
+	svaraJSON(w, http.StatusOK, o)
+}
+
+type utdelBody struct {
+	Task  string `json:"task"`
+	Agent string `json:"agent"`
+}
+
+// delaUt startar körningen i bakgrunden och svarar direkt. Vyn följer
+// statusen genom att polla översikten.
+func (s *Server) delaUt(w http.ResponseWriter, r *http.Request) {
+	alias := r.PathValue("alias")
+	if _, err := pm.NewSamtalStore(s.db).ProjectIDByAlias(r.Context(), alias); err != nil {
+		svaraFel(w, err, http.StatusNotFound)
+		return
+	}
+	var body utdelBody
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+		svaraFel(w, errors.New("kunde inte läsa utdelningen"), http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(body.Task) == "" {
+		svaraFel(w, errors.New("ange vilken task som ska delas ut"), http.StatusBadRequest)
+		return
+	}
+	if s.utdelare == nil {
+		svaraFel(w, errors.New("utdelaren är inte konfigurerad i den här servern"), http.StatusServiceUnavailable)
+		return
+	}
+
+	tasks := service.NewTaskService(s.db, service.NewPlanService(s.db), service.NewLabelService(s.db))
+	taskID, err := tasks.ResolveRef(r.Context(), body.Task)
+	if err != nil {
+		svaraFel(w, fmt.Errorf("hittade inte tasken %q", body.Task), http.StatusNotFound)
+		return
+	}
+	if body.Agent != "" {
+		if _, err := s.register.Hamta(body.Agent); err != nil {
+			svaraFel(w, err, http.StatusBadRequest)
+			return
+		}
+	}
+
+	klart := s.utdelare(taskID, body.Agent)
+	svaraJSON(w, http.StatusAccepted, map[string]any{"startad": true, "task": body.Task, "agent": body.Agent, "kvitto": klart})
+}
+
 func (s *Server) hamtaKorningar(w http.ResponseWriter, r *http.Request) {
 	projectID, err := pm.NewSamtalStore(s.db).ProjectIDByAlias(r.Context(), r.PathValue("alias"))
 	if err != nil {
@@ -157,6 +225,14 @@ func (s *Server) hamtaKorningar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	svaraJSON(w, http.StatusOK, map[string]any{"korningar": korningar})
+}
+
+func (s *Server) hamtaAgenter(w http.ResponseWriter, r *http.Request) {
+	namn := []string{}
+	if s.register != nil {
+		namn = s.register.Namn()
+	}
+	svaraJSON(w, http.StatusOK, map[string]any{"agenter": namn})
 }
 
 func (s *Server) hamtaKorning(w http.ResponseWriter, r *http.Request) {
