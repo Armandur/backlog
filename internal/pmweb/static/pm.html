@@ -24,10 +24,12 @@
     <section class="view on" id="v-projekt">
       <h1 id="ptitel">Projekt</h1>
       <p class="lead" id="pdesc"></p>
+      <p class="begrepp">När du delar ut en task väljer PM en agent och startar en körning.</p>
       <div class="grid">
         <div class="stack">
           <section>
             <h2>Pågående körningar <span class="n" id="nPagaende"></span></h2>
+            <p class="begrepp">En körning visar arbetet som en agent gör med en task.</p>
             <div class="list" id="pagaende"></div>
           </section>
           <section>
@@ -66,7 +68,7 @@
 
     <section class="view" id="v-korningar">
       <h1>Körningar</h1>
-      <p class="lead">Varje utdelning blir en körning med agent, status, exitkod och logg.</p>
+      <p class="lead">En körning börjar när PM ber en agent arbeta med en task. En utdelning betyder att PM väljer task och agent. Exitkoden visar om agentens kommando lyckades. Koden 0 betyder att kommandot lyckades.</p>
       <div class="list" id="korningar"></div>
       <div id="loggruta" hidden>
         <h2 id="loggtitel"></h2>
@@ -76,13 +78,38 @@
 
     <section class="view" id="v-konfig">
       <h1>Agenter och regler</h1>
-      <p class="lead" id="konfigMeta">Läser konfigurationen...</p>
+      <p class="lead">Här väljer du vilka agenter PM kan använda och hur PM startar dem. När du sparar använder PM inställningarna vid nästa utdelning.</p>
+      <p class="konfig-meta" id="konfigMeta">Läser konfigurationen...</p>
       <p class="notis konfig-varning">När du sparar skriver PM om hela filen. Kommentarer och okända nycklar försvinner.</p>
+      <aside class="kommandoexempel">
+        <h2>Så blir kommandot</h2>
+        <p>PM ersätter <code>{brief}</code> med arbetsbeskrivningen som agenten ska följa.</p>
+        <p>Exemplet använder kommandot <code>claude</code>. Args innehåller <code>-p</code> och <code>{brief}</code> på varsin rad.</p>
+        <p>PM kan då starta denna färdiga kommandorad:</p>
+        <pre><code>claude -p "Fixa TASK-1746 enligt beskrivningen"</code></pre>
+      </aside>
+      <template id="agentHjalp">
+        <span class="falttips" data-hjalp="kommando">PM startar programmet som du skriver här. Exempel är <code>claude</code> och <code>codex</code>.</span>
+        <span class="falttips" data-hjalp="args">PM skickar dessa inställningar till programmet. Skriv varje argument på en egen rad.</span>
+        <span class="falttips" data-hjalp="brief">Briefen är arbetsbeskrivningen. Välj <code>arg</code> för ett kommandoargument eller <code>stdin</code> för programmets indata.</span>
+        <span class="falttips" data-hjalp="svar">Välj <code>stdout</code> när programmet skriver svaret direkt. Välj <code>fil</code> när programmet sparar svaret i en fil.</span>
+        <span class="falttips" data-hjalp="stdin">Värdet styr programmets indata. <code>devnull</code> stänger indata när briefen ligger i args.</span>
+        <span class="falttips" data-hjalp="timeout">PM stoppar agenten efter så många sekunder.</span>
+        <span class="falttips" data-hjalp="mcp">PM lägger till sin MCP-konfiguration när programmet startar. Då kan agenten läsa och ändra projektets data.</span>
+      </template>
       <form id="konfigform" class="konfigform">
         <section class="konfigsektion">
           <div class="sektionshuvud">
             <h2>Agenter</h2>
-            <button type="button" class="btn sm" id="laggTillAgent">Lägg till agent</button>
+            <div class="laggtillrad">
+              <label for="agentmall">Mall</label>
+              <select id="agentmall">
+                <option value="tom">Tom agent</option>
+                <option value="claude">Claude Code</option>
+                <option value="codex">Codex</option>
+              </select>
+              <button type="button" class="btn sm" id="laggTillAgent">Lägg till agent</button>
+            </div>
           </div>
           <label class="falt kompakt" for="defaultAgent">Förvald agent
             <select id="defaultAgent"></select>

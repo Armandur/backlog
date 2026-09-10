@@ -63,6 +63,7 @@ h1 { font-size: 22px; margin: 0 0 4px; }
 h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--svag); margin: 0 0 10px; display: flex; gap: 8px; align-items: center; }
 h2 .n { font-weight: 500; background: var(--sankt); border-radius: 10px; padding: 0 7px; font-size: 12px; letter-spacing: 0; }
 .lead { color: var(--svag); margin: 0 0 20px; max-width: 64ch; }
+.begrepp { color: var(--svag); font-size: 13px; margin: -4px 0 10px; max-width: 64ch; }
 .view { display: none; } .view.on { display: block; }
 .grid { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr) 300px; }
 .stack { display: grid; gap: 22px; min-width: 0; align-content: start; }
@@ -141,10 +142,18 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 
 /* Konfigredigeraren */
 .konfigform { display: grid; gap: 22px; max-width: 920px; }
+.konfig-meta { color: var(--svag); margin: -12px 0 12px; font-size: 13px; }
 .konfig-varning { margin: 0 0 20px; max-width: 920px; }
+.kommandoexempel { max-width: 920px; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 14px; margin-bottom: 20px; }
+.kommandoexempel p { margin: 5px 0; color: var(--svag); }
+.kommandoexempel pre { margin: 10px 0 0; overflow-x: auto; }
+.kommandoexempel pre code { display: block; padding: 10px 12px; }
 .konfigsektion { display: grid; gap: 12px; }
 .sektionshuvud { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sektionshuvud h2 { margin: 0; }
+.laggtillrad { display: flex; align-items: end; gap: 6px; }
+.laggtillrad label { color: var(--svag); font-size: 12px; font-weight: 600; }
+.laggtillrad select { min-width: 130px; padding: 3px 8px; font-size: 12px; }
 .falt.kompakt { max-width: 340px; }
 .kortlista { display: grid; gap: 12px; }
 .konfigkort { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 14px; display: grid; gap: 12px; }
@@ -157,6 +166,9 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 .regelgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .falt { display: grid; gap: 5px; color: var(--svag); font-size: 12px; font-weight: 600; }
 .falt input, .falt textarea, .falt select { color: var(--text); font-weight: 400; }
+.falttips { color: var(--svag); font-size: 12px; font-weight: 400; line-height: 1.35; text-transform: none; letter-spacing: 0; }
+.detaljkryss { flex-wrap: wrap; }
+.detaljkryss .falttips { flex-basis: 100%; }
 .konfigkort details { border-top: 1px solid var(--kant); padding-top: 10px; }
 .konfigkort summary, .kroksektion summary { color: var(--svag); cursor: pointer; font-weight: 600; }
 .konfigkort details[open] summary, .kroksektion[open] summary { margin-bottom: 12px; }
@@ -171,6 +183,9 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 }
 @media (max-width: 760px) {
   .sektionshuvud, .korthuvud { align-items: stretch; }
+  .sektionshuvud { flex-direction: column; }
+  .laggtillrad { align-items: end; }
+  .laggtillrad select { min-width: 0; }
   .korthuvud { flex-direction: column; }
   .agentnamn { max-width: none; }
   .kortknappar { justify-content: flex-end; }

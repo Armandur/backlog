@@ -5,6 +5,11 @@ let vy = location.hash.replace("#", "") || "projekt";
 let valdKorning = null;
 let agenter = [];
 let konfig = null;
+const AGENTMALLAR = {
+  tom: { namn: "ny-agent", kommando: "", args: ["{brief}"], brief: "arg", svar: "stdout", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: false },
+  claude: { namn: "claude", kommando: "claude", args: ["-p", "{brief}"], brief: "arg", svar: "stdout", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: true },
+  codex: { namn: "codex", kommando: "codex", args: ["exec", "-C", "{repo}", "-s", "workspace-write", "-c", "sandbox_workspace_write.network_access=true", "-o", "{svarsfil}", "{brief}"], brief: "arg", svar: "fil", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: false },
+};
 
 function tid(ns) {
   return new Date(Number(ns) / 1e6).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
@@ -329,6 +334,11 @@ function renderaKonfig() {
       <pre class="provsvar" hidden></pre>
     </article>`;
   }).join("") || '<div class="tom">Inga agenter. Lägg till en innan du sparar.</div>';
+  document.querySelectorAll(".agentkort").forEach((kort) => {
+    $("#agentHjalp").content.querySelectorAll("[data-hjalp]").forEach((hjalp) => {
+      kort.querySelector('[data-agentfalt="' + hjalp.dataset.hjalp + '"]').closest("label").append(hjalp.cloneNode(true));
+    });
+  });
 
   $("#regelkort").innerHTML = (konfig.regler || []).map((regel, i) => `<article class="konfigkort regelkort" data-regel="${i}">
     <div class="korthuvud"><strong>Regel ${i + 1}</strong><div class="kortknappar">
@@ -403,10 +413,12 @@ async function laddaKonfig() {
 
 $("#laggTillAgent").onclick = () => {
   try { konfig = samlaKonfig(); } catch (err) { return toast(err.message); }
-  let namn = "ny-agent";
+  const mall = AGENTMALLAR[$("#agentmall").value] || AGENTMALLAR.tom;
+  const { namn: basnamn, ...agent } = mall;
+  let namn = basnamn;
   let nummer = 2;
-  while (konfig.agenter[namn]) namn = `ny-agent-${nummer++}`;
-  konfig.agenter[namn] = { kommando: "", args: ["{brief}"], brief: "arg", svar: "stdout", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: false };
+  while (konfig.agenter[namn]) namn = basnamn + "-" + nummer++;
+  konfig.agenter[namn] = { ...agent, args: [...agent.args], miljo: {} };
   if (!konfig.default_agent) konfig.default_agent = namn;
   renderaKonfig();
 };
