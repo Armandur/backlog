@@ -95,8 +95,8 @@ func (u *Utdelare) DelaUt(ctx context.Context, in UtdelInput) (*Korning, error) 
 	}
 	defer las.Slapp()
 
-	u.krok(ctx, u.konfig.Krok.Anspraka, fakta, korning)
-	defer u.krok(context.WithoutCancel(ctx), u.konfig.Krok.Slapp, fakta, korning)
+	u.krok(ctx, u.konfig.Krok.Anspraka, fakta, korning, in)
+	defer u.krok(context.WithoutCancel(ctx), u.konfig.Krok.Slapp, fakta, korning, in)
 
 	return u.kor(ctx, store, korare, fakta, korning, in)
 }
@@ -172,23 +172,40 @@ func (u *Utdelare) skrivKommentar(ctx context.Context, fakta TaskFakta, korning 
 
 // krok kör ett valfritt externt anspråkskommando, t.ex. arbetar. Saknas kroken
 // händer ingenting och kön fungerar ändå.
-func (u *Utdelare) krok(ctx context.Context, mall []string, fakta TaskFakta, korning *Korning) {
+func (u *Utdelare) krok(ctx context.Context, mall []string, fakta TaskFakta, korning *Korning, in UtdelInput) {
 	if len(mall) == 0 {
 		return
 	}
-	in := KorInput{Repo: fakta.RepoPath, TaskRef: fakta.Ref, Logg: korning.Logg}
+	platshallare := KorInput{Repo: fakta.RepoPath, TaskRef: fakta.Ref, Logg: korning.Logg, Profil: in.Profil}
 	args := make([]string, 0, len(mall))
 	for _, del := range mall {
-		del = ersattPlatshallare(del, in)
+		del = ersattPlatshallare(del, platshallare)
 		args = append(args, strings.ReplaceAll(del, "{agent}", korning.Agent))
 	}
 	ctx, avbryt := context.WithTimeout(ctx, 30*time.Second)
 	defer avbryt()
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdin = nil
+	cmd.Env = krokMiljo(u.konfig.Krok.Miljo, in)
 	if ut, err := cmd.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "kroken %s misslyckades: %v: %s\n", args[0], err, strings.TrimSpace(string(ut)))
 	}
+}
+
+// krokMiljo pekar kroken mot PM-workspacet. Utan det kör ett backlog-baserat
+// verktyg som arbetar mot vardagsdatabasen och kan skriva på fel task.
+func krokMiljo(extra map[string]string, in UtdelInput) []string {
+	miljo := os.Environ()
+	if in.Profil != "" {
+		miljo = append(miljo, "BACKLOG_PROFILE="+in.Profil)
+	}
+	if in.WorkspaceDir != "" {
+		miljo = append(miljo, "BACKLOG_DB="+filepath.Join(in.WorkspaceDir, "backlog.db"))
+	}
+	for k, v := range extra {
+		miljo = append(miljo, k+"="+v)
+	}
+	return miljo
 }
 
 // LoggKatalog är där körningarnas loggar hamnar.

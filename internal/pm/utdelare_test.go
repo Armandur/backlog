@@ -283,3 +283,65 @@ func sistaKommentar(t *testing.T, db *sql.DB, taskID string) (string, string) {
 	}
 	return body, aktor
 }
+
+// Kroken måste peka på PM-workspacet. Utan det kör ett backlog-baserat
+// verktyg som arbetar mot vardagsdatabasen och skriver på fel task.
+func TestKrokenKorMotPMProfilen(t *testing.T) {
+	db := testDB(t)
+	ws := t.TempDir()
+	repo := t.TempDir()
+	pid := projektMedRepo(t, db, "demo", repo)
+	taskID := testTask(t, db, pid, "Task med krok", "text", 13)
+
+	spar := filepath.Join(ws, "krok.txt")
+	skript := filepath.Join(ws, "krok.sh")
+	innehall := "#!/bin/sh\n{\n  echo \"args: $*\"\n  echo \"BACKLOG_PROFILE=$BACKLOG_PROFILE\"\n  echo \"BACKLOG_DB=$BACKLOG_DB\"\n  echo \"EGEN=$EGEN\"\n} >> " + spar + "\n"
+	if err := os.WriteFile(skript, []byte(innehall), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	korare := &fejkKorare{namn: "fejk", utdata: "ok"}
+	u := utdelareMed(t, db, korare)
+	u.konfig.Krok = Krok{
+		Anspraka: []string{skript, "anspraka", "{task}", "{repo}"},
+		Slapp:    []string{skript, "slapp", "{task}"},
+		Miljo:    map[string]string{"EGEN": "värde"},
+	}
+
+	if _, err := u.DelaUt(context.Background(), UtdelInput{TaskID: taskID, WorkspaceDir: ws, Profil: "pm"}); err != nil {
+		t.Fatalf("dela-ut: %v", err)
+	}
+
+	data, err := os.ReadFile(spar)
+	if err != nil {
+		t.Fatalf("kroken kördes inte: %v", err)
+	}
+	text := string(data)
+	for _, vantat := range []string{"args: anspraka TASK-13", "args: slapp TASK-13", "BACKLOG_PROFILE=pm", "EGEN=värde"} {
+		if !strings.Contains(text, vantat) {
+			t.Fatalf("kroken saknar %q:\n%s", vantat, text)
+		}
+	}
+	if !strings.Contains(text, "BACKLOG_DB="+filepath.Join(ws, "backlog.db")) {
+		t.Fatalf("kroken pekar inte på PM-databasen:\n%s", text)
+	}
+}
+
+// Kön ska fungera utan krok - låsningen är PM:s egen.
+func TestKonFungerarUtanKrok(t *testing.T) {
+	db := testDB(t)
+	ws := t.TempDir()
+	repo := t.TempDir()
+	pid := projektMedRepo(t, db, "demo", repo)
+	taskID := testTask(t, db, pid, "Utan krok", "text", 14)
+
+	korare := &fejkKorare{namn: "fejk", utdata: "ok"}
+	u := utdelareMed(t, db, korare)
+	if len(u.konfig.Krok.Anspraka) != 0 {
+		t.Fatal("standardkonfigurationen ska inte ha någon krok")
+	}
+	k, err := u.DelaUt(context.Background(), UtdelInput{TaskID: taskID, WorkspaceDir: ws})
+	if err != nil || k.Status != StatusKlar {
+		t.Fatalf("körning utan krok ska bli klar, fick %+v %v", k, err)
+	}
+}

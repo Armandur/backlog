@@ -41,8 +41,9 @@ type Regel struct {
 // Krok kan anropa ett externt anspråkskommando, t.ex. arbetar. Kön fungerar
 // utan krok.
 type Krok struct {
-	Anspraka []string `toml:"anspraka"`
-	Slapp    []string `toml:"slapp"`
+	Anspraka []string          `toml:"anspraka"`
+	Slapp    []string          `toml:"slapp"`
+	Miljo    map[string]string `toml:"miljo"`
 }
 
 // Konfig är hela PM-konfigurationen.
