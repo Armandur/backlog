@@ -64,6 +64,7 @@ func (s *Server) rutter(upstream http.Handler) {
 	s.mux.HandleFunc("GET /api/agenter", s.hamtaAgenter)
 	s.mux.HandleFunc("GET /api/konfig", s.hamtaKonfig)
 	s.mux.HandleFunc("PUT /api/konfig", s.skrivKonfig)
+	s.mux.HandleFunc("POST /api/konfig/foresla", s.foreslaAgent)
 	s.mux.HandleFunc("POST /api/konfig/prova", s.provaKonfig)
 	s.mux.HandleFunc("GET /pm/{alias}", s.tradVy)
 	s.mux.HandleFunc("GET /pm/", s.tradVy)

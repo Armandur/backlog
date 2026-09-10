@@ -5,6 +5,7 @@ let vy = location.hash.replace("#", "") || "projekt";
 let valdKorning = null;
 let agenter = [];
 let konfig = null;
+const agentutkast = new Set();
 const AGENTMALLAR = {
   tom: { namn: "ny-agent", kommando: "", args: ["{brief}"], brief: "arg", svar: "stdout", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: false },
   claude: { namn: "claude", kommando: "claude", args: ["-p", "{brief}"], brief: "arg", svar: "stdout", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: true },
@@ -266,15 +267,9 @@ laddaAgenter().then(ladda);
 setInterval(ladda, 4000);
 
 // ---------- konfiguration ----------
-function rader(varden) {
-  return (varden || []).join("\n");
-}
-function kommaseparerat(varden) {
-  return (varden || []).join(", ");
-}
-function miljoRader(miljo) {
-  return Object.entries(miljo || {}).map(([namn, varde]) => `${namn}=${varde}`).join("\n");
-}
+function rader(varden) { return (varden || []).join("\n"); }
+function kommaseparerat(varden) { return (varden || []).join(", "); }
+function miljoRader(miljo) { return Object.entries(miljo || {}).map(([namn, varde]) => `${namn}=${varde}`).join("\n"); }
 function lasMiljo(text, falt) {
   const miljo = {};
   text.split("\n").map((rad) => rad.trim()).filter(Boolean).forEach((rad) => {
@@ -293,12 +288,7 @@ function agentAlternativ(vald) {
 }
 
 function normaliseraKonfig(data) {
-  data.agenter ||= {};
-  data.regler ||= [];
-  data.krok ||= {};
-  data.krok.anspraka ||= [];
-  data.krok.slapp ||= [];
-  data.krok.miljo ||= {};
+  data.agenter ||= {}; data.regler ||= []; data.krok ||= {}; data.krok.anspraka ||= []; data.krok.slapp ||= []; data.krok.miljo ||= {};
   return data;
 }
 
@@ -338,6 +328,9 @@ function renderaKonfig() {
     $("#agentHjalp").content.querySelectorAll("[data-hjalp]").forEach((hjalp) => {
       kort.querySelector('[data-agentfalt="' + hjalp.dataset.hjalp + '"]').closest("label").append(hjalp.cloneNode(true));
     });
+    if (agentutkast.has(kort.dataset.agent)) {
+      kort.classList.add("utkast"); kort.prepend($("#utkastMarke").content.cloneNode(true));
+    }
   });
 
   $("#regelkort").innerHTML = (konfig.regler || []).map((regel, i) => `<article class="konfigkort regelkort" data-regel="${i}">
@@ -411,6 +404,24 @@ async function laddaKonfig() {
   }
 }
 
+$("#forslagsform").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const knapp = $("#hamtaForslag");
+  $("#forslagsFel").textContent = "";
+  knapp.disabled = true;
+  try {
+    konfig = samlaKonfig();
+    const forslag = await hamta("/api/konfig/foresla", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ beskrivning: $("#verktygsbeskrivning").value }),
+    });
+    const { namn: basnamn, ...agent } = forslag;
+    let namn = basnamn, nummer = 2;
+    while (konfig.agenter[namn]) namn = basnamn + "-" + nummer++;
+    konfig.agenter[namn] = agent; agentutkast.add(namn);
+    if (!konfig.default_agent) konfig.default_agent = namn;
+    renderaKonfig();
+  } catch (err) { $("#forslagsFel").textContent = err.message; } finally { knapp.disabled = false; }
+});
 $("#laggTillAgent").onclick = () => {
   try { konfig = samlaKonfig(); } catch (err) { return toast(err.message); }
   const mall = AGENTMALLAR[$("#agentmall").value] || AGENTMALLAR.tom;
@@ -478,6 +489,7 @@ $("#konfigform").addEventListener("submit", async (e) => {
     konfig = utkast;
     konfig = normaliseraKonfig(await hamta("/api/konfig", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(utkast) }));
     agenter = Object.keys(konfig.agenter || {}).sort();
+    agentutkast.clear();
     renderaKonfig();
     toast("pm.toml är sparad.");
   } catch (err) {

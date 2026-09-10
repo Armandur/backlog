@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -61,6 +62,88 @@ func (s *Server) skrivKonfig(w http.ResponseWriter, r *http.Request) {
 
 type provaKonfigBody struct {
 	Agent string `json:"agent"`
+}
+
+type foreslaAgentBody struct {
+	Beskrivning string `json:"beskrivning"`
+	Agent       string `json:"agent"`
+}
+
+type agentForslag struct {
+	Namn string `json:"namn"`
+	pm.AgentKonfig
+}
+
+func (s *Server) foreslaAgent(w http.ResponseWriter, r *http.Request) {
+	var body foreslaAgentBody
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+		svaraFel(w, errors.New("kunde inte läsa beskrivningen av verktyget"), http.StatusBadRequest)
+		return
+	}
+	body.Beskrivning = strings.TrimSpace(body.Beskrivning)
+	if body.Beskrivning == "" {
+		svaraFel(w, errors.New("beskriv verktyget som agenten ska konfigurera"), http.StatusBadRequest)
+		return
+	}
+	if s.register == nil {
+		svaraFel(w, errors.New("ingen agent finns för att skapa ett förslag"), http.StatusServiceUnavailable)
+		return
+	}
+	agent, err := s.register.Hamta(strings.TrimSpace(body.Agent))
+	if err != nil {
+		svaraFel(w, err, http.StatusBadRequest)
+		return
+	}
+	ctx, avbryt := context.WithTimeout(r.Context(), provTimeout)
+	defer avbryt()
+	svar, err := agent.Fraga(ctx, byggForslagsprompt(body.Beskrivning))
+	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			svaraFel(w, errors.New("agenten hann inte skapa ett förslag"), http.StatusGatewayTimeout)
+			return
+		}
+		svaraFel(w, fmt.Errorf("agenten kunde inte skapa förslaget: %w", err), http.StatusBadGateway)
+		return
+	}
+	var forslag agentForslag
+	if err := json.Unmarshal([]byte(strings.TrimSpace(svar)), &forslag); err != nil {
+		svaraFel(w, errors.New("agenten svarade inte med ett giltigt agentblock"), http.StatusBadGateway)
+		return
+	}
+	forslag.Namn = strings.TrimSpace(forslag.Namn)
+	if forslag.Namn == "" {
+		svaraFel(w, errors.New("agentens förslag saknar ett namn"), http.StatusBadGateway)
+		return
+	}
+	if forslag.Args == nil {
+		forslag.Args = []string{}
+	}
+	if forslag.Miljo == nil {
+		forslag.Miljo = map[string]string{}
+	}
+	konfig := pm.Konfig{
+		DefaultAgent: forslag.Namn,
+		Agenter:      map[string]pm.AgentKonfig{forslag.Namn: forslag.AgentKonfig},
+	}
+	if err := konfig.Validera(); err != nil {
+		svaraFel(w, fmt.Errorf("agentens förslag går inte att använda: %w", err), http.StatusBadGateway)
+		return
+	}
+	svaraJSON(w, http.StatusOK, forslag)
+}
+
+func byggForslagsprompt(beskrivning string) string {
+	return fmt.Sprintf(`Du hjälper användaren att konfigurera ett agentverktyg i backlog-pm.
+Svara endast med ett JSON-objekt. Använd inga kodstaket eller förklaringar.
+Objektet ska ha fälten namn, kommando, args, brief, svar, stdin, timeout_sekunder, miljo och mcp.
+args ska vara en lista med ett kommandoargument per post.
+brief ska vara arg eller stdin. Lägg {brief} i args när brief är arg.
+svar ska vara stdout eller fil. Lägg {svarsfil} i args när svar är fil.
+miljo ska vara ett objekt med miljövariabler. mcp ska vara true eller false.
+
+Verktygets beskrivning:
+%s
+`, strings.TrimSpace(beskrivning))
 }
 
 func (s *Server) provaKonfig(w http.ResponseWriter, r *http.Request) {

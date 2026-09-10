@@ -88,6 +88,22 @@
         <p>PM kan då starta denna färdiga kommandorad:</p>
         <pre><code>claude -p "Fixa TASK-1746 enligt beskrivningen"</code></pre>
       </aside>
+      <section class="agentforslag">
+        <h2>Beskriv ett agentverktyg</h2>
+        <p>Beskriv vad verktyget heter och hur PM ska köra det. En agent skapar ett redigerbart utkast.</p>
+        <form id="forslagsform">
+          <label class="falt" for="verktygsbeskrivning">Beskrivning
+            <textarea id="verktygsbeskrivning" rows="3" required></textarea>
+          </label>
+          <div class="forslagsfot">
+            <p class="fel-text" id="forslagsFel" role="alert"></p>
+            <button type="submit" class="btn pri" id="hamtaForslag">Hämta förslag</button>
+          </div>
+        </form>
+      </section>
+      <template id="utkastMarke">
+        <span class="utkastmarke">Ogodkänt utkast. Granska och spara själv.</span>
+      </template>
       <template id="agentHjalp">
         <span class="falttips" data-hjalp="kommando">PM startar programmet som du skriver här. Exempel är <code>claude</code> och <code>codex</code>.</span>
         <span class="falttips" data-hjalp="args">PM skickar dessa inställningar till programmet. Skriv varje argument på en egen rad.</span>

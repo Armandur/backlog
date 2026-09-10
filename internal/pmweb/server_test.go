@@ -439,3 +439,58 @@ func TestProvaKonfigKorAgentUtanKorningEllerTask(t *testing.T) {
 		t.Fatalf("provet rörde PM-data: %d körningar, %d tasks", korningar, tasks)
 	}
 }
+
+func TestForeslaAgentGerUtkastUtanAttAndraKonfig(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	sokvag := filepath.Join(dir, pm.KonfigFil)
+	fore := []byte("behåll den här filen\n")
+	if err := os.WriteFile(sokvag, fore, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv, _ := testServer(t)
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{svar: `{
+		"namn":"verktyg","kommando":"verktyg","args":["run","{brief}"],
+		"brief":"arg","svar":"stdout","stdin":"devnull",
+		"timeout_sekunder":60,"miljo":{"LAGE":"test"},"mcp":false
+	}`})
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/konfig/foresla",
+		bytes.NewBufferString(`{"beskrivning":"Kör verktyg med run och briefen"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("förslag gav %d: %s", w.Code, w.Body.String())
+	}
+	var forslag struct {
+		Namn string `json:"namn"`
+		pm.AgentKonfig
+	}
+	if err := json.NewDecoder(w.Body).Decode(&forslag); err != nil {
+		t.Fatal(err)
+	}
+	if forslag.Namn != "verktyg" || forslag.Kommando != "verktyg" || forslag.Args[1] != "{brief}" {
+		t.Fatalf("oväntat förslag: %+v", forslag)
+	}
+	efter, err := os.ReadFile(sokvag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(fore, efter) {
+		t.Fatal("förslagsanropet ändrade pm.toml")
+	}
+}
+
+func TestForeslaAgentAvvisarSvarSomInteArJSON(t *testing.T) {
+	srv, _ := testServer(t)
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{svar: "kör verktyget med --help"})
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/konfig/foresla",
+		bytes.NewBufferString(`{"beskrivning":"Ett eget verktyg"}`)))
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("ogiltigt agentsvar gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "agenten svarade inte med ett giltigt agentblock") {
+		t.Fatalf("felmeddelandet hjälper inte användaren: %s", w.Body.String())
+	}
+}
