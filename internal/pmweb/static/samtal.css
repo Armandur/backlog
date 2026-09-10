@@ -1,0 +1,85 @@
+:root {
+  color-scheme: light dark;
+  --bakgrund: #f7f7f5;
+  --yta: #ffffff;
+  --kant: #d9d9d4;
+  --text: #1c1c1a;
+  --svag: #6b6b64;
+  --ai: #eef3ff;
+  --ai-kant: #b9caf0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bakgrund: #16161a;
+    --yta: #202026;
+    --kant: #34343d;
+    --text: #ececf0;
+    --svag: #9a9aa5;
+    --ai: #1e2740;
+    --ai-kant: #33477a;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bakgrund);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header { padding: 1rem 1rem 0.5rem; }
+h1 { font-size: 1.25rem; margin: 0; }
+.status { color: var(--svag); font-size: 0.85rem; margin: 0.25rem 0 0; }
+main { flex: 1; padding: 0 1rem 1rem; }
+.trad { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+.inlagg {
+  background: var(--yta);
+  border: 1px solid var(--kant);
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+}
+.inlagg.ai { background: var(--ai); border-color: var(--ai-kant); }
+.meta { color: var(--svag); font-size: 0.8rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.aktor { font-weight: 600; color: var(--text); }
+.text { margin: 0.35rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tom { color: var(--svag); }
+.skriv {
+  position: sticky;
+  bottom: 0;
+  background: var(--yta);
+  border-top: 1px solid var(--kant);
+  padding: 0.75rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+textarea, input[type=text], input:not([type]) {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  background: var(--bakgrund);
+  border: 1px solid var(--kant);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+}
+textarea { resize: vertical; }
+.rad { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.rad input:not([type=checkbox]) { flex: 1 1 12rem; min-width: 0; }
+.kryss { display: flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; white-space: nowrap; }
+button {
+  font: inherit;
+  padding: 0.5rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: #2f5fd0;
+  color: #fff;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.6; cursor: progress; }
+.fel { color: #c02626; }
+.dold { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (min-width: 900px) {
+  header, main, .skriv { max-width: 46rem; margin-inline: auto; width: 100%; }
+}

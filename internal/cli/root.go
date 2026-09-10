@@ -53,6 +53,22 @@ var guard func(cmd *cobra.Command) error
 // completion och help.
 func SetGuard(g func(cmd *cobra.Command) error) { guard = g }
 
+// postOpen körs när databasen är öppnad och upstreams migreringar körda.
+// backlog-pm kör sina egna migreringar där.
+var postOpen func(db *sql.DB) error
+
+// SetPostOpen registrerar ett steg som körs direkt efter att databasen öppnats.
+func SetPostOpen(f func(db *sql.DB) error) { postOpen = f }
+
+// DB ger den öppnade databasen. Giltig först när ett kommando kör.
+func DB() *sql.DB { return app.DB }
+
+// CurrentActor ger aktören för den här körningen.
+func CurrentActor() models.Actor { return app.Actor }
+
+// JSONOutput är sant om --json är satt.
+func JSONOutput() bool { return flagJSON }
+
 func Execute() error {
 	return newRootCmd().Execute()
 }
@@ -63,6 +79,14 @@ func NewRoot(use string, extra ...*cobra.Command) *cobra.Command {
 	root := newRootCmd()
 	if use != "" {
 		root.Use = use
+	}
+	// Ett extra kommando ersätter upstreams med samma namn, t.ex. web.
+	for _, e := range extra {
+		for _, existing := range root.Commands() {
+			if existing.Name() == e.Name() {
+				root.RemoveCommand(existing)
+			}
+		}
 	}
 	root.AddCommand(extra...)
 	return root
@@ -187,6 +211,13 @@ func openApp(cmd *cobra.Command) error {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	app.DB = db
+	if postOpen != nil {
+		if err := postOpen(db); err != nil {
+			db.Close()
+			app.DB = nil
+			return err
+		}
+	}
 	return nil
 }
 
