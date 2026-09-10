@@ -76,7 +76,8 @@ async function laddaOversikt() {
   }, "Inga körningar just nu.");
 
   const oppna = o.tasks.filter((t) => t.status !== "done");
-  $("#nTasks").textContent = oppna.length;
+  // Listan visar alla tasks, så säg vad siffran räknar.
+  $("#nTasks").textContent = `${oppna.length} öppna av ${o.tasks.length}`;
   fyll("#tasks", o.tasks, (t) => {
     const kor = o.korningar.find((k) => k.task_ref === t.ref);
     const status = kor ? pill(kor.status) : t.status === "done" ? pill("klar") : t.status === "doing" ? pill("kor") : "";
