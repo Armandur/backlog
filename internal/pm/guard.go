@@ -16,16 +16,23 @@ import (
 // DefaultProfileName är namnet på vardagsprofilen som backlog-pm aldrig får köra mot.
 const DefaultProfileName = "default"
 
-// Selection är den databasval en körning gör: profilflaggan, --db och BACKLOG_DB.
+// Selection är det databasval en körning gör: profilflaggan, --db, BACKLOG_DB
+// och init:s --path.
 type Selection struct {
 	Profile string
 	DB      string
 	EnvDB   string
+	Path    string
 }
 
 // Check avgör om ett databasval är tillåtet för backlog-pm.
 // defaultDir är vardagsprofilens workspace-katalog, tom om ingen finns.
 func Check(sel Selection, defaultDir string) error {
+	// init --path öppnar och kan med --reset radera databasen i katalogen.
+	if sel.Path != "" && defaultDir != "" && withinDir(sel.Path, defaultDir) {
+		return fmt.Errorf("backlog-pm vägrar skriva i vardagsprofilens katalog: --path pekar in i %q (%s)", DefaultProfileName, defaultDir)
+	}
+
 	if path := firstNonEmpty(sel.DB, sel.EnvDB); path != "" {
 		if defaultDir != "" && withinDir(path, defaultDir) {
 			return fmt.Errorf("backlog-pm vägrar köra mot vardagsdatabasen: %s pekar in i profilen %q (%s). Peka om till PM-workspacet", sourceName(sel), DefaultProfileName, defaultDir)
@@ -57,6 +64,7 @@ func selectionFromCmd(cmd *cobra.Command) Selection {
 		Profile: flagValue(cmd, "profile"),
 		DB:      flagValue(cmd, "db"),
 		EnvDB:   os.Getenv("BACKLOG_DB"),
+		Path:    flagValue(cmd, "path"),
 	}
 }
 

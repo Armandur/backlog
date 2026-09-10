@@ -16,7 +16,7 @@ var version = "dev"
 func main() {
 	cli.SetVersion(version)
 	cli.SetGuard(pm.Guard)
-	if err := cli.ExecuteRoot("backlog-pm"); err != nil {
+	if err := cli.ExecuteRoot("backlog-pm", pm.NewPMCmd()); err != nil {
 		fmt.Fprintln(os.Stderr, "fel:", err)
 		os.Exit(1)
 	}

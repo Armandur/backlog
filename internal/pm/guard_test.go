@@ -1,6 +1,7 @@
 package pm
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -113,4 +114,62 @@ func TestGuardLaserInitsEgnaProfilflagga(t *testing.T) {
 	if err := Guard(initCmd); err != nil {
 		t.Fatalf("init --profile pm ska passera, fick: %v", err)
 	}
+}
+
+// init --path öppnar databasen i katalogen och kan med --reset radera den.
+func TestCheckAvvisarPathInIVardagsprofilen(t *testing.T) {
+	if err := Check(Selection{Profile: "pm", Path: defaultDir}, defaultDir); err == nil {
+		t.Fatal("--path mot vardagsprofilens katalog passerade spärren")
+	}
+	if err := Check(Selection{Profile: "pm", Path: "/home/rasmus/.config/backlog/pm"}, defaultDir); err != nil {
+		t.Fatalf("egen --path ska passera, fick: %v", err)
+	}
+}
+
+func TestGuardSparrarInitMotVardagskatalogen(t *testing.T) {
+	root := cli.NewRoot("backlog-pm")
+	initCmd, _, err := root.Find([]string{"init"})
+	if err != nil {
+		t.Fatalf("hittade inte init: %v", err)
+	}
+	if err := initCmd.Flags().Set("profile", "pm"); err != nil {
+		t.Fatal(err)
+	}
+	if err := initCmd.Flags().Set("path", filepath.Join(homeDir(t), ".backlog", "default")); err != nil {
+		t.Fatal(err)
+	}
+	if err := Guard(initCmd); err == nil {
+		t.Fatal("init --path mot vardagskatalogen passerade spärren")
+	}
+}
+
+func TestPMKommandotFinnsIBinarensRot(t *testing.T) {
+	root := cli.NewRoot("backlog-pm", NewPMCmd())
+	if _, _, err := root.Find([]string{"pm", "info"}); err != nil {
+		t.Fatalf("pm info saknas i backlog-pm: %v", err)
+	}
+	if _, _, err := cli.NewRoot("backlog").Find([]string{"pm"}); err == nil {
+		t.Fatal("pm-kommandot ska inte finnas i vanliga backlog")
+	}
+}
+
+func TestInfoBeskriverValdWorkspace(t *testing.T) {
+	text, err := Info(Selection{Profile: "pm", DB: "/tmp/finns-inte/backlog.db"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, vantat := range []string{"profil:   pm", "/tmp/finns-inte/backlog.db", "saknas", "spärr:    aktiv"} {
+		if !strings.Contains(text, vantat) {
+			t.Fatalf("info saknar %q, fick:\n%s", vantat, text)
+		}
+	}
+}
+
+func homeDir(t *testing.T) string {
+	t.Helper()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("ingen hemkatalog")
+	}
+	return home
 }
