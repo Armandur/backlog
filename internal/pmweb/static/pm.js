@@ -122,7 +122,8 @@ async function visaLogg(id) {
   $("#loggruta").hidden = false;
   $("#loggtitel").textContent = `${data.korning.task_ref} · ${data.korning.agent} · ${data.korning.status}`;
   $("#logg").textContent = data.logg || "(ingen logg skriven än)";
-  byt("korningar");
+  byt("korningar", true);
+  $("#loggruta").scrollIntoView({ block: "nearest" });
 }
 
 // ---------- samtal ----------
@@ -207,11 +208,16 @@ $("#dStarta").onclick = async () => {
 };
 
 // ---------- skal ----------
-function byt(ny) {
+function byt(ny, behallScroll) {
+  const bytteVy = vy !== ny;
   vy = ny;
-  location.hash = ny;
+  // replaceState i stället för location.hash: annars hoppar webbläsaren till
+  // elementet med samma id, t.ex. listan #korningar.
+  history.replaceState(null, "", "#" + ny);
   document.querySelectorAll(".rail button").forEach((b) => b.classList.toggle("on", b.dataset.v === vy));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("on", v.id === "v-" + vy));
+  // En ny vy börjar på sin egen topp, inte där förra vyn var skrollad.
+  if (bytteVy && !behallScroll) window.scrollTo(0, 0);
   if (ny === "konfig") laddaKonfig();
 }
 $("#nav").addEventListener("click", (e) => {
