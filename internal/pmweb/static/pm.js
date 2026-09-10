@@ -18,6 +18,9 @@ function toast(text) {
   clearTimeout(t._h);
   t._h = setTimeout(() => t.classList.remove("on"), 3200);
 }
+// Nyckeln i JSON är ascii, etiketten i vyn är svensk.
+const VANTAR_ETIKETT = { fel: "fel", fraga: "fråga", beslut: "beslut" };
+
 // Säg bara att repot är upptaget när en annan körning faktiskt kör.
 function koText(k, alla) {
   if (k.status === "kor") return "startade " + klocka(k.startad_at || k.skapad_at);
@@ -87,7 +90,7 @@ async function laddaOversikt() {
 
   $("#nVantar").textContent = o.vantar.length;
   fyll("#vantar", o.vantar, (v) => {
-    const el = rad(`<span class="pill p-${v.sort === "fel" ? "fel" : v.sort === "fraga" ? "fraga" : "beslut"}">${v.sort}</span>
+    const el = rad(`<span class="pill p-${v.sort}">${VANTAR_ETIKETT[v.sort] || esc(v.sort)}</span>
       <div class="t">${v.ref ? `<span class="mono">${v.ref}</span>` : ""}<span class="meta">${esc(v.text)}</span></div>
       <div class="act">${v.sort === "fraga" ? `<button class="btn sm" data-vy="samtal">Öppna</button>` : v.korning_id ? `<button class="btn sm" data-logg="${v.korning_id}">Logg</button>` : `<button class="btn sm pri" data-dela="${v.ref}">Dela ut</button>`}</div>`);
     el.classList.add("stripe", v.sort);
