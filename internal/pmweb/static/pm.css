@@ -58,14 +58,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .rail button { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 8px 10px; color: var(--svag); font-weight: 500; }
 .rail button.on { background: var(--accent-mjuk); color: var(--text); }
 .rail .n { font-size: 12px; background: var(--sankt); border-radius: 10px; padding: 0 7px; }
-main { padding: 20px 24px 90px; max-width: 1180px; width: 100%; min-width: 0; }
+main { padding: 20px 24px 90px; max-width: 2000px; width: 100%; min-width: 0; }
 h1 { font-size: 22px; margin: 0 0 4px; }
 h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--svag); margin: 0 0 10px; display: flex; gap: 8px; align-items: center; }
 h2 .n { font-weight: 500; background: var(--sankt); border-radius: 10px; padding: 0 7px; font-size: 12px; letter-spacing: 0; }
 .lead { color: var(--svag); margin: 0 0 20px; max-width: 64ch; }
 .begrepp { color: var(--svag); font-size: 13px; margin: -4px 0 10px; max-width: 64ch; }
 .view { display: none; } .view.on { display: block; }
-.grid { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr) 300px; }
+.grid { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr) minmax(300px, 0.5fr); }
 .stack { display: grid; gap: 22px; min-width: 0; align-content: start; }
 .list { border: 1px solid var(--kant); border-radius: 8px; background: var(--yta); overflow: hidden; }
 .rad-post { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--kant); }
@@ -141,17 +141,17 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 }
 
 /* Konfigredigeraren */
-.agentforslag { max-width: 920px; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 14px; margin-bottom: 20px; }
+.agentforslag { max-width: 1400px; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 14px; margin-bottom: 20px; }
 .agentforslag h2, .agentforslag p { margin-top: 0; }
 #forslagsform { display: grid; gap: 10px; }
 .forslagsfot { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .forslagsfot p { flex: 1; margin: 0; }
 .konfigkort.utkast { border-color: var(--varn); }
 .utkastmarke { color: var(--varn); font-size: 12px; font-weight: 600; }
-.konfigform { display: grid; gap: 22px; max-width: 920px; }
+.konfigform { display: grid; gap: 22px; max-width: 1400px; }
 .konfig-meta { color: var(--svag); margin: -12px 0 12px; font-size: 13px; }
-.konfig-varning { margin: 0 0 20px; max-width: 920px; }
-.kommandoexempel { max-width: 920px; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 14px; margin-bottom: 20px; }
+.konfig-varning { margin: 0 0 20px; max-width: 1400px; }
+.kommandoexempel { max-width: 1400px; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 14px; margin-bottom: 20px; }
 .kommandoexempel p { margin: 5px 0; color: var(--svag); }
 .kommandoexempel pre { margin: 10px 0 0; overflow-x: auto; }
 .kommandoexempel pre code { display: block; padding: 10px 12px; }
@@ -206,3 +206,8 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 .forslagsstatus[hidden] { display: none; }
 .snurra { width: 14px; height: 14px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: snurr 0.8s linear infinite; }
 @keyframes snurr { to { transform: rotate(360deg); } }
+
+/* Breda skärmar: agentkortets fält får fyra kolumner i stället för två. */
+@media (min-width: 1500px) {
+  .agentgrid, .regelgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
