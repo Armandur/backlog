@@ -1,7 +1,7 @@
 const alias = decodeURIComponent(location.pathname.replace(/^\/pm\/?/, "").split("/")[0] || "");
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-let vy = location.hash.replace("#", "") || "projekt";
+let vy = location.hash.replace("#", "") || (alias ? "projekt" : "projekt-nytt");
 let valdKorning = null;
 let agenter = [];
 
@@ -206,8 +206,46 @@ $("#dStarta").onclick = async () => {
   }
 };
 
+// ---------- lägg till projekt ----------
+function uppdateraProjektlage() {
+  const lage = document.querySelector('input[name="lage"]:checked').value;
+  $("#projektSokvagTips").textContent = lage === "nytt"
+    ? "PM skapar katalogen, ett Git-repo och README.md."
+    : "Katalogen måste redan finnas och innehålla en .git-katalog.";
+}
+
+document.querySelectorAll('input[name="lage"]').forEach((val) => val.addEventListener("change", uppdateraProjektlage));
+$("#projektform").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const knapp = $("#skapaProjekt");
+  $("#projektFel").textContent = "";
+  $("#projektSvar").hidden = true;
+  knapp.disabled = true;
+  try {
+    const data = await hamta("/api/projekt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        alias: $("#projektAlias").value,
+        namn: $("#projektNamn").value,
+        beskrivning: $("#projektBeskrivning").value,
+        lage: document.querySelector('input[name="lage"]:checked').value,
+        sokvag: $("#projektSokvag").value,
+      }),
+    });
+    $("#projektLank").href = data.lank;
+    $("#projektLank").textContent = `Öppna ${data.projekt.name}`;
+    $("#projektSvar").hidden = false;
+  } catch (err) {
+    $("#projektFel").textContent = err.message;
+  } finally {
+    knapp.disabled = false;
+  }
+});
+
 // ---------- skal ----------
 function byt(ny, behallScroll) {
+  if (!alias && ny !== "projekt-nytt" && ny !== "konfig") ny = "projekt-nytt";
   const bytteVy = vy !== ny;
   vy = ny;
   // replaceState i stället för location.hash: annars hoppar webbläsaren till
@@ -243,8 +281,8 @@ async function laddaAgenter() {
 
 async function ladda() {
   if (!alias) {
-    $("#projnamn").textContent = "Konfiguration";
-    if (vy !== "konfig") byt("konfig");
+    $("#projnamn").textContent = "Projekt";
+    if (vy === "projekt") byt("projekt-nytt");
     return;
   }
   try {

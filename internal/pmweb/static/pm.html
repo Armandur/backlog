@@ -15,12 +15,48 @@
 
   <nav class="rail" id="nav">
     <button data-v="projekt" class="on">Projekt</button>
+    <button data-v="projekt-nytt">Nytt projekt</button>
     <button data-v="samtal">Samtal</button>
     <button data-v="korningar">Körningar <span class="n" id="nRun"></span></button>
     <button data-v="konfig">Konfig</button>
   </nav>
 
   <main>
+    <section class="view" id="v-projekt-nytt">
+      <h1>Lägg till projekt</h1>
+      <p class="lead">PM kan skapa en ny arbetsmapp eller koppla ett Git-repo som redan finns.</p>
+      <form id="projektform" class="projektform">
+        <fieldset class="lageval">
+          <legend>Arbetsmapp</legend>
+          <label><input type="radio" name="lage" value="nytt" checked> Skapa nytt projekt</label>
+          <label><input type="radio" name="lage" value="befintligt"> Koppla befintligt repo</label>
+        </fieldset>
+        <div class="projektfalt">
+          <label class="falt" for="projektAlias">Alias
+            <input id="projektAlias" name="alias" required spellcheck="false" placeholder="mitt-projekt">
+            <span class="falttips">Använd små bokstäver, siffror och bindestreck.</span>
+          </label>
+          <label class="falt" for="projektNamn">Namn
+            <input id="projektNamn" name="namn" required placeholder="Mitt projekt">
+          </label>
+          <label class="falt hel" for="projektBeskrivning">Beskrivning, valfri
+            <textarea id="projektBeskrivning" name="beskrivning" rows="3"></textarea>
+          </label>
+          <label class="falt hel" for="projektSokvag">Sökväg under ~/workspace
+            <input id="projektSokvag" name="sokvag" required spellcheck="false" placeholder="mitt-projekt">
+            <span class="falttips" id="projektSokvagTips">PM skapar katalogen, ett Git-repo och README.md.</span>
+          </label>
+        </div>
+        <div class="projektfot">
+          <p class="fel-text" id="projektFel" role="alert"></p>
+          <button type="submit" class="btn pri" id="skapaProjekt">Lägg till projekt</button>
+        </div>
+      </form>
+      <p class="projektsvar" id="projektSvar" role="status" hidden>
+        Projektet är klart. <a id="projektLank" href="">Öppna projektet</a>
+      </p>
+    </section>
+
     <section class="view on" id="v-projekt">
       <h1 id="ptitel">Projekt</h1>
       <p class="lead" id="pdesc"></p>

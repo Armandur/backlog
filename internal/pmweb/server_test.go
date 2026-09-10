@@ -5,9 +5,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -492,5 +494,157 @@ func TestForeslaAgentAvvisarSvarSomInteArJSON(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "agenten svarade inte med ett giltigt agentblock") {
 		t.Fatalf("felmeddelandet hjälper inte användaren: %s", w.Body.String())
+	}
+}
+
+func medProjektBas(t *testing.T, bas string) {
+	t.Helper()
+	gammal := projektBasDir
+	projektBasDir = func() (string, error) { return bas, nil }
+	t.Cleanup(func() { projektBasDir = gammal })
+}
+
+func postProjekt(t *testing.T, srv *Server, body skapaProjektBody) *httptest.ResponseRecorder {
+	t.Helper()
+	data, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/projekt", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(w, req)
+	return w
+}
+
+func TestSkapaNyttProjektViaRouten(t *testing.T) {
+	bas := t.TempDir()
+	medProjektBas(t, bas)
+	srv, db := testServer(t)
+
+	w := postProjekt(t, srv, skapaProjektBody{
+		Alias: "nytt-projekt", Namn: "Nytt projekt", Beskrivning: "Ett prov", Lage: "nytt", Sokvag: "nytt-projekt",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST gav %d: %s", w.Code, w.Body.String())
+	}
+
+	repoSokvag := filepath.Join(bas, "nytt-projekt")
+	readme, err := os.ReadFile(filepath.Join(repoSokvag, "README.md"))
+	if err != nil || string(readme) != "# Nytt projekt\n" {
+		t.Fatalf("README.md är fel: %q, %v", readme, err)
+	}
+	gitInfo, err := os.Stat(filepath.Join(repoSokvag, ".git"))
+	if err != nil || !gitInfo.IsDir() {
+		t.Fatalf("Git-repot saknas: %v", err)
+	}
+	antal, err := exec.Command("git", "-C", repoSokvag, "rev-list", "--count", "HEAD").Output()
+	if err != nil || strings.TrimSpace(string(antal)) != "1" {
+		t.Fatalf("väntade en commit, fick %q: %v", antal, err)
+	}
+	var sparadSokvag string
+	if err := db.QueryRow(`SELECT repo_path FROM projects WHERE alias='nytt-projekt'`).Scan(&sparadSokvag); err != nil {
+		t.Fatal(err)
+	}
+	if sparadSokvag != repoSokvag || !strings.Contains(w.Body.String(), `"lank":"/pm/nytt-projekt"`) {
+		t.Fatalf("projektet fick fel sökväg eller länk: %q, %s", sparadSokvag, w.Body.String())
+	}
+}
+
+func TestRegistreraBefintligtRepoViaRouten(t *testing.T) {
+	bas := t.TempDir()
+	medProjektBas(t, bas)
+	repoSokvag := filepath.Join(bas, "befintligt")
+	if err := os.Mkdir(repoSokvag, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if utdata, err := exec.Command("git", "-C", repoSokvag, "init").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %s: %v", utdata, err)
+	}
+	markor := filepath.Join(repoSokvag, "behall.txt")
+	if err := os.WriteFile(markor, []byte("behåll"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv, db := testServer(t)
+
+	w := postProjekt(t, srv, skapaProjektBody{
+		Alias: "befintligt", Namn: "Befintligt", Lage: "befintligt", Sokvag: repoSokvag,
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST gav %d: %s", w.Code, w.Body.String())
+	}
+	if innehall, err := os.ReadFile(markor); err != nil || string(innehall) != "behåll" {
+		t.Fatalf("PM ändrade det befintliga repot: %q, %v", innehall, err)
+	}
+	var antal int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM projects WHERE alias='befintligt' AND repo_path=?`, repoSokvag).Scan(&antal); err != nil {
+		t.Fatal(err)
+	}
+	if antal != 1 {
+		t.Fatalf("projektet registrerades inte: %d", antal)
+	}
+}
+
+func TestProjektRoutenAvvisarSokvagUtanforBasen(t *testing.T) {
+	bas := t.TempDir()
+	medProjektBas(t, bas)
+	srv, _ := testServer(t)
+	utanfor := filepath.Join(filepath.Dir(bas), "utanfor")
+
+	for namn, sokvag := range map[string]string{
+		"absolut": utanfor,
+		"parent":  "../smitare",
+	} {
+		t.Run(namn, func(t *testing.T) {
+			w := postProjekt(t, srv, skapaProjektBody{
+				Alias: "smitare-" + namn, Namn: "Smitare", Lage: "nytt", Sokvag: sokvag,
+			})
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("POST gav %d: %s", w.Code, w.Body.String())
+			}
+		})
+	}
+	if _, err := os.Stat(utanfor); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("PM skrev utanför basmappen: %v", err)
+	}
+}
+
+func TestProjektRoutenStadarEfterAliaskrock(t *testing.T) {
+	bas := t.TempDir()
+	medProjektBas(t, bas)
+	srv, _ := testServer(t)
+	sokvag := filepath.Join(bas, "ska-forsvinna")
+
+	w := postProjekt(t, srv, skapaProjektBody{
+		Alias: "demo", Namn: "Krock", Lage: "nytt", Sokvag: "ska-forsvinna",
+	})
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "används redan") {
+		t.Fatalf("aliaskrocken gav %d: %s", w.Code, w.Body.String())
+	}
+	if _, err := os.Stat(sokvag); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("projektmappen blev kvar efter aliaskrocken: %v", err)
+	}
+}
+
+func TestNyttProjektAvvisarKatalogMedInnehall(t *testing.T) {
+	bas := t.TempDir()
+	medProjektBas(t, bas)
+	sokvag := filepath.Join(bas, "upptagen")
+	if err := os.Mkdir(sokvag, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sokvag, "viktigt.txt"), []byte("behåll"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv, _ := testServer(t)
+
+	w := postProjekt(t, srv, skapaProjektBody{
+		Alias: "upptagen", Namn: "Upptagen", Lage: "nytt", Sokvag: "upptagen",
+	})
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "viktigt.txt") {
+		t.Fatalf("upptagen katalog gav %d: %s", w.Code, w.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(sokvag, ".git")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("PM startade Git i den upptagna katalogen: %v", err)
 	}
 }

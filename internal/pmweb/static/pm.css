@@ -140,6 +140,23 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
   .skriv { bottom: 56px; }
 }
 
+/* Projektformuläret */
+.projektform { max-width: 760px; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 16px; display: grid; gap: 16px; }
+.lageval { border: 0; padding: 0; margin: 0; display: flex; gap: 18px; flex-wrap: wrap; }
+.lageval legend { color: var(--svag); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+.lageval label { display: flex; align-items: center; gap: 6px; }
+.projektfalt { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.projektfalt .hel { grid-column: 1/-1; }
+.projektfot { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
+.projektfot p { flex: 1; margin: 0; }
+.projektsvar { max-width: 760px; background: var(--bra-mjuk); color: var(--bra); border-radius: 8px; padding: 12px 14px; }
+.projektsvar a { color: inherit; font-weight: 600; }
+@media (max-width: 760px) {
+  .projektfalt { grid-template-columns: 1fr; }
+  .projektfalt .hel { grid-column: auto; }
+  .lageval { flex-direction: column; gap: 8px; }
+}
+
 /* Konfigredigeraren */
 .agentforslag { max-width: 1400px; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 14px; margin-bottom: 20px; }
 .agentforslag h2, .agentforslag p { margin-top: 0; }

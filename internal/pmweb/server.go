@@ -50,6 +50,7 @@ func (s *Server) MedUtdelare(f Utdelarfunktion) *Server {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }
 
 func (s *Server) rutter(upstream http.Handler) {
+	s.mux.HandleFunc("POST /api/projekt", s.skapaProjekt)
 	s.mux.HandleFunc("GET /api/projects/{alias}/samtal", s.hamtaSamtal)
 	s.mux.HandleFunc("POST /api/projects/{alias}/samtal", s.skrivSamtal)
 	// Utan metodmönster skulle en DELETE falla vidare till upstream och ge 404.
