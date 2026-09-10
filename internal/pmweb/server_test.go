@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -219,6 +220,21 @@ func TestOversiktVisarObesvaradAgentfraga(t *testing.T) {
 }
 
 func TestDelaUtRoutenStartarKorningen(t *testing.T) {
+	// Agentvalet valideras mot konfigurationen, samma källa som körningen
+	// använder, så testet pekar konfigen på en egen fil.
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, pm.KonfigFil), []byte(`
+default_agent = "fake-modell"
+
+[agenter.fake-modell]
+kommando = "/bin/sh"
+args = ["-c", "printf %s {brief}"]
+brief = "arg"
+svar = "stdout"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	srv, db := testServer(t)
 	nu := timeutil.Now()
 	var projectID string
@@ -274,5 +290,152 @@ func TestDelaUtUtanUtdelareGer503(t *testing.T) {
 		bytes.NewBufferString(`{"task":"TASK-1"}`)))
 	if w.Code != http.StatusNotFound && w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("utan utdelare väntade 404 eller 503, fick %d", w.Code)
+	}
+}
+
+func medKonfigDir(t *testing.T, dir string) {
+	t.Helper()
+	gammal := konfigWorkDir
+	konfigWorkDir = func() string { return dir }
+	t.Cleanup(func() { konfigWorkDir = gammal })
+}
+
+func TestGetOchPutPaKonfigrouten(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	srv, _ := testServer(t)
+
+	gw := httptest.NewRecorder()
+	srv.ServeHTTP(gw, httptest.NewRequest(http.MethodGet, "/api/konfig", nil))
+	if gw.Code != http.StatusOK {
+		t.Fatalf("GET gav %d: %s", gw.Code, gw.Body.String())
+	}
+	var fore struct {
+		Agenter map[string]pm.AgentKonfig `json:"agenter"`
+		Sokvag  string                    `json:"sokvag"`
+		Saknas  bool                      `json:"saknas"`
+	}
+	if err := json.NewDecoder(gw.Body).Decode(&fore); err != nil {
+		t.Fatal(err)
+	}
+	if !fore.Saknas || fore.Sokvag != filepath.Join(dir, pm.KonfigFil) || len(fore.Agenter) == 0 {
+		t.Fatalf("GET gav fel metadata eller defaulter: %+v", fore)
+	}
+
+	kropp := bytes.NewBufferString(`{
+		"default_agent":"test",
+		"agenter":{"test":{"kommando":"/bin/sh","args":["-c","printf %s {brief}"],"brief":"arg","svar":"stdout","timeout_sekunder":15}},
+		"regler":[{"namn":"allt","agent":"test"}],
+		"krok":{}
+	}`)
+	pw := httptest.NewRecorder()
+	srv.ServeHTTP(pw, httptest.NewRequest(http.MethodPut, "/api/konfig", kropp))
+	if pw.Code != http.StatusOK {
+		t.Fatalf("PUT gav %d: %s", pw.Code, pw.Body.String())
+	}
+	k, err := pm.LasKonfig(dir)
+	if err != nil {
+		t.Fatalf("kunde inte läsa den skrivna filen: %v", err)
+	}
+	if k.DefaultAgent != "test" || k.Agenter["test"].TimeoutSekunder != 15 {
+		t.Fatalf("PUT sparade fel konfiguration: %+v", k)
+	}
+
+	gw = httptest.NewRecorder()
+	srv.ServeHTTP(gw, httptest.NewRequest(http.MethodGet, "/api/konfig", nil))
+	var efter struct {
+		DefaultAgent string `json:"default_agent"`
+		Saknas       bool   `json:"saknas"`
+	}
+	if err := json.NewDecoder(gw.Body).Decode(&efter); err != nil {
+		t.Fatal(err)
+	}
+	if efter.Saknas || efter.DefaultAgent != "test" {
+		t.Fatalf("GET läste inte den nya filen: %+v", efter)
+	}
+}
+
+func TestPutKonfigAvvisarOgiltigUtanAttAndraFilen(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	srv, _ := testServer(t)
+	ursprung := pm.Konfig{
+		DefaultAgent: "test",
+		Agenter: map[string]pm.AgentKonfig{
+			"test": {Kommando: "/bin/sh", Args: []string{"-c", "printf %s {brief}"}, Brief: "arg", Svar: "stdout", TimeoutSekunder: 15},
+		},
+	}
+	if err := pm.SkrivKonfig(dir, ursprung); err != nil {
+		t.Fatal(err)
+	}
+	sokvag := filepath.Join(dir, pm.KonfigFil)
+	fore, err := os.ReadFile(sokvag)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/konfig", bytes.NewBufferString(`{
+		"default_agent":"trasig",
+		"agenter":{"trasig":{"args":["{brief}"],"brief":"arg","svar":"stdout","timeout_sekunder":15}},
+		"regler":[],"krok":{}
+	}`)))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("ogiltig PUT gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `agenten \"trasig\" saknar kommando i konfigurationen`) {
+		t.Fatalf("PUT gav inte Valideras felmeddelande: %s", w.Body.String())
+	}
+	efter, err := os.ReadFile(sokvag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(fore, efter) {
+		t.Fatal("den ogiltiga PUT-begäran ändrade konfigurationsfilen")
+	}
+}
+
+func TestProvaKonfigKorAgentUtanKorningEllerTask(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	srv, db := testServer(t)
+	konfig := pm.Konfig{
+		DefaultAgent: "test",
+		Agenter: map[string]pm.AgentKonfig{
+			"test": {
+				Kommando: "/bin/echo", Args: []string{"prov fungerar", "{brief}"},
+				Brief: "arg", Svar: "stdout", TimeoutSekunder: 15,
+			},
+		},
+	}
+	if err := pm.SkrivKonfig(dir, konfig); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/konfig/prova",
+		bytes.NewBufferString(`{"agent":"test"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("prov gav %d: %s", w.Code, w.Body.String())
+	}
+	var svar struct {
+		Exitkod int    `json:"exitkod"`
+		Svar    string `json:"svar"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&svar); err != nil {
+		t.Fatal(err)
+	}
+	if svar.Exitkod != 0 || !strings.Contains(svar.Svar, "prov fungerar") {
+		t.Fatalf("oväntat provsvar: %+v", svar)
+	}
+	var korningar, tasks int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pm_korningar`).Scan(&korningar); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM tasks`).Scan(&tasks); err != nil {
+		t.Fatal(err)
+	}
+	if korningar != 0 || tasks != 0 {
+		t.Fatalf("provet rörde PM-data: %d körningar, %d tasks", korningar, tasks)
 	}
 }

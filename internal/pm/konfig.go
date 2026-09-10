@@ -1,6 +1,7 @@
 package pm
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,45 +16,45 @@ const KonfigFil = "pm.toml"
 // AgentKonfig beskriver hur en agent startas. Allt som behövs för en ny agent
 // står här, så en tredje agent läggs till i konfigfilen utan kodändring.
 type AgentKonfig struct {
-	Kommando string   `toml:"kommando"`
-	Args     []string `toml:"args"`
+	Kommando string   `toml:"kommando" json:"kommando"`
+	Args     []string `toml:"args" json:"args"`
 	// Brief: "arg" (redan i args via {brief}) eller "stdin".
-	Brief string `toml:"brief"`
+	Brief string `toml:"brief" json:"brief"`
 	// Svar: "stdout" eller "fil" (läses från {svarsfil}).
-	Svar string `toml:"svar"`
+	Svar string `toml:"svar" json:"svar"`
 	// Stdin: "devnull" stänger stdin, vilket codex kräver.
-	Stdin           string            `toml:"stdin"`
-	TimeoutSekunder int               `toml:"timeout_sekunder"`
-	Miljo           map[string]string `toml:"miljo"`
+	Stdin           string            `toml:"stdin" json:"stdin"`
+	TimeoutSekunder int               `toml:"timeout_sekunder" json:"timeout_sekunder"`
+	Miljo           map[string]string `toml:"miljo" json:"miljo"`
 	// MCP lägger till --mcp-config mot PM-profilen (claude headless).
-	MCP bool `toml:"mcp"`
+	MCP bool `toml:"mcp" json:"mcp"`
 }
 
 // Regel väljer agent utifrån taskens typ, etiketter och nyckelord.
 type Regel struct {
-	Namn      string   `toml:"namn"`
-	Typ       []string `toml:"typ"`
-	Etiketter []string `toml:"etiketter"`
-	Nyckelord []string `toml:"nyckelord"`
-	Agent     string   `toml:"agent"`
+	Namn      string   `toml:"namn" json:"namn"`
+	Typ       []string `toml:"typ" json:"typ"`
+	Etiketter []string `toml:"etiketter" json:"etiketter"`
+	Nyckelord []string `toml:"nyckelord" json:"nyckelord"`
+	Agent     string   `toml:"agent" json:"agent"`
 }
 
 // Krok kan anropa ett externt anspråkskommando, t.ex. arbetar. Kön fungerar
 // utan krok.
 type Krok struct {
-	Anspraka []string          `toml:"anspraka"`
-	Slapp    []string          `toml:"slapp"`
-	Miljo    map[string]string `toml:"miljo"`
+	Anspraka []string          `toml:"anspraka" json:"anspraka"`
+	Slapp    []string          `toml:"slapp" json:"slapp"`
+	Miljo    map[string]string `toml:"miljo" json:"miljo"`
 }
 
 // Konfig är hela PM-konfigurationen.
 type Konfig struct {
-	DefaultAgent string                 `toml:"default_agent"`
-	Agenter      map[string]AgentKonfig `toml:"agenter"`
-	Regler       []Regel                `toml:"regler"`
-	Krok         Krok                   `toml:"krok"`
+	DefaultAgent string                 `toml:"default_agent" json:"default_agent"`
+	Agenter      map[string]AgentKonfig `toml:"agenter" json:"agenter"`
+	Regler       []Regel                `toml:"regler" json:"regler"`
+	Krok         Krok                   `toml:"krok" json:"krok"`
 	// Kalla är sökvägen filen lästes från, tom när defaulterna används.
-	Kalla string `toml:"-"`
+	Kalla string `toml:"-" json:"-"`
 }
 
 // StandardKonfig är det som gäller när ingen pm.toml finns.
@@ -119,6 +120,52 @@ func LasKonfig(workspaceDir string) (Konfig, error) {
 		return Konfig{}, err
 	}
 	return k, nil
+}
+
+// SkrivKonfig validerar och ersätter pm.toml atomiskt.
+func SkrivKonfig(workspaceDir string, k Konfig) error {
+	if err := k.Validera(); err != nil {
+		return err
+	}
+
+	var data bytes.Buffer
+	if err := toml.NewEncoder(&data).Encode(k); err != nil {
+		return fmt.Errorf("kunde inte skapa konfigurationsfilen: %w", err)
+	}
+
+	sokvag := filepath.Join(workspaceDir, KonfigFil)
+	tmp, err := os.CreateTemp(workspaceDir, ".pm.toml-*")
+	if err != nil {
+		return fmt.Errorf("kunde inte skapa en temporär konfigurationsfil: %w", err)
+	}
+	tmpNamn := tmp.Name()
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Remove(tmpNamn)
+		}
+	}()
+
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("kunde inte skydda den temporära konfigurationsfilen: %w", err)
+	}
+	if _, err := tmp.Write(data.Bytes()); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("kunde inte skriva den temporära konfigurationsfilen: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("kunde inte synka den temporära konfigurationsfilen: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("kunde inte stänga den temporära konfigurationsfilen: %w", err)
+	}
+	if err := os.Rename(tmpNamn, sokvag); err != nil {
+		return fmt.Errorf("kunde inte ersätta %s: %w", sokvag, err)
+	}
+	renamed = true
+	return nil
 }
 
 func fyllIStandard(a AgentKonfig) AgentKonfig {

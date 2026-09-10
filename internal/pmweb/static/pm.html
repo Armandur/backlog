@@ -17,6 +17,7 @@
     <button data-v="projekt" class="on">Projekt</button>
     <button data-v="samtal">Samtal</button>
     <button data-v="korningar">Körningar <span class="n" id="nRun"></span></button>
+    <button data-v="konfig">Konfig</button>
   </nav>
 
   <main>
@@ -71,6 +72,53 @@
         <h2 id="loggtitel"></h2>
         <pre class="logg" id="logg"></pre>
       </div>
+    </section>
+
+    <section class="view" id="v-konfig">
+      <h1>Agenter och regler</h1>
+      <p class="lead" id="konfigMeta">Läser konfigurationen...</p>
+      <p class="notis konfig-varning">När du sparar skriver PM om hela filen. Kommentarer och okända nycklar försvinner.</p>
+      <form id="konfigform" class="konfigform">
+        <section class="konfigsektion">
+          <div class="sektionshuvud">
+            <h2>Agenter</h2>
+            <button type="button" class="btn sm" id="laggTillAgent">Lägg till agent</button>
+          </div>
+          <label class="falt kompakt" for="defaultAgent">Förvald agent
+            <select id="defaultAgent"></select>
+          </label>
+          <div id="agentkort" class="kortlista"></div>
+        </section>
+
+        <section class="konfigsektion">
+          <div class="sektionshuvud">
+            <h2>Regler</h2>
+            <button type="button" class="btn sm" id="laggTillRegel">Lägg till regel</button>
+          </div>
+          <p class="regel">Den första matchande regeln väljer agent. Flytta reglerna med pilknapparna.</p>
+          <div id="regelkort" class="kortlista"></div>
+        </section>
+
+        <details class="konfigsektion kroksektion">
+          <summary>Krok för anspråk</summary>
+          <div class="faltgrid">
+            <label class="falt">Anspråkskommando, ett argument per rad
+              <textarea id="krokAnspraka" rows="4" spellcheck="false"></textarea>
+            </label>
+            <label class="falt">Släppkommando, ett argument per rad
+              <textarea id="krokSlapp" rows="4" spellcheck="false"></textarea>
+            </label>
+          </div>
+          <label class="falt">Miljö, en <code>NYCKEL=värde</code> per rad
+            <textarea id="krokMiljo" rows="3" spellcheck="false"></textarea>
+          </label>
+        </details>
+
+        <div class="konfigfot">
+          <p class="fel-text" id="konfigFel" role="alert"></p>
+          <button type="submit" class="btn pri" id="sparaKonfig">Spara pm.toml</button>
+        </div>
+      </form>
     </section>
   </main>
 </div>

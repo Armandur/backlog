@@ -62,6 +62,9 @@ func (s *Server) rutter(upstream http.Handler) {
 	s.mux.HandleFunc("GET /api/projects/{alias}/korningar", s.hamtaKorningar)
 	s.mux.HandleFunc("GET /api/korningar/{id}", s.hamtaKorning)
 	s.mux.HandleFunc("GET /api/agenter", s.hamtaAgenter)
+	s.mux.HandleFunc("GET /api/konfig", s.hamtaKonfig)
+	s.mux.HandleFunc("PUT /api/konfig", s.skrivKonfig)
+	s.mux.HandleFunc("POST /api/konfig/prova", s.provaKonfig)
 	s.mux.HandleFunc("GET /pm/{alias}", s.tradVy)
 	s.mux.HandleFunc("GET /pm/", s.tradVy)
 
@@ -203,7 +206,7 @@ func (s *Server) delaUt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Agent != "" {
-		if _, err := s.register.Hamta(body.Agent); err != nil {
+		if _, err := s.aktuelltRegister().Hamta(body.Agent); err != nil {
 			svaraFel(w, err, http.StatusBadRequest)
 			return
 		}
@@ -228,11 +231,21 @@ func (s *Server) hamtaKorningar(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) hamtaAgenter(w http.ResponseWriter, r *http.Request) {
-	namn := []string{}
-	if s.register != nil {
-		namn = s.register.Namn()
+	svaraJSON(w, http.StatusOK, map[string]any{"agenter": s.aktuelltRegister().Namn()})
+}
+
+// aktuelltRegister läser konfigurationen per anrop, så en agent som lagts till
+// i konfigvyn går att använda utan omstart. Faller tillbaka på registret från
+// starten om filen inte går att läsa.
+func (s *Server) aktuelltRegister() *pm.AgentRegister {
+	konfig, err := pm.LasKonfig(konfigWorkDir())
+	if err != nil {
+		if s.register != nil {
+			return s.register
+		}
+		return pm.NewAgentRegister()
 	}
-	svaraJSON(w, http.StatusOK, map[string]any{"agenter": namn})
+	return pm.FranKonfig(konfig)
 }
 
 func (s *Server) hamtaKorning(w http.ResponseWriter, r *http.Request) {

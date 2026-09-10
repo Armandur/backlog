@@ -29,18 +29,24 @@ func NewWebCmd(hamtaRegister func() (*pm.AgentRegister, error)) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			konfig, err := pm.LasKonfig(cli.WorkDir())
-			if err != nil {
+			if _, err := pm.LasKonfig(cli.WorkDir()); err != nil {
 				return err
 			}
-			utdelare := pm.NewUtdelare(cli.DB(), konfig, reg)
 			workspace := cli.WorkDir()
 			profil := profilNamn()
 			srv := New(cli.DB(), cli.CurrentActor(), reg).MedUtdelare(
 				func(taskID, agent string) string {
 					// Körningen lever längre än HTTP-anropet.
 					go func() {
-						_, err := utdelare.DelaUt(context.Background(), pm.UtdelInput{
+						// Konfigurationen läses vid varje utdelning, så en agent
+						// som lagts till i konfigvyn fungerar utan omstart.
+						konfig, err := pm.LasKonfig(workspace)
+						if err != nil {
+							fmt.Fprintf(os.Stderr, "kunde inte läsa konfigurationen: %v\n", err)
+							return
+						}
+						utdelare := pm.NewUtdelare(cli.DB(), konfig, pm.FranKonfig(konfig))
+						_, err = utdelare.DelaUt(context.Background(), pm.UtdelInput{
 							TaskID: taskID, Overstyrning: agent,
 							WorkspaceDir: workspace, Profil: profil, PMBinar: pm.PMBinar(),
 						})

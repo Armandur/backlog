@@ -138,3 +138,44 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
   .rad-post .act { grid-column: 1/-1; justify-content: flex-end; }
   .skriv { bottom: 56px; }
 }
+
+/* Konfigredigeraren */
+.konfigform { display: grid; gap: 22px; max-width: 920px; }
+.konfig-varning { margin: 0 0 20px; max-width: 920px; }
+.konfigsektion { display: grid; gap: 12px; }
+.sektionshuvud { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sektionshuvud h2 { margin: 0; }
+.falt.kompakt { max-width: 340px; }
+.kortlista { display: grid; gap: 12px; }
+.konfigkort { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 14px; display: grid; gap: 12px; }
+.korthuvud { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+.agentnamn { flex: 1; max-width: 360px; }
+.kortknappar { display: flex; gap: 6px; align-items: center; }
+.btn.fara { color: var(--fel); }
+.faltgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.agentgrid { grid-template-columns: minmax(220px, 2fr) minmax(130px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr); }
+.regelgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.falt { display: grid; gap: 5px; color: var(--svag); font-size: 12px; font-weight: 600; }
+.falt input, .falt textarea, .falt select { color: var(--text); font-weight: 400; }
+.konfigkort details { border-top: 1px solid var(--kant); padding-top: 10px; }
+.konfigkort summary, .kroksektion summary { color: var(--svag); cursor: pointer; font-weight: 600; }
+.konfigkort details[open] summary, .kroksektion[open] summary { margin-bottom: 12px; }
+.detaljkryss { align-self: end; min-height: 38px; }
+.provsvar { margin: 0; background: var(--sankt); border-radius: 6px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.kroksektion { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 14px; }
+.konfigfot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: flex-end; gap: 12px; background: color-mix(in srgb, var(--ground) 92%, transparent); padding: 12px 0; }
+.konfigfot p { flex: 1; margin: 0; }
+
+@media (max-width: 900px) {
+  .agentgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .sektionshuvud, .korthuvud { align-items: stretch; }
+  .korthuvud { flex-direction: column; }
+  .agentnamn { max-width: none; }
+  .kortknappar { justify-content: flex-end; }
+  .faltgrid, .agentgrid, .regelgrid { grid-template-columns: 1fr; }
+  .konfigkort { padding: 12px; }
+  .konfigfot { bottom: 55px; }
+  .konfigfot .btn { white-space: nowrap; }
+}
