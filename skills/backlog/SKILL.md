@@ -1,101 +1,32 @@
 ---
 name: backlog
-description: Interact with the Backlog CLI — create and manage tasks, plans, comments, labels, projects, memory, docs, and attachments in a local SQLite workspace
+description: CLI-referens för Backlog-verktyget - kommandon och flaggor för tasks, planer, kommentarer, etiketter, projekt, memory, docs och bilagor i en lokal SQLite-workspace. Ren referens utan arbetsflöde: flödena ägs av todo-capture (fånga todos), backlog-loop (beta av en task med Judge-grind) och review-to-backlog (granskningsfynd till tasks).
 ---
 
 You have access to the `backlog` CLI. Use it to manage tasks, plans, comments, labels, projects, memory entries, docs, and attachments. Always pass `--as ai:<your-model-name>` so writes are attributed to you. Always pass `--json` when you need to parse output.
 
 ## Session startup
 
-When starting a work session on a backlog project, load context before anything else:
+Sessionsstart-flödet (läsa in memory, docs och öppna tasks) ägs av
+backlog-memory-skillen - se den. Kommandona är `backlog memory list`,
+`backlog doc list`/`doc show` och `backlog task list`, alla med
+`--project <alias> --json --profile default`.
+
+## Arbetsflöden (lokalt)
+
+Ingen agentisk loop här - arbetsflödena ägs av andra skills:
+`todo-capture` (fånga och gå vidare, jobba aldrig todon direkt),
+`/backlog-loop` (beta av EN task med Judge-grind),
+`review-to-backlog` (granskningsfynd till tasks).
+Den här skillen är enbart kommandoreferens.
+
+## Import findings (formatreferens)
+
+Bulkimport av fynd (arbetsflödet ägs av review-to-backlog):
 
 ```sh
-# 1. Resolve the active project
-backlog project list --json --profile default
-
-# 2. Load persisted memory (decisions, architecture, open-work summaries)
-backlog memory list --project <alias> --json --profile default
-
-# 3. Load docs (full body of each)
-backlog doc list --project <alias> --json --profile default
-# For each doc ID returned:
-backlog doc show <doc-id> --json --profile default
-
-# 4. Load open tasks for situational awareness
-backlog task list --project <alias> --status todo --json --profile default
-backlog task list --project <alias> --status doing --json --profile default
-```
-
-Surface memory entries and doc bodies as context before responding — this prevents re-deriving decisions already recorded.
-
-If memory entries are empty → suggest running `/backlog-memory <alias>` to load context and bootstrap summaries.
-
-## Core workflow
-
-The standard agentic loop for working through a backlog:
-
-### 1. Pick a task
-
-```sh
-# List by priority (highest first)
-backlog task list --project <alias> --status todo --json --profile default
-```
-
-Choose the highest-priority task that is actionable. Prefer P1 > P2 > P3.
-
-### 2. Claim it
-
-```sh
-backlog task move TASK-N --status doing --as "ai:<model>" --profile default
-```
-
-### 3. Attach a plan (for non-trivial tasks)
-
-```sh
-backlog plan add --task TASK-N \
-  --title "Implementation plan" \
-  --content "## Steps\n1. ...\n2. ...\n\n## Testing\n- ..." \
-  --as "ai:<model>" --profile default
-```
-
-### 4. Do the work
-
-Implement, fix, or research — whatever the task requires.
-
-### 5. Record outcomes
-
-```sh
-# Add a comment with what was done / any decisions made
-backlog comment add "Fixed by changing X in file Y. Verified with Z." \
-  --task TASK-N --as "ai:<model>" --profile default
-
-# If a decision was made that future sessions should know:
-backlog memory add "Decided to use X because Y" \
-  --project <alias> --tag "decision" --as "ai:<model>" --profile default
-```
-
-### 6. Close it
-
-```sh
-backlog task move TASK-N --status done --as "ai:<model>" --profile default
-```
-
-### 7. Repeat or stop
-
-Pick the next task or surface a summary of what was completed.
-
-## Task triage workflow
-
-When asked to triage or bulk-create tasks from findings (scan output, review notes, etc.):
-
-```sh
-# 1. Write a findings JSON file
-# 2. Dry-run first
 backlog import-findings findings.json --dry-run --profile default
-# 3. Import
-backlog import-findings findings.json --as "ai:<model>" --profile default
-# 4. Confirm
-backlog task list --project <alias> --status todo --json --profile default
+backlog import-findings findings.json --as "ai:<modell>" --profile default
 ```
 
 Findings file format:
@@ -111,9 +42,9 @@ Findings file format:
 
 ## Memory workflow
 
-- `/backlog-memory <alias>` — one skill that both **learns** (reads tasks, plans, docs, and memory into context) and **stores** (persists synthesized summaries). It auto-picks: learn at the start of a session, store after work has been done, and asks if it's ambiguous.
-- Force a mode with `/backlog-memory learn <alias>` or `/backlog-memory store <alias>`.
-- Run store after significant work to refresh the `open-work` and `done-work` entries.
+Använd den lokala backlog-memory-skillen (learn/store). Delningsregeln:
+projektfakta och beslut till backlog memory, agentbeteende-feedback till
+agentens egen memory.
 
 ## Conventions
 
@@ -121,14 +52,14 @@ Findings file format:
 - Always `--as ai:<your-model-name>` on writes.
 - Always `--json` when parsing output.
 - Use `TASK-N` format in messages to the user.
-- Never hardcode actor names — use `ai:<your-model-name>` dynamically.
+- Never hardcode actor names - use `ai:<your-model-name>` dynamically.
 
 ## Core concepts
 
 | Concept | Description |
 |---|---|
 | Workspace | Directory containing `backlog.db` + `config.toml`. Resolved via `--db`, `$BACKLOG_DB`, `--profile`, or the default profile. There is **no** cwd walk-up. |
-| Profile | Named pointer to a workspace, registered in `~/.config/backlog/config.toml`. By default workspaces live at `~/.config/backlog/<profile-name>/`. |
+| Profile | Named pointer to a workspace, registered in `~/.config/backlog/config.toml`. Lokalt på den här maskinen pekar profilen `default` på `~/.backlog/default/` (kontrollera med `backlog profile show default`). |
 | Project | Named group of tasks inside a workspace, identified by a short `alias` (e.g. `api`, `web`). |
 | Task | Unit of work. Has type, status, priority, actor. Identified by `TASK-N`, bare `N`, or full ULID. |
 | Plan | Versioned markdown document attached to a task. Every edit creates a new immutable version. |
@@ -137,9 +68,9 @@ Findings file format:
 | Attachment | Binary file attached to a task or a doc, stored in the SQLite DB. |
 | Comment | Actor-attributed note on a task. |
 | Label | Per-project tag attachable to tasks. |
-| Actor | `kind:name` — `kind` is `human` or `ai`. Example: `ai:claude-code`. |
+| Actor | `kind:name` - `kind` is `human` or `ai`. Example: `ai:claude-code`. |
 
-## ID formats — all equivalent for tasks
+## ID formats - all equivalent for tasks
 
 ```
 TASK-5          # canonical human-readable ref
@@ -147,7 +78,7 @@ TASK-5          # canonical human-readable ref
 01KR4JA4754H... # full ULID (returned in JSON)
 ```
 
-Use the `TASK-N` format in messages to users. Use the ULID from JSON output when chaining commands. Plan IDs, doc IDs, attachment IDs, and memory IDs are always full or short ULIDs — there is no `PLAN-N` form.
+Use the `TASK-N` format in messages to users. Use the ULID from JSON output when chaining commands. Plan IDs, doc IDs, attachment IDs, and memory IDs are always full or short ULIDs - there is no `PLAN-N` form.
 
 ## Global flags (apply to every command)
 
@@ -169,9 +100,9 @@ BACKLOG_DB=/path/to/backlog.db   # overrides profile resolution; use in MCP conf
 
 1. `--db <path>` flag
 2. `$BACKLOG_DB` env var
-3. `--profile <name>` flag → `~/.config/backlog/<name>/backlog.db`
+3. `--profile <name>` flag → sökvägen profilen registrerats med i `~/.config/backlog/config.toml` (lokalt: `default` → `~/.backlog/default/backlog.db`)
 4. Default profile from `~/.config/backlog/config.toml`
-5. Error: "no backlog workspace found — run `backlog init` to create one"
+5. Error: "no backlog workspace found - run `backlog init` to create one"
 
 ---
 
@@ -200,11 +131,11 @@ backlog init --profile work --actor human:mazin --priority 2 --type bug --status
 ```
 
 Flags:
-- `--profile <name>` — profile name (default: `default`)
-- `--path <dir>` — workspace directory (default: `~/.config/backlog/<profile>/`)
-- `--set-default` — make this the active profile
-- `--reset` — wipe and reinitialize an existing workspace
-- `--actor`, `--priority`, `--status`, `--type` — defaults written into workspace `config.toml`
+- `--profile <name>` - profile name (default: `default`)
+- `--path <dir>` - workspace directory (default: `~/.config/backlog/<profile>/`)
+- `--set-default` - make this the active profile
+- `--reset` - wipe and reinitialize an existing workspace
+- `--actor`, `--priority`, `--status`, `--type` - defaults written into workspace `config.toml`
 
 If no default profile exists yet, the new workspace becomes the default automatically.
 
@@ -258,7 +189,7 @@ backlog project update api --name "API v2" --description "REST backend"
 # Archive (hidden from list; tasks remain)
 backlog project archive api
 
-# Delete (hard — removes all tasks, plans, comments, labels)
+# Delete (hard - removes all tasks, plans, comments, labels)
 backlog project delete api
 ```
 
@@ -290,14 +221,15 @@ Flags:
 - `-p / --project` alias (required)
 - `-t / --title` (required)
 - `-d / --description` markdown body
-- `--type` task · bug · issue · improvement · feature · vulnerability · chore · spike
+- `--type` task · bug · issue · improvement · feature · vulnerability · chore · spike · bucket-list
 - `--priority` P1–P5 or 1–5 (P1 = highest, P3 = default)
 - `--status` todo · doing · done (default: todo)
 - `--assignee` name
 - `--label` repeatable: `--label auth --label crypto`
 - `--source` origin tool/review name
 - `--external-ref` URL or ticket ID
-- `--from-file <file>` — `.json` is parsed as a full task payload, anything else is loaded as the description
+- `--project-path` fil:rad eller URL till relevant kodställe (t.ex. `internal/handlers/search.go:84`)
+- `--from-file <file>` - `.json` is parsed as a full task payload, anything else is loaded as the description
 - `--due-date` YYYY-MM-DD or RFC3339
 
 ### List
@@ -375,8 +307,8 @@ backlog task move TASK-1 --status todo  --as ai:claude-code
 ### Archive / Delete
 
 ```sh
-backlog task archive TASK-1   # soft — hidden from list, recoverable via --include-archived
-backlog task delete  TASK-1   # hard — permanent
+backlog task archive TASK-1   # soft - hidden from list, recoverable via --include-archived
+backlog task delete  TASK-1   # hard - permanent
 ```
 
 ---
@@ -462,7 +394,7 @@ backlog label create "security" --project api --color "#ff0000"
 # List
 backlog label list --project api
 
-# Attach / detach (use ULID, not TASK-N — task ref is resolved internally)
+# Attach / detach (use ULID, not TASK-N - task ref is resolved internally)
 backlog label attach security --task TASK-1
 backlog label detach security --task TASK-1
 ```
@@ -475,7 +407,7 @@ Free-form text + optional comma-separated tags. Use this for decisions, context,
 
 ```sh
 # Add
-backlog memory add "Decided to use SQLite — single file, no server" \
+backlog memory add "Decided to use SQLite - single file, no server" \
   --project api --tag "decision,arch" --as ai:claude-code
 
 # Append text to an existing entry (newline-joined)
@@ -494,7 +426,7 @@ JSON entry shape:
 {
   "id": "01KR...",
   "project_id": "...",
-  "body": "Decided to use SQLite — single file, no server",
+  "body": "Decided to use SQLite - single file, no server",
   "tags": "decision,arch",
   "actor": { "kind": "ai", "name": "claude-code" },
   "created_at": 1746724800000000000
@@ -536,6 +468,30 @@ backlog doc delete <doc-id>
 ```
 
 `--from-file` is supported on both `add`, `update`, and `append`.
+
+### The workspace is shared - `update` replaces the whole body
+
+The backlog DB is shared across the whole machine, and several sessions (and
+several models) can work in the same project at once. Docs are a shared
+resource, not a file in your worktree.
+
+- **`update` replaces the ENTIRE body**, whether the content comes from
+  `--content` or `--from-file`. There is no merge, no conflict, no question -
+  just a new version containing exactly what you sent. Anything another
+  session added since you last read the doc is gone.
+- **`append` only adds**, so it cannot clobber anyone. Use it for additions.
+- **`history` shows who wrote what and when.** Read it whenever a doc looks
+  different than you remember - the author column tells you if another
+  session has been in it.
+
+Practical rule: additions go through `append`. To change an existing passage,
+`show` the doc immediately before editing and write it back straight away -
+the window between reading and writing is the entire risk. Never update from a
+copy that has been sitting in a scratch directory while you did other work.
+
+Real case, 2026-08-18: a doc was taken from v10 to v13 by another model while
+a local copy from v10 sat unused. One more `update --from-file` from that copy
+would have silently erased three versions of someone else's work.
 
 ---
 
@@ -702,21 +658,21 @@ backlog mcp serve --as ai:claude-code --db /path/to/backlog.db
 
 | Tool | Required | Optional |
 |---|---|---|
-| `project_list` | — | — |
+| `project_list` | - | - |
 | `task_create` | `project`, `title` | `description`, `type`, `status`, `priority`, `source`, `external_ref`, `due_date` |
-| `task_list` | — | `project`, `status`, `type`, `priority`, `search` |
-| `task_show` | `id` | — |
+| `task_list` | - | `project`, `status`, `type`, `priority`, `search` |
+| `task_show` | `id` | - |
 | `task_update` | `id` | `title`, `description`, `status`, `priority`, `due_date` |
-| `task_move` | `id`, `status` | — |
+| `task_move` | `id`, `status` | - |
 | `plan_add` | `task_id`, `title`, `body` | `source` |
 | `plan_update` | `plan_id`, `title`, `body` | `change_note` |
-| `plan_history` | `plan_id` | — |
-| `comment_add` | `task_id`, `body` | — |
+| `plan_history` | `plan_id` | - |
+| `comment_add` | `task_id`, `body` | - |
 | `memory_add` | `project`, `body` | `tags` |
 | `memory_list` | `project` | `tag` |
-| `doc_add` | `project`, `title`, `body` | — |
-| `doc_list` | `project` | — |
-| `doc_show` | `id` | — |
+| `doc_add` | `project`, `title`, `body` | - |
+| `doc_list` | `project` | - |
+| `doc_show` | `id` | - |
 | `doc_update` | `id`, `body` | `title`, `change_note` |
 
 Note: `id` / `task_id` accept any of the three task ref forms (TASK-N, bare integer, ULID). `plan_id` and doc `id` are full ULIDs returned by the matching list/create response.
@@ -759,7 +715,7 @@ backlog plan update <plan-id> \
 ### Capture a design decision as memory
 
 ```sh
-backlog memory add "Chose Cobra over urfave/cli — better completion + posix flag handling" \
+backlog memory add "Chose Cobra over urfave/cli - better completion + posix flag handling" \
   --project api --tag "decision,deps" --as ai:claude-code
 ```
 
@@ -792,7 +748,7 @@ backlog plan add --task "$TASK_ID" --title "Plan" --content "..." --as ai:claude
 
 ## Enum reference
 
-**type:** `task` · `bug` · `issue` · `improvement` · `feature` · `vulnerability` · `chore` · `spike`
+**type:** `task` · `bug` · `issue` · `improvement` · `feature` · `vulnerability` · `chore` · `spike` · `bucket-list`
 
 **status:** `todo` · `doing` · `done`
 

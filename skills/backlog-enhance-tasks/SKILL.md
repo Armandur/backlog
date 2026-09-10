@@ -1,6 +1,6 @@
 ---
 name: backlog-enhance-tasks
-description: Enhance a backlog task's title, description, and optionally generate a plan using Claude. Invoke as /backlog-enhance-tasks TASK-N or /backlog-enhance-tasks TASK-N --build-plan.
+description: Berika en backlog-task med tydligare titel, strukturerad beskrivning (Context, Acceptance criteria, Verification) och valfri plan, så den blir judgeable och loop-bar. Använd vid "gör tasken judgeable", "skriv acceptanskriterier för TASK-N", "berika tasken", "gör den loop-bar", eller inför /backlog-loop när beskrivningen är tunn. Anropas som /backlog-enhance-tasks TASK-N, med --build-plan för att även fästa en plan.
 ---
 
 # backlog-enhance-tasks
@@ -18,7 +18,7 @@ Accepts: a task ref (`TASK-N` or bare integer), optional `--build-plan` flag.
 ### 1. Fetch the task
 
 ```sh
-./backlog --profile default task show <ref> --json
+backlog --profile default task show <ref> --json
 ```
 
 Parse the JSON. Extract: `id`, `seq`, `title`, `description`, `type`, `priority`, `project`.
@@ -26,7 +26,7 @@ Parse the JSON. Extract: `id`, `seq`, `title`, `description`, `type`, `priority`
 ### 2. Rewrite the title
 
 Improve the title for clarity and specificity. Rules:
-- Use imperative verb ("Add", "Fix", "Remove", "Expose", "Migrate" — not "Adding" or "Added")
+- Use imperative verb ("Add", "Fix", "Remove", "Expose", "Migrate" - not "Adding" or "Added")
 - Be specific: include the subsystem or file if known (e.g., "Fix circular onclick rebind in load-more button" not "Fix button bug")
 - Keep it under 80 chars
 - Do not change the intent or scope
@@ -37,7 +37,7 @@ Rewrite the description as structured markdown with these sections (omit section
 
 ```markdown
 ## Context
-<1-2 sentences on why this matters — what breaks or is missing without it>
+<1-2 sentences on why this matters - what breaks or is missing without it>
 
 ## Acceptance criteria
 - [ ] <specific, testable criterion>
@@ -45,21 +45,27 @@ Rewrite the description as structured markdown with these sections (omit section
 - [ ] ...
 
 ## Implementation hints
-<optional: file paths, function names, API patterns — only if clearly known>
+<optional: file paths, function names, API patterns - only if clearly known>
+
+## Verification
+- <körbart kommando per kriterium, t.ex. `pytest tests/test_x.py -k y`, `grep -n mönster fil`, `curl -s URL`>
+- <eller "manuellt: <vad som ska inspekteras och vad som ska synas>">
+- Frontend: gör kriteriet browser-judgeable - `shot` vid 390px och 1280px, säg vad som ska synas
 ```
 
 Rules:
 - Keep what's already correct in the existing description
 - Do not invent scope that isn't implied by the title/type/context
 - Write for a developer who hasn't seen this codebase before
+- Verification är obligatorisk: minst ett körbart kommando eller "manuellt: ..." - utan den bouncar /backlog-loop tasken
 
 ### 4. Write back to the task
 
 ```sh
-./backlog --profile default task update <ref> \
+backlog --profile default task update <ref> \
   --title "<improved title>" \
   --description "<expanded description>" \
-  --as "ai:claude-sonnet-4-6"
+  --as "ai:<modell>"
 ```
 
 ### 5. Build plan (if `--build-plan` flag provided)
@@ -68,7 +74,7 @@ Generate a concise implementation plan:
 
 ```markdown
 ## Steps
-1. <first concrete action — file, function, what to change>
+1. <first concrete action - file, function, what to change>
 2. <next action>
 ...
 
@@ -78,11 +84,11 @@ Generate a concise implementation plan:
 
 Then attach it:
 ```sh
-./backlog --profile default plan add \
+backlog --profile default plan add \
   --task <ref> \
   --title "Implementation plan" \
   --content "<plan markdown>" \
-  --as "ai:claude-sonnet-4-6"
+  --as "ai:<modell>"
 ```
 
 ## Output
@@ -98,7 +104,7 @@ Enhanced TASK-N: <new title>
 
 ## Notes
 
-- Always use `--profile default` for all backlog CLI calls in this project
-- Always attribute writes to `ai:claude-sonnet-4-6` (or the current model)
-- Do not change `type`, `priority`, `status`, or `project` — only `title` and `description`
+- Always use `--profile default` for all backlog CLI calls
+- Always attribute writes to `ai:<modell>` (or the current model)
+- Do not change `type`, `priority`, `status`, or `project` - only `title` and `description`
 - If the task already has a detailed description, preserve its structure and only enrich it
