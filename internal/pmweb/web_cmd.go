@@ -15,7 +15,7 @@ import (
 
 // NewWebCmd ersätter upstreams web-kommando med PM-webben: samma UI plus
 // projektsamtalen på /pm/<alias>.
-func NewWebCmd(reg *pm.AgentRegister) *cobra.Command {
+func NewWebCmd(hamtaRegister func() (*pm.AgentRegister, error)) *cobra.Command {
 	var port int
 	var bind string
 
@@ -23,10 +23,14 @@ func NewWebCmd(reg *pm.AgentRegister) *cobra.Command {
 		Use:   "web",
 		Short: "Starta PM-webben (backlog-UI plus projektsamtal)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			reg, err := hamtaRegister()
+			if err != nil {
+				return err
+			}
 			srv := New(cli.DB(), cli.CurrentActor(), reg)
 			addr := net.JoinHostPort(bind, fmt.Sprintf("%d", port))
-			vard, err := os.Hostname()
-			if err != nil || vard == "" {
+			vard, felVard := os.Hostname()
+			if felVard != nil || vard == "" {
 				vard = "ubuntu-ai"
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "PM-webb: http://%s:%d/  tråd: http://%s:%d/pm/<alias>\n", vard, port, vard, port)

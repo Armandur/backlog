@@ -36,10 +36,13 @@ func main() {
 	cli.SetGuard(pm.Guard)
 	cli.SetPostOpen(pm.Migrate)
 
-	register := pm.NewAgentRegister()
-	register.Registrera(pm.NewClaudeAgent(pm.AgentBinar(), profilFlagga()))
-
-	extra := []*cobra.Command{pm.NewPMCmd(), pm.NewSamtalCmd(register), pmweb.NewWebCmd(register)}
+	extra := []*cobra.Command{
+		pm.NewPMCmd(),
+		pm.NewSamtalCmd(pm.RegisterFranProfil),
+		pm.NewDelaUtCmd(profilFlagga),
+		pm.NewKorningCmd(),
+		pmweb.NewWebCmd(pm.RegisterFranProfil),
+	}
 	if err := cli.ExecuteRoot("backlog-pm", extra...); err != nil {
 		fmt.Fprintln(os.Stderr, "fel:", err)
 		os.Exit(1)

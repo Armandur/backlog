@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/mazen160/backlog/internal/cli"
 )
 
 // Agent är adaptergränssnittet mot en modell. Utdelaren i delsteg 3 bygger
@@ -68,83 +69,46 @@ func (r *AgentRegister) Namn() []string {
 	return namn
 }
 
-// ClaudeAgent kör Claude headless (claude -p) och ger den PM-workspacet som
-// MCP-server, så agenten kan slå upp mer än det som ryms i prompten.
-type ClaudeAgent struct {
-	Binar     string // claude, kan pekas om i test
-	Modell    string // aktörsnamnet på svaret
-	PMBinar   string // sökväg till backlog-pm för mcp-servern
-	Profil    string // profilen mcp-servern ska köra mot
-	MCPConfig string // färdig config-fil, annars skrivs en temporär
+// FranKonfig bygger registret ur konfigurationen. Alla agenter är
+// kommandoagenter, så en tredje agent läggs till i pm.toml utan kodändring.
+func FranKonfig(k Konfig) *AgentRegister {
+	reg := NewAgentRegister()
+	namn := make([]string, 0, len(k.Agenter))
+	for n := range k.Agenter {
+		namn = append(namn, n)
+	}
+	sort.Strings(namn)
+	for _, n := range namn {
+		reg.Registrera(NewKommandoAgent(n, k.Agenter[n]))
+	}
+	if k.DefaultAgent != "" {
+		reg.SattForval(k.DefaultAgent)
+	}
+	return reg
 }
 
-func NewClaudeAgent(pmBinar, profil string) *ClaudeAgent {
-	return &ClaudeAgent{Binar: "claude", Modell: "claude-opus-5", PMBinar: pmBinar, Profil: profil}
-}
-
-func (c *ClaudeAgent) Namn() string {
-	if c.Modell == "" {
-		return "claude"
-	}
-	return c.Modell
-}
-
-func (c *ClaudeAgent) Fraga(ctx context.Context, prompt string) (string, error) {
-	binar := c.Binar
-	if binar == "" {
-		binar = "claude"
-	}
-	args := []string{"-p", prompt}
-	if cfg, cleanup, err := c.mcpConfig(); err == nil && cfg != "" {
-		defer cleanup()
-		args = append(args, "--mcp-config", cfg)
-	}
-
-	cmd := exec.CommandContext(ctx, binar, args...)
-	cmd.Stdin = nil
-	ut, err := cmd.Output()
+// HamtaKorare ger agenten som körare, för utdelaren.
+func (r *AgentRegister) HamtaKorare(namn string) (Korare, error) {
+	a, err := r.Hamta(namn)
 	if err != nil {
-		var stderr string
-		if ee, ok := err.(*exec.ExitError); ok {
-			stderr = strings.TrimSpace(string(ee.Stderr))
-		}
-		if stderr != "" {
-			return "", fmt.Errorf("agenten %s svarade inte: %v: %s", c.Namn(), err, stderr)
-		}
-		return "", fmt.Errorf("agenten %s svarade inte: %w", c.Namn(), err)
+		return nil, err
 	}
-	svar := strings.TrimSpace(string(ut))
-	if svar == "" {
-		return "", fmt.Errorf("agenten %s gav ett tomt svar", c.Namn())
+	k, ok := a.(Korare)
+	if !ok {
+		return nil, fmt.Errorf("agenten %q kan inte köra tasks, bara svara i samtal", a.Namn())
 	}
-	return svar, nil
+	return k, nil
 }
 
-// mcpConfig skriver en tillfällig MCP-config som pekar på PM-workspacet.
-func (c *ClaudeAgent) mcpConfig() (string, func(), error) {
-	if c.MCPConfig != "" {
-		return c.MCPConfig, func() {}, nil
+// RegistreraKorare lägger in en körare i registret. Används av test.
+func (r *AgentRegister) RegistreraKorare(k Korare) {
+	if a, ok := k.(Agent); ok {
+		r.Registrera(a)
 	}
-	if c.PMBinar == "" || c.Profil == "" {
-		return "", func() {}, nil
-	}
-	f, err := os.CreateTemp("", "backlog-pm-mcp-*.json")
-	if err != nil {
-		return "", func() {}, err
-	}
-	cfg := fmt.Sprintf(`{"mcpServers":{"backlog-pm":{"command":%q,"args":["--profile",%q,"mcp","serve"]}}}`,
-		c.PMBinar, c.Profil)
-	if _, err := f.WriteString(cfg); err != nil {
-		f.Close()
-		os.Remove(f.Name())
-		return "", func() {}, err
-	}
-	f.Close()
-	return f.Name(), func() { os.Remove(f.Name()) }, nil
 }
 
-// AgentBinar ger sökvägen till den körande binären, för MCP-configen.
-func AgentBinar() string {
+// PMBinar ger sökvägen till den körande binären, för MCP-configen.
+func PMBinar() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return "backlog-pm"
@@ -153,4 +117,14 @@ func AgentBinar() string {
 		return real
 	}
 	return exe
+}
+
+// RegisterFranProfil bygger agentregistret ur profilens pm.toml när ett
+// kommando körs. Ändras konfigfilen behövs ingen ombyggnad.
+func RegisterFranProfil() (*AgentRegister, error) {
+	k, err := LasKonfig(cli.WorkDir())
+	if err != nil {
+		return nil, err
+	}
+	return FranKonfig(k), nil
 }

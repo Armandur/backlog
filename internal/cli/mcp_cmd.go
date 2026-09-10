@@ -1,8 +1,8 @@
 package cli
 
 import (
-	"github.com/spf13/cobra"
 	"github.com/mazen160/backlog/internal/mcpserver"
+	"github.com/spf13/cobra"
 )
 
 func newMCPCmd() *cobra.Command {

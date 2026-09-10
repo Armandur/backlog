@@ -45,6 +45,8 @@ func (s *Server) rutter(upstream http.Handler) {
 		w.Header().Set("Allow", "GET, POST")
 		svaraFel(w, fmt.Errorf("metoden %s stöds inte på samtalsrouten", r.Method), http.StatusMethodNotAllowed)
 	})
+	s.mux.HandleFunc("GET /api/projects/{alias}/korningar", s.hamtaKorningar)
+	s.mux.HandleFunc("GET /api/korningar/{id}", s.hamtaKorning)
 	s.mux.HandleFunc("GET /pm/{alias}", s.tradVy)
 	s.mux.HandleFunc("GET /pm/", s.tradVy)
 
@@ -141,6 +143,33 @@ func (s *Server) skrivSamtal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	svaraJSON(w, http.StatusCreated, post)
+}
+
+func (s *Server) hamtaKorningar(w http.ResponseWriter, r *http.Request) {
+	projectID, err := pm.NewSamtalStore(s.db).ProjectIDByAlias(r.Context(), r.PathValue("alias"))
+	if err != nil {
+		svaraFel(w, err, http.StatusNotFound)
+		return
+	}
+	korningar, err := pm.NewKorningStore(s.db).Lista(r.Context(), projectID, 0)
+	if err != nil {
+		svaraFel(w, err, http.StatusInternalServerError)
+		return
+	}
+	svaraJSON(w, http.StatusOK, map[string]any{"korningar": korningar})
+}
+
+func (s *Server) hamtaKorning(w http.ResponseWriter, r *http.Request) {
+	k, err := pm.NewKorningStore(s.db).Hamta(r.Context(), r.PathValue("id"))
+	if err != nil {
+		svaraFel(w, err, http.StatusNotFound)
+		return
+	}
+	svar := map[string]any{"korning": k}
+	if r.URL.Query().Get("logg") == "1" {
+		svar["logg"] = pm.LasLogg(k.Logg)
+	}
+	svaraJSON(w, http.StatusOK, svar)
 }
 
 func svaraJSON(w http.ResponseWriter, kod int, v any) {

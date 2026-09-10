@@ -66,6 +66,9 @@ func DB() *sql.DB { return app.DB }
 // CurrentActor ger aktören för den här körningen.
 func CurrentActor() models.Actor { return app.Actor }
 
+// WorkDir ger workspace-katalogen för den aktiva profilen.
+func WorkDir() string { return app.WorkDir }
+
 // JSONOutput är sant om --json är satt.
 func JSONOutput() bool { return flagJSON }
 

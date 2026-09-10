@@ -12,12 +12,12 @@ import (
 )
 
 // NewSamtalCmd bygger kommandogrenen samtal.
-func NewSamtalCmd(reg *AgentRegister) *cobra.Command {
+func NewSamtalCmd(hamtaRegister func() (*AgentRegister, error)) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "samtal",
 		Short: "Projektsamtal: en tråd per projekt",
 	}
-	cmd.AddCommand(samtalAddCmd(), samtalListCmd(), samtalFragaCmd(reg))
+	cmd.AddCommand(samtalAddCmd(), samtalListCmd(), samtalFragaCmd(hamtaRegister))
 	return cmd
 }
 
@@ -88,7 +88,7 @@ func samtalListCmd() *cobra.Command {
 	return cmd
 }
 
-func samtalFragaCmd(reg *AgentRegister) *cobra.Command {
+func samtalFragaCmd(hamtaRegister func() (*AgentRegister, error)) *cobra.Command {
 	var projekt, agentNamn, aktor string
 	cmd := &cobra.Command{
 		Use:   "fraga <text>",
@@ -102,6 +102,10 @@ func samtalFragaCmd(reg *AgentRegister) *cobra.Command {
 				return err
 			}
 			a, err := aktorEller(aktor, cli.CurrentActor())
+			if err != nil {
+				return err
+			}
+			reg, err := hamtaRegister()
 			if err != nil {
 				return err
 			}

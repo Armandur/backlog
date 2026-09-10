@@ -53,16 +53,17 @@ func TestMigrateSkaparSamtalstabellenOchEgenVersion(t *testing.T) {
 	if err := db.QueryRow(`SELECT value FROM schema_meta WHERE key='pm_schema_version'`).Scan(&v); err != nil {
 		t.Fatalf("pm_schema_version saknas: %v", err)
 	}
-	if v != "1" {
-		t.Fatalf("väntade version 1, fick %q", v)
+	// Versionen följer antalet PM-migreringar.
+	if v == "0" {
+		t.Fatalf("pm_schema_version kördes inte, fick %q", v)
 	}
 	// Upstreams version får inte ha rubbats av PM-migreringen.
 	var upstream string
 	if err := db.QueryRow(`SELECT value FROM schema_meta WHERE key='schema_version'`).Scan(&upstream); err != nil {
 		t.Fatalf("schema_version saknas: %v", err)
 	}
-	if upstream == "1" {
-		t.Fatal("PM-migreringen skrev över upstreams schema_version")
+	if upstream == v {
+		t.Fatalf("PM-migreringen ser ut att dela version med upstream (%q)", upstream)
 	}
 }
 
