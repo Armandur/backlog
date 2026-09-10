@@ -319,7 +319,7 @@ function renderaKonfig() {
           <label class="falt">Stdin<input data-agentfalt="stdin" value="${esc(a.stdin || "")}" spellcheck="false"></label>
           <label class="kryss detaljkryss"><input data-agentfalt="mcp" type="checkbox"${a.mcp ? " checked" : ""}> Lägg till MCP-konfiguration</label>
         </div>
-        <label class="falt">Miljö, en <code>NYCKEL=värde</code> per rad<textarea data-agentfalt="miljo" rows="3" spellcheck="false">${esc(miljoRader(a.miljo))}</textarea></label>
+        <label class="falt"><span>Miljö, en <code>NYCKEL=värde</code> per rad</span><textarea data-agentfalt="miljo" rows="3" spellcheck="false">${esc(miljoRader(a.miljo))}</textarea></label>
       </details>
       <pre class="provsvar" hidden></pre>
     </article>`;
