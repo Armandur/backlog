@@ -201,3 +201,8 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
   .konfigfot { bottom: 55px; }
   .konfigfot .btn { white-space: nowrap; }
 }
+
+.forslagsstatus { display: flex; align-items: center; gap: 8px; color: var(--svag); }
+.forslagsstatus[hidden] { display: none; }
+.snurra { width: 14px; height: 14px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: snurr 0.8s linear infinite; }
+@keyframes snurr { to { transform: rotate(360deg); } }
