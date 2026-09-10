@@ -105,19 +105,25 @@ func withinDir(path, dir string) bool {
 }
 
 // resolvePath ger en absolut sökväg med symlänkar upplösta. Finns inte
-// sökvägen än löses närmaste befintliga förälder upp i stället.
+// sökvägen än vandrar den uppåt till närmaste befintliga förälder, löser upp
+// den och lägger tillbaka de saknade komponenterna.
 func resolvePath(p string) string {
 	abs, err := filepath.Abs(expandHome(p))
 	if err != nil {
 		return expandHome(p)
 	}
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		return real
+	dir, rest := abs, ""
+	for {
+		if real, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(real, rest)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return abs
+		}
+		rest = filepath.Join(filepath.Base(dir), rest)
+		dir = parent
 	}
-	if real, err := filepath.EvalSymlinks(filepath.Dir(abs)); err == nil {
-		return filepath.Join(real, filepath.Base(abs))
-	}
-	return abs
 }
 
 func expandHome(p string) string {

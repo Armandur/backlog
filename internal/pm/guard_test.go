@@ -194,3 +194,23 @@ func TestCheckAvvisarSymlankTillVardagskatalogen(t *testing.T) {
 		}
 	}
 }
+
+// Flera nivåer av ännu icke-existerande kataloger under en symlänk får inte
+// smita förbi: init skapar dem och hamnar då inuti vardagskatalogen.
+func TestCheckAvvisarDjupOskapadSokvagUnderSymlank(t *testing.T) {
+	riktig := t.TempDir()
+	lank := filepath.Join(t.TempDir(), "genvag")
+	if err := os.Symlink(riktig, lank); err != nil {
+		t.Skipf("kan inte skapa symlänk: %v", err)
+	}
+
+	for _, djup := range []string{"nested/deep", "a/b/c/d", "nested/deep/backlog.db"} {
+		sel := Selection{Profile: "pm", Path: filepath.Join(lank, djup)}
+		if err := Check(sel, riktig); err == nil {
+			t.Fatalf("--path %s under symlänk passerade spärren", djup)
+		}
+	}
+	if err := Check(Selection{Profile: "pm", Path: filepath.Join(t.TempDir(), "a/b/c")}, riktig); err != nil {
+		t.Fatalf("egen oskapad sökväg ska passera, fick: %v", err)
+	}
+}
