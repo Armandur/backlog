@@ -66,7 +66,7 @@ type provaKonfigBody struct {
 func (s *Server) provaKonfig(w http.ResponseWriter, r *http.Request) {
 	var body provaKonfigBody
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
-		svaraFel(w, errors.New("kunde inte läsa vilken agent som ska provas"), http.StatusBadRequest)
+		svaraFel(w, errors.New("kunde inte läsa vilken agent du vill prova"), http.StatusBadRequest)
 		return
 	}
 	body.Agent = strings.TrimSpace(body.Agent)

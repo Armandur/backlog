@@ -119,7 +119,7 @@ func ParseActor(s string) (models.Actor, error) {
 	}
 	kind, name, found := strings.Cut(s, ":")
 	if !found || name == "" {
-		return models.Actor{}, fmt.Errorf("aktören %q måste skrivas som human:namn eller ai:modell", s)
+		return models.Actor{}, fmt.Errorf("skriv aktören %q som human:namn eller ai:modell", s)
 	}
 	switch models.ActorKind(kind) {
 	case models.ActorKindHuman, models.ActorKindAI:

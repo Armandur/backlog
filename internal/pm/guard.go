@@ -42,7 +42,7 @@ func Check(sel Selection, defaultDir string) error {
 
 	switch sel.Profile {
 	case "":
-		return fmt.Errorf("backlog-pm kräver en egen profil: ange --profile pm. Utan flagga skulle vardagsprofilen %q användas", DefaultProfileName)
+		return fmt.Errorf("backlog-pm kräver en egen profil: ange --profile pm. Utan flagga tar den vardagsprofilen %q", DefaultProfileName)
 	case DefaultProfileName:
 		return fmt.Errorf("backlog-pm får inte köras mot profilen %q - det är vardagsdatabasen. Ange --profile pm", DefaultProfileName)
 	}

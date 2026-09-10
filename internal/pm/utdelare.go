@@ -78,7 +78,7 @@ func (u *Utdelare) DelaUt(ctx context.Context, in UtdelInput) (*Korning, error) 
 	}
 	if !tagen {
 		if in.Neka {
-			return korning, fmt.Errorf("körningen köades inte: %s. Kör igen senare eller vänta utan --neka", las.LasBesked())
+			return korning, fmt.Errorf("repot är upptaget: %s. Kör igen senare, eller vänta i kön utan --neka", las.LasBesked())
 		}
 		timeout := in.KoTimeout
 		if timeout <= 0 {
@@ -208,5 +208,5 @@ func krokMiljo(extra map[string]string, in UtdelInput) []string {
 	return miljo
 }
 
-// LoggKatalog är där körningarnas loggar hamnar.
+// LoggKatalog pekar ut var körningarna skriver sina loggar.
 func LoggKatalog(workspaceDir string) string { return filepath.Join(workspaceDir, "korningar") }

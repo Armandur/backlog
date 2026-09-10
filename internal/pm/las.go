@@ -80,7 +80,7 @@ func (l *RepoLas) Agare() (*lasInnehall, bool, error) {
 	}
 	var innehall lasInnehall
 	if err := json.Unmarshal(data, &innehall); err != nil {
-		// Trasig låsfil räknas som inaktuell.
+		// En trasig låsfil är inaktuell.
 		return &lasInnehall{}, false, nil
 	}
 	return &innehall, processLever(innehall.PID), nil

@@ -220,7 +220,7 @@ func TestNekaGerBeskedIStalletForKo(t *testing.T) {
 
 	korare := &fejkKorare{namn: "fejk", utdata: "ok"}
 	_, err := utdelareMed(t, db, korare).DelaUt(context.Background(), UtdelInput{TaskID: taskID, WorkspaceDir: ws, Neka: true})
-	if err == nil || !strings.Contains(err.Error(), "köades inte") {
+	if err == nil || !strings.Contains(err.Error(), "repot är upptaget") {
 		t.Fatalf("väntade besked om upptaget repo, fick %v", err)
 	}
 	if korare.anrop != 0 {

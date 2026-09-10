@@ -20,7 +20,7 @@ type TaskFakta struct {
 	Status      string
 }
 
-// AgentVal är utfallet av regelmotorn, med motiveringen som sparas på körningen.
+// AgentVal är utfallet av regelmotorn. Motiveringen följer med till körningen.
 type AgentVal struct {
 	Agent      string
 	Motivering string
@@ -54,7 +54,7 @@ func ValjAgent(k Konfig, fakta TaskFakta, overstyrning string) (AgentVal, error)
 	return AgentVal{Agent: k.DefaultAgent, Motivering: fmt.Sprintf("ingen regel matchade, default-agent %s (%s)", k.DefaultAgent, kalla)}, nil
 }
 
-// matchar kräver att varje angivet villkor stämmer. Tomma villkor hoppas över.
+// matchar kräver att varje angivet villkor stämmer, och hoppar över tomma villkor.
 func matchar(r Regel, f TaskFakta) (string, bool) {
 	var skal []string
 

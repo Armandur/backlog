@@ -53,7 +53,7 @@ type Konfig struct {
 	Agenter      map[string]AgentKonfig `toml:"agenter" json:"agenter"`
 	Regler       []Regel                `toml:"regler" json:"regler"`
 	Krok         Krok                   `toml:"krok" json:"krok"`
-	// Kalla är sökvägen filen lästes från, tom när defaulterna används.
+	// Kalla är sökvägen konfigurationen kommer från, tom när PM använder defaulterna.
 	Kalla string `toml:"-" json:"-"`
 }
 
@@ -181,7 +181,7 @@ func fyllIStandard(a AgentKonfig) AgentKonfig {
 	return a
 }
 
-// Validera fångar konfigfel innan en körning startas.
+// Validera fångar konfigfel innan PM startar en körning.
 func (k Konfig) Validera() error {
 	for namn, a := range k.Agenter {
 		if a.Kommando == "" {
