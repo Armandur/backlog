@@ -173,3 +173,24 @@ func homeDir(t *testing.T) string {
 	}
 	return home
 }
+
+// En symlänk till vardagskatalogen får inte ta sig förbi spärren.
+func TestCheckAvvisarSymlankTillVardagskatalogen(t *testing.T) {
+	riktig := t.TempDir()
+	lank := filepath.Join(t.TempDir(), "genvag")
+	if err := os.Symlink(riktig, lank); err != nil {
+		t.Skipf("kan inte skapa symlänk: %v", err)
+	}
+
+	cases := []Selection{
+		{Profile: "pm", Path: lank},
+		{Profile: "pm", Path: filepath.Join(lank, "under")},
+		{Profile: "pm", DB: filepath.Join(lank, "backlog.db")},
+		{Profile: "pm", EnvDB: filepath.Join(lank, "backlog.db")},
+	}
+	for _, sel := range cases {
+		if err := Check(sel, riktig); err == nil {
+			t.Fatalf("symlänksvalet %+v passerade spärren", sel)
+		}
+	}
+}

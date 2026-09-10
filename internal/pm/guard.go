@@ -94,21 +94,30 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// withinDir är sant om path är dir eller ligger under dir.
+// withinDir är sant om path är dir eller ligger under dir. Symlänkar löses
+// upp först, annars smiter en länk till vardagskatalogen förbi spärren.
 func withinDir(path, dir string) bool {
-	absPath, err := filepath.Abs(expandHome(path))
-	if err != nil {
-		return false
-	}
-	absDir, err := filepath.Abs(expandHome(dir))
-	if err != nil {
-		return false
-	}
-	rel, err := filepath.Rel(absDir, absPath)
+	rel, err := filepath.Rel(resolvePath(dir), resolvePath(path))
 	if err != nil {
 		return false
 	}
 	return rel == "." || !strings.HasPrefix(rel, "..")
+}
+
+// resolvePath ger en absolut sökväg med symlänkar upplösta. Finns inte
+// sökvägen än löses närmaste befintliga förälder upp i stället.
+func resolvePath(p string) string {
+	abs, err := filepath.Abs(expandHome(p))
+	if err != nil {
+		return expandHome(p)
+	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		return real
+	}
+	if real, err := filepath.EvalSymlinks(filepath.Dir(abs)); err == nil {
+		return filepath.Join(real, filepath.Base(abs))
+	}
+	return abs
 }
 
 func expandHome(p string) string {
