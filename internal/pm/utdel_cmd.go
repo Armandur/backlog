@@ -99,7 +99,7 @@ func korningListCmd() *cobra.Command {
 				return nil
 			}
 			for _, k := range korningar {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s  %-5s  %-8s  %-10s  exit=%s  %s\n",
+				fmt.Fprintf(cmd.OutOrStdout(), "%s  %-8s  %-5s  %-12s  exit=%-3s  %s\n",
 					k.ID, k.TaskRef, k.Status, k.Agent, exitText(k.ExitKod), Tidstext(k.SkapadAt))
 			}
 			return nil
