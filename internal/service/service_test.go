@@ -180,6 +180,32 @@ func TestTaskCRUD(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestTaskCreateValidatesSwedishTitleLengthInCharacters(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	projSvc := service.NewProjectService(db)
+	planSvc := service.NewPlanService(db)
+	labelSvc := service.NewLabelService(db)
+	taskSvc := service.NewTaskService(db, planSvc, labelSvc)
+
+	p, err := projSvc.Create(ctx, models.CreateProjectInput{Alias: "proj", Name: "Proj", Actor: testActor})
+	require.NoError(t, err)
+
+	_, err = taskSvc.Create(ctx, models.CreateTaskInput{
+		ProjectID: p.ID,
+		Title:     strings.Repeat("å", 255),
+		Actor:     testActor,
+	})
+	require.NoError(t, err)
+
+	_, err = taskSvc.Create(ctx, models.CreateTaskInput{
+		ProjectID: p.ID,
+		Title:     strings.Repeat("å", 256),
+		Actor:     testActor,
+	})
+	require.ErrorIs(t, err, service.ErrTaskTitleTooLong)
+}
+
 func TestTaskFilters(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)

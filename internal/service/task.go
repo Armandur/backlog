@@ -66,14 +66,14 @@ func ValidateTaskTitle(title string) error {
 // ValidateTaskTitleLength kollar bara längden. En uppdatering har alltid
 // accepterat en tom titel, och det beteendet ska inte ändras i smyg.
 func ValidateTaskTitleLength(title string) error {
-	if len(title) > maxTitleLen {
+	if len([]rune(title)) > maxTitleLen {
 		return ErrTaskTitleTooLong
 	}
 	return nil
 }
 
 func ValidateTaskDescription(description string) error {
-	if len(description) > maxDescriptionLen {
+	if len([]rune(description)) > maxDescriptionLen {
 		return ErrTaskDescTooLong
 	}
 	return nil
