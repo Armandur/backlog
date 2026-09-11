@@ -308,10 +308,67 @@
     <div class="kommentarlista" id="kommentarer"></div>
   </div>
 </aside>
+<aside class="drawer" id="forslagsdrawer" aria-label="Förslag för task">
+  <header><h3 id="forslagTitel">Taskförslag</h3><button class="x" id="forslagStang" aria-label="Stäng">×</button></header>
+  <form id="taskforslagsform" class="taskforslagsform">
+    <div class="bd">
+      <p class="notis"><strong>Utkast.</strong> PM sparar inget förrän du granskar fälten och klickar på Spara.</p>
+      <div class="falt">
+        <label for="forslagAgent">Agent, valfri</label>
+        <select id="forslagAgent"></select>
+      </div>
+      <div class="forslagsval">
+        <button type="button" class="btn" data-hamta-forslag="klassning">Föreslå klassning</button>
+        <button type="button" class="btn" data-hamta-forslag="berikning">Föreslå berikning</button>
+      </div>
+      <p class="forslagsstatus" id="taskforslagsStatus" role="status" hidden><span class="snurra" aria-hidden="true"></span> Agenten skriver ett utkast.</p>
+      <p class="fel-text" id="taskforslagsFel" role="alert"></p>
+      <div id="taskutkast" class="taskutkast" hidden>
+        <label class="falt" for="utkastTitel">Titel
+          <input id="utkastTitel" maxlength="255" required>
+        </label>
+        <label class="falt" for="utkastBeskrivning">Beskrivning
+          <textarea id="utkastBeskrivning" rows="12" maxlength="65535"></textarea>
+        </label>
+        <div class="taskutkast-rad">
+          <label class="falt" for="utkastTyp">Typ
+            <select id="utkastTyp">
+              <option value="task">Task</option><option value="bug">Bugg</option>
+              <option value="issue">Problem</option><option value="improvement">Förbättring</option>
+              <option value="feature">Funktion</option><option value="vulnerability">Sårbarhet</option>
+              <option value="chore">Underhåll</option><option value="spike">Utredning</option>
+              <option value="bucket-list">Idé</option>
+            </select>
+          </label>
+          <label class="falt" for="utkastPrioritet">Prioritet
+            <select id="utkastPrioritet">
+              <option value="1">P1</option><option value="2">P2</option><option value="3">P3</option>
+              <option value="4">P4</option><option value="5">P5</option>
+            </select>
+          </label>
+        </div>
+        <div class="taskutkast-rad">
+          <label class="falt" for="utkastModell">Modell, valfri
+            <input id="utkastModell" spellcheck="false">
+          </label>
+          <label class="falt" for="utkastAnstrangning">Ansträngning, valfri
+            <input id="utkastAnstrangning" spellcheck="false">
+          </label>
+        </div>
+        <p class="regel">Modell och ansträngning hör till körningen. Använd dem vid utdelningen.</p>
+      </div>
+    </div>
+    <footer>
+      <button type="button" class="btn" id="forslagDela" disabled>Använd vid utdelning</button>
+      <button type="submit" class="btn pri" id="sparaTaskforslag" disabled>Spara granskade fält</button>
+    </footer>
+  </form>
+</aside>
 <div class="toast" id="toast"></div>
 
 <script src="/pm-static/pm.js"></script>
-<script src="/pm-static/pm-strom.js"></script>
 <script src="/pm-static/pm-konfig.js"></script>
+<script src="/pm-static/pm-strom.js"></script>
+<script src="/pm-static/pm-forslag.js"></script>
 </body>
 </html>

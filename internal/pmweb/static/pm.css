@@ -74,7 +74,7 @@ h2 .n { font-weight: 500; background: var(--sankt); border-radius: 10px; padding
 .rad-post a.ref:hover { color: var(--accent); text-decoration: underline; }
 .rad-post .t { min-width: 0; }
 .rad-post .meta { font-size: 12px; color: var(--svag); display: block; }
-.rad-post .act { display: flex; gap: 6px; align-items: center; }
+.rad-post .act { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .stripe { border-left: 3px solid transparent; }
 .stripe.fel { border-left-color: var(--fel); }
 .stripe.fraga { border-left-color: var(--varn); }
@@ -264,4 +264,17 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 .proj select { width: auto; max-width: 46vw; padding: 4px 8px; font-size: 13px; }
 @media (max-width: 760px) {
   .proj select { max-width: 42vw; }
+}
+
+
+/* Redigerbart taskutkast */
+.taskforslagsform { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.forslagsval { display: flex; gap: 8px; flex-wrap: wrap; }
+.taskutkast { display: grid; gap: 14px; }
+.taskutkast-rad { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+#forslagsdrawer { width: min(580px, 100vw); }
+#forslagsdrawer footer { flex-wrap: wrap; }
+@media (max-width: 520px) {
+  .taskutkast-rad { grid-template-columns: 1fr; }
+  #forslagsdrawer footer .btn { flex: 1 1 auto; }
 }

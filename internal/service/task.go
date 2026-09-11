@@ -49,11 +49,43 @@ const (
 var (
 	ErrTaskTitleRequired = errors.New("title is required")
 	ErrTaskTitleTooLong  = errors.New("title exceeds max length of 255 characters")
+	ErrTaskDescRequired  = errors.New("description is required")
 	ErrTaskDescTooLong   = errors.New("description exceeds max length of 65535 characters")
 	ErrTaskTypeInvalid   = errors.New("invalid type")
 	ErrTaskStatusInvalid = errors.New("invalid status")
 	ErrTaskPriority      = errors.New("priority must be 1-5")
 )
+
+func ValidateTaskTitle(title string) error {
+	if title == "" {
+		return ErrTaskTitleRequired
+	}
+	if len(title) > maxTitleLen {
+		return ErrTaskTitleTooLong
+	}
+	return nil
+}
+
+func ValidateTaskDescription(description string) error {
+	if len(description) > maxDescriptionLen {
+		return ErrTaskDescTooLong
+	}
+	return nil
+}
+
+func ValidateTaskType(taskType models.TaskType) error {
+	if !taskType.Valid() {
+		return fmt.Errorf("%w %q (valid: %s)", ErrTaskTypeInvalid, taskType, joinTaskTypes())
+	}
+	return nil
+}
+
+func ValidateTaskPriority(priority int) error {
+	if priority < 1 || priority > 5 {
+		return ErrTaskPriority
+	}
+	return nil
+}
 
 func joinTaskTypes() string {
 	parts := make([]string, 0, len(models.AllTaskTypes()))
@@ -72,14 +104,11 @@ func joinTaskStatuses() string {
 }
 
 func (s *TaskService) Create(ctx context.Context, in models.CreateTaskInput) (*models.Task, error) {
-	if in.Title == "" {
-		return nil, ErrTaskTitleRequired
+	if err := ValidateTaskTitle(in.Title); err != nil {
+		return nil, err
 	}
-	if len(in.Title) > maxTitleLen {
-		return nil, ErrTaskTitleTooLong
-	}
-	if len(in.Description) > maxDescriptionLen {
-		return nil, ErrTaskDescTooLong
+	if err := ValidateTaskDescription(in.Description); err != nil {
+		return nil, err
 	}
 	if in.ProjectID == "" {
 		return nil, fmt.Errorf("project is required")
@@ -87,8 +116,8 @@ func (s *TaskService) Create(ctx context.Context, in models.CreateTaskInput) (*m
 	if in.Type == "" {
 		in.Type = models.TaskTypeTask
 	}
-	if !in.Type.Valid() {
-		return nil, fmt.Errorf("%w %q (valid: %s)", ErrTaskTypeInvalid, in.Type, joinTaskTypes())
+	if err := ValidateTaskType(in.Type); err != nil {
+		return nil, err
 	}
 	if in.Status == "" {
 		in.Status = models.TaskStatusTodo
@@ -99,8 +128,8 @@ func (s *TaskService) Create(ctx context.Context, in models.CreateTaskInput) (*m
 	if in.Priority == 0 {
 		in.Priority = 3
 	}
-	if in.Priority < 1 || in.Priority > 5 {
-		return nil, ErrTaskPriority
+	if err := ValidateTaskPriority(in.Priority); err != nil {
+		return nil, err
 	}
 
 	now := timeutil.Now()
@@ -298,20 +327,20 @@ func (s *TaskService) Update(ctx context.Context, ref string, in models.UpdateTa
 	oldStatus := t.Status
 
 	if in.Title != nil {
-		if len(*in.Title) > maxTitleLen {
-			return nil, ErrTaskTitleTooLong
+		if err := ValidateTaskTitle(*in.Title); err != nil {
+			return nil, err
 		}
 		t.Title = *in.Title
 	}
 	if in.Description != nil {
-		if len(*in.Description) > maxDescriptionLen {
-			return nil, ErrTaskDescTooLong
+		if err := ValidateTaskDescription(*in.Description); err != nil {
+			return nil, err
 		}
 		t.Description = *in.Description
 	}
 	if in.Type != nil {
-		if !in.Type.Valid() {
-			return nil, fmt.Errorf("%w %q (valid: %s)", ErrTaskTypeInvalid, *in.Type, joinTaskTypes())
+		if err := ValidateTaskType(*in.Type); err != nil {
+			return nil, err
 		}
 		t.Type = *in.Type
 	}
@@ -326,8 +355,8 @@ func (s *TaskService) Update(ctx context.Context, ref string, in models.UpdateTa
 		t.Status = *in.Status
 	}
 	if in.Priority != nil {
-		if *in.Priority < 1 || *in.Priority > 5 {
-			return nil, ErrTaskPriority
+		if err := ValidateTaskPriority(*in.Priority); err != nil {
+			return nil, err
 		}
 		t.Priority = *in.Priority
 	}

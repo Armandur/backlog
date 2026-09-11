@@ -84,7 +84,7 @@ async function laddaOversikt() {
     return rad(`<a class="mono ref" href="/tasks/${encodeURIComponent(t.ref)}" title="Öppna i backlog-UI:t">${t.ref}</a>
       <div class="t"><span class="prio">P${t.prioritet}</span> ${esc(t.titel)}
         <span class="meta">${esc(t.typ)}${t.etiketter.length ? " · " + esc(t.etiketter.join(", ")) : ""}${sista}</span></div>
-      <div class="act">${status}${kommentarknapp}${knapp}</div>`);
+      <div class="act">${status}${kommentarknapp}<button class="btn sm" data-taskforslag="klassning" data-taskref="${esc(t.ref)}">Klassa</button><button class="btn sm" data-taskforslag="berikning" data-taskref="${esc(t.ref)}">Berika</button>${knapp}</div>`);
   }, "Inga tasks i projektet.");
   $("#nVantar").textContent = o.vantar.length;
   fyll("#vantar", o.vantar, (v) => {

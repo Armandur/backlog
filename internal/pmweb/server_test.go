@@ -27,11 +27,23 @@ import (
 	"github.com/mazen160/backlog/internal/timeutil"
 )
 
-type fakeAgent struct{ svar string }
+type fakeAgent struct {
+	svar   string
+	fel    error
+	prompt *string
+	vanta  bool
+}
 
 func (f fakeAgent) Namn() string { return "fake-modell" }
 func (f fakeAgent) Fraga(ctx context.Context, prompt string) (string, error) {
-	return f.svar, nil
+	if f.prompt != nil {
+		*f.prompt = prompt
+	}
+	if f.vanta {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+	return f.svar, f.fel
 }
 
 func testServer(t *testing.T) (*Server, *sql.DB) {
@@ -320,9 +332,16 @@ func TestPMVyInnehallerKunskapOchKommentarspanel(t *testing.T) {
 	srv, _ := testServer(t)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/pm/demo", nil))
-	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`} {
-		if !strings.Contains(w.Body.String(), innehall) {
+	body := w.Body.String()
+	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`} {
+		if !strings.Contains(body, innehall) {
 			t.Fatalf("PM-vyn saknar %s", innehall)
+		}
+	}
+	skript := []string{"/pm-static/pm.js", "/pm-static/pm-konfig.js", "/pm-static/pm-strom.js", "/pm-static/pm-forslag.js"}
+	for i := 1; i < len(skript); i++ {
+		if strings.Index(body, skript[i-1]) >= strings.Index(body, skript[i]) {
+			t.Fatalf("skripten laddas i fel ordning: %v", skript)
 		}
 	}
 }
@@ -1220,5 +1239,200 @@ func TestDelaUtSkickarModellOchAnstrangning(t *testing.T) {
 	got := <-sett
 	if got[0] != "opus" || got[1] != "hog" {
 		t.Fatalf("utdelaren fick %q", got)
+	}
+}
+
+func skapaForslagsTask(t *testing.T, db *sql.DB) *models.Task {
+	t.Helper()
+	projekt, err := service.NewProjectService(db).GetByAlias(t.Context(), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := service.NewTaskService(db, service.NewPlanService(db), service.NewLabelService(db)).Create(
+		t.Context(), models.CreateTaskInput{
+			ProjectID: projekt.ID, Title: "Kort titel", Description: "Kort beskrivning",
+			Type: models.TaskTypeTask, Priority: 3, Actor: models.Actor{Kind: models.ActorKindHuman, Name: "rasmus"},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return task
+}
+
+func TestForeslaTaskKlassningGerUtkastUtanSkrivning(t *testing.T) {
+	srv, db := testServer(t)
+	task := skapaForslagsTask(t, db)
+	var prompt string
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{
+		svar:   `{"typ":"feature","prioritet":2,"modell":"gpt-5","anstrangning":"high"}`,
+		prompt: &prompt,
+	})
+
+	w := httptest.NewRecorder()
+	url := fmt.Sprintf("/api/tasks/TASK-%d/foresla", task.Seq)
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, url, bytes.NewBufferString(`{"sort":"klassning"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("klassningen gav %d: %s", w.Code, w.Body.String())
+	}
+	var utkast taskUtkast
+	if err := json.NewDecoder(w.Body).Decode(&utkast); err != nil {
+		t.Fatal(err)
+	}
+	if utkast.Typ != models.TaskTypeFeature || utkast.Prioritet != 2 || utkast.Modell != "gpt-5" || utkast.Anstrangning != "high" {
+		t.Fatalf("oväntat utkast: %+v", utkast)
+	}
+	for _, taskTyp := range models.AllTaskTypes() {
+		if !strings.Contains(prompt, string(taskTyp)) {
+			t.Fatalf("prompten saknar typen %q: %s", taskTyp, prompt)
+		}
+	}
+	oandrad, err := service.NewTaskService(db, service.NewPlanService(db), service.NewLabelService(db)).Get(
+		t.Context(), task.ID, false, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oandrad.Type != models.TaskTypeTask || oandrad.Priority != 3 || oandrad.Title != "Kort titel" ||
+		oandrad.Description != "Kort beskrivning" {
+		t.Fatalf("förslagsanropet ändrade tasken: %+v", oandrad)
+	}
+}
+
+func TestForeslaTaskBerikningOchPatchSpararGranskadeFalt(t *testing.T) {
+	srv, db := testServer(t)
+	task := skapaForslagsTask(t, db)
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{svar: `{
+		"titel":"Tydligare titel",
+		"beskrivning":"## Kontext\nBakgrund.\n\n## Acceptanskriterier\n- Klart.\n\n## Verifiering\n- Testa."
+	}`})
+
+	fw := httptest.NewRecorder()
+	url := fmt.Sprintf("/api/tasks/TASK-%d/foresla", task.Seq)
+	srv.ServeHTTP(fw, httptest.NewRequest(http.MethodPost, url, bytes.NewBufferString(`{"sort":"berikning"}`)))
+	if fw.Code != http.StatusOK {
+		t.Fatalf("berikningen gav %d: %s", fw.Code, fw.Body.String())
+	}
+	var utkast taskUtkast
+	if err := json.NewDecoder(fw.Body).Decode(&utkast); err != nil {
+		t.Fatal(err)
+	}
+	if utkast.Titel != "Tydligare titel" || !strings.Contains(utkast.Beskrivning, "## Acceptanskriterier") {
+		t.Fatalf("oväntat berikningsutkast: %+v", utkast)
+	}
+
+	pw := httptest.NewRecorder()
+	patch := `{"titel":"Granskad titel","beskrivning":"Granskad beskrivning","typ":"improvement","prioritet":4}`
+	srv.ServeHTTP(pw, httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/tasks/TASK-%d", task.Seq), strings.NewReader(patch)))
+	if pw.Code != http.StatusOK {
+		t.Fatalf("PATCH gav %d: %s", pw.Code, pw.Body.String())
+	}
+	sparad, err := service.NewTaskService(db, service.NewPlanService(db), service.NewLabelService(db)).Get(
+		t.Context(), task.ID, false, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sparad.Title != "Granskad titel" || sparad.Description != "Granskad beskrivning" ||
+		sparad.Type != models.TaskTypeImprovement || sparad.Priority != 4 {
+		t.Fatalf("PATCH sparade fel värden: %+v", sparad)
+	}
+}
+
+func TestForeslaTaskAvvisarSvarSomInteArJSON(t *testing.T) {
+	srv, db := testServer(t)
+	task := skapaForslagsTask(t, db)
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{svar: "Jag föreslår en funktion."})
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/tasks/%s/foresla", task.ID),
+		bytes.NewBufferString(`{"sort":"klassning"}`)))
+	if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), "giltig JSON") {
+		t.Fatalf("ogiltigt agentsvar gav %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestForeslaTaskAvvisarOgiltigPrioritet(t *testing.T) {
+	srv, db := testServer(t)
+	task := skapaForslagsTask(t, db)
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{svar: `{"typ":"bug","prioritet":8,"modell":"","anstrangning":""}`})
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/tasks/%s/foresla", task.ID),
+		bytes.NewBufferString(`{"sort":"klassning"}`)))
+	if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), "prioriteten måste vara P1-P5") {
+		t.Fatalf("ogiltig prioritet gav %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestForeslaTaskAvvisarTomBerikning(t *testing.T) {
+	for namn, testfall := range map[string]struct {
+		svar string
+		text string
+	}{
+		"titel":       {`{"titel":" ","beskrivning":"Text"}`, "ange taskens titel"},
+		"beskrivning": {`{"titel":"Titel","beskrivning":" "}`, "saknar en beskrivning"},
+	} {
+		t.Run(namn, func(t *testing.T) {
+			srv, db := testServer(t)
+			task := skapaForslagsTask(t, db)
+			srv.register = pm.NewAgentRegister()
+			srv.register.Registrera(fakeAgent{svar: testfall.svar})
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/tasks/%s/foresla", task.ID),
+				bytes.NewBufferString(`{"sort":"berikning"}`)))
+			if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), testfall.text) {
+				t.Fatalf("tom %s gav %d: %s", namn, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestTaskForslagsrutterGerSvensk404(t *testing.T) {
+	srv, _ := testServer(t)
+	for _, testfall := range []struct {
+		metod string
+		url   string
+		kropp string
+	}{
+		{http.MethodPost, "/api/tasks/TASK-9999/foresla", `{"sort":"klassning"}`},
+		{http.MethodPatch, "/api/tasks/TASK-9999", `{"prioritet":2}`},
+	} {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest(testfall.metod, testfall.url, strings.NewReader(testfall.kropp)))
+		if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "tasken finns inte") {
+			t.Fatalf("%s %s gav %d: %s", testfall.metod, testfall.url, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestForeslaTaskVisarAgentfel(t *testing.T) {
+	srv, db := testServer(t)
+	task := skapaForslagsTask(t, db)
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{fel: errors.New("verktyget startade inte")})
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/tasks/%s/foresla", task.ID),
+		bytes.NewBufferString(`{"sort":"klassning"}`)))
+	if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), "agenten kunde inte skapa förslaget") {
+		t.Fatalf("agentfelet gav %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestForeslaTaskGerBegripligtTimeoutfel(t *testing.T) {
+	gammalTimeout := taskForslagTimeout
+	taskForslagTimeout = time.Millisecond
+	t.Cleanup(func() { taskForslagTimeout = gammalTimeout })
+	srv, db := testServer(t)
+	task := skapaForslagsTask(t, db)
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{vanta: true})
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/tasks/%s/foresla", task.ID),
+		bytes.NewBufferString(`{"sort":"klassning"}`)))
+	if w.Code != http.StatusGatewayTimeout || !strings.Contains(w.Body.String(), "hann inte skapa ett förslag") {
+		t.Fatalf("timeout gav %d: %s", w.Code, w.Body.String())
 	}
 }
