@@ -90,6 +90,8 @@ func begripligtTaskfel(err error) (string, int) {
 		return "ange taskens titel", http.StatusBadRequest
 	case errors.Is(err, service.ErrTaskTitleTooLong):
 		return "taskens titel får innehålla högst 255 tecken", http.StatusBadRequest
+	case errors.Is(err, service.ErrTaskDescTooLong):
+		return "beskrivningen får innehålla högst 65535 tecken", http.StatusBadRequest
 	case errors.Is(err, service.ErrTaskTypeInvalid):
 		return "välj en giltig typ", http.StatusBadRequest
 	case errors.Is(err, service.ErrTaskStatusInvalid):

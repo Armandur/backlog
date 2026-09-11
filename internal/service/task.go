@@ -49,6 +49,7 @@ const (
 var (
 	ErrTaskTitleRequired = errors.New("title is required")
 	ErrTaskTitleTooLong  = errors.New("title exceeds max length of 255 characters")
+	ErrTaskDescTooLong   = errors.New("description exceeds max length of 65535 characters")
 	ErrTaskTypeInvalid   = errors.New("invalid type")
 	ErrTaskStatusInvalid = errors.New("invalid status")
 	ErrTaskPriority      = errors.New("priority must be 1-5")
@@ -78,7 +79,7 @@ func (s *TaskService) Create(ctx context.Context, in models.CreateTaskInput) (*m
 		return nil, ErrTaskTitleTooLong
 	}
 	if len(in.Description) > maxDescriptionLen {
-		return nil, fmt.Errorf("description exceeds max length of %d characters", maxDescriptionLen)
+		return nil, ErrTaskDescTooLong
 	}
 	if in.ProjectID == "" {
 		return nil, fmt.Errorf("project is required")
@@ -298,25 +299,25 @@ func (s *TaskService) Update(ctx context.Context, ref string, in models.UpdateTa
 
 	if in.Title != nil {
 		if len(*in.Title) > maxTitleLen {
-			return nil, fmt.Errorf("title exceeds max length of %d characters", maxTitleLen)
+			return nil, ErrTaskTitleTooLong
 		}
 		t.Title = *in.Title
 	}
 	if in.Description != nil {
 		if len(*in.Description) > maxDescriptionLen {
-			return nil, fmt.Errorf("description exceeds max length of %d characters", maxDescriptionLen)
+			return nil, ErrTaskDescTooLong
 		}
 		t.Description = *in.Description
 	}
 	if in.Type != nil {
 		if !in.Type.Valid() {
-			return nil, fmt.Errorf("invalid type %q (valid: %s)", *in.Type, joinTaskTypes())
+			return nil, fmt.Errorf("%w %q (valid: %s)", ErrTaskTypeInvalid, *in.Type, joinTaskTypes())
 		}
 		t.Type = *in.Type
 	}
 	if in.Status != nil {
 		if !in.Status.Valid() {
-			return nil, fmt.Errorf("invalid status %q (valid: %s)", *in.Status, joinTaskStatuses())
+			return nil, fmt.Errorf("%w %q (valid: %s)", ErrTaskStatusInvalid, *in.Status, joinTaskStatuses())
 		}
 		if *in.Status == models.TaskStatusDone && t.Status != models.TaskStatusDone {
 			now := timeutil.Now()
@@ -326,7 +327,7 @@ func (s *TaskService) Update(ctx context.Context, ref string, in models.UpdateTa
 	}
 	if in.Priority != nil {
 		if *in.Priority < 1 || *in.Priority > 5 {
-			return nil, fmt.Errorf("priority must be 1-5")
+			return nil, ErrTaskPriority
 		}
 		t.Priority = *in.Priority
 	}
