@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	skill "github.com/mazen160/backlog/skills"
 )
 
 func TestRunInstallSkillsWritesCodexSkillDirectory(t *testing.T) {
@@ -22,14 +24,29 @@ func TestRunInstallSkillsWritesCodexSkillDirectory(t *testing.T) {
 	}
 
 	got := string(body)
-	for _, want := range []string{
-		"---\nname: backlog\n",
-		"description: Interact with the Backlog CLI",
-		"You have access to the `backlog` CLI.",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("Codex skill body missing %q", want)
+	if !strings.HasPrefix(got, "---\nname: backlog\n") {
+		t.Fatalf("Codex skill body is missing the backlog frontmatter, got %.40q", got)
+	}
+	// Jämför mot den inbäddade källan i stället för mot en fast textrad.
+	// Skillens text är översatt och skrivs om, testet ska ändå hålla.
+	alla, err := skill.All()
+	if err != nil {
+		t.Fatalf("skill.All: %v", err)
+	}
+	var kalla string
+	for _, s := range alla {
+		if s.Name == "backlog" {
+			kalla = s.Body
 		}
+	}
+	if kalla == "" {
+		t.Fatal("hittade ingen inbäddad skill som heter backlog")
+	}
+	if got != kalla {
+		t.Fatalf("Codex skill body skiljer sig från den inbäddade skillen")
+	}
+	if !strings.Contains(kalla, "\ndescription: ") {
+		t.Fatal("den inbäddade backlog-skillen saknar en description-rad")
 	}
 
 	oldPromptPath := filepath.Join(home, ".codex", "prompts", "backlog.md")
