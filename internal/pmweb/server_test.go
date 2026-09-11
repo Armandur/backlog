@@ -1708,3 +1708,24 @@ func TestForeslaTaskGerBegripligtTimeoutfel(t *testing.T) {
 		t.Fatalf("timeout gav %d: %s", w.Code, w.Body.String())
 	}
 }
+
+// Ett kvarglömt testserverblock för ett raderat projekt får inte spärra
+// konfigvyn. Går vyn inte att läsa går blocket inte att ta bort heller.
+func TestKonfigVisasAvenMedTestserverForRaderatProjekt(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	konfig := "[agenter.claude]\n  kommando = \"claude\"\n  args = [\"{brief}\"]\n" +
+		"\n[testserver.raderat]\n  kommando = \"python3\"\n  args = [\"{port}\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, pm.KonfigFil), []byte(konfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv, _ := testServer(t)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/konfig", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("konfigvyn gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "raderat") {
+		t.Fatalf("blocket kom inte med, då går det inte att ta bort: %s", w.Body.String())
+	}
+}

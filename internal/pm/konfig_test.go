@@ -161,16 +161,27 @@ func TestTestserverValideringFangarFel(t *testing.T) {
 	}
 }
 
-func TestLasKonfigAvvisarOkantProjektalias(t *testing.T) {
+// Skrivningen avvisar ett alias som inte finns, men läsningen släpper igenom
+// det. Annars går ett kvarglömt block för ett raderat projekt inte att ta bort
+// i konfigvyn, för vyn kan då inte ens läsa konfigurationen.
+func TestSkrivKonfigAvvisarOkantProjektaliasMenLasKonfigSlapperIgenom(t *testing.T) {
 	dir := skrivKonfig(t, `
 [testserver.okant]
 kommando = "go"
 args = ["--port", "{port}"]
 `)
 	skrivProjektDB(t, dir, "demo")
-	_, err := LasKonfig(dir)
-	if err == nil || !strings.Contains(err.Error(), "okant") {
-		t.Fatalf("väntade fel om okänt projektalias, fick %v", err)
+
+	k, err := LasKonfig(dir)
+	if err != nil {
+		t.Fatalf("läsningen spärrades av ett kvarglömt block: %v", err)
+	}
+	if _, finns := k.Testserver["okant"]; !finns {
+		t.Fatal("blocket försvann vid läsningen, då går det inte att ta bort i vyn")
+	}
+
+	if err := SkrivKonfig(dir, k); err == nil || !strings.Contains(err.Error(), "okant") {
+		t.Fatalf("väntade fel om okänt projektalias vid skrivning, fick %v", err)
 	}
 }
 

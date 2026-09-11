@@ -140,17 +140,18 @@ func LasKonfig(workspaceDir string) (Konfig, error) {
 	for namn, a := range k.Agenter {
 		k.Agenter[namn] = fyllIStandard(a)
 	}
-	projektalias, err := lasProjektalias(workspaceDir)
-	if err != nil {
-		return Konfig{}, err
-	}
-	if err := k.Validera(projektalias...); err != nil {
+	// Läsningen kontrollerar inte att projekten finns. Ett kvarglömt block för
+	// ett raderat projekt ska inte kunna spärra hela konfigvyn, för då går det
+	// inte att ta bort blocket där heller.
+	if err := k.Validera(); err != nil {
 		return Konfig{}, err
 	}
 	return k, nil
 }
 
-// SkrivKonfig validerar och ersätter pm.toml atomiskt.
+// SkrivKonfig validerar och ersätter pm.toml atomiskt. Här kontrolleras även
+// att varje testserver pekar på ett projekt som finns, för här går felet att
+// rätta i samma anrop.
 func SkrivKonfig(workspaceDir string, k Konfig) error {
 	projektalias, err := lasProjektalias(workspaceDir)
 	if err != nil {
