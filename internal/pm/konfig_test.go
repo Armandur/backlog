@@ -1,6 +1,8 @@
 package pm
 
 import (
+	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +18,23 @@ func skrivKonfig(t *testing.T, innehall string) string {
 	return dir
 }
 
+func skrivProjektDB(t *testing.T, dir string, alias ...string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.Join(dir, "backlog.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("CREATE TABLE projects (alias TEXT, archived_at INTEGER)"); err != nil {
+		t.Fatal(err)
+	}
+	for _, namn := range alias {
+		if _, err := db.Exec("INSERT INTO projects(alias) VALUES(?)", namn); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestLasKonfigUtanFilGerStandard(t *testing.T) {
 	k, err := LasKonfig(t.TempDir())
 	if err != nil {
@@ -29,6 +48,9 @@ func TestLasKonfigUtanFilGerStandard(t *testing.T) {
 	}
 	if k.Agenter["codex"].Stdin != "devnull" {
 		t.Fatal("codex måste köras med stängd stdin")
+	}
+	if len(k.Testserver) != 0 {
+		t.Fatal("standardkonfigurationen ska sakna testservrar")
 	}
 }
 
@@ -83,5 +105,105 @@ func TestTrasigKonfigGerTydligtFel(t *testing.T) {
 	_, err := LasKonfig(skrivKonfig(t, "det här är inte toml ["))
 	if err == nil || !strings.Contains(err.Error(), "trasig") {
 		t.Fatalf("väntade tydligt fel om trasig konfig, fick %v", err)
+	}
+}
+
+func TestLasKonfigLaserTestserver(t *testing.T) {
+	cwd := t.TempDir()
+	dir := skrivKonfig(t, fmt.Sprintf(`
+[testserver.demo]
+kommando = "go"
+args = ["run", ".", "--port", "{port}"]
+cwd = %q
+port = 8123
+halsa = "/health"
+
+[testserver.demo.miljo]
+APP_ENV = "test"
+`, cwd))
+	skrivProjektDB(t, dir, "demo")
+
+	k, err := LasKonfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := k.Testserver["demo"]
+	if server.Kommando != "go" || server.CWD != cwd || server.Port != 8123 || server.Halsa != "/health" {
+		t.Fatalf("testservern lästes fel: %+v", server)
+	}
+	if len(server.Args) != 4 || server.Miljo["APP_ENV"] != "test" {
+		t.Fatalf("testserverns args eller miljö lästes fel: %+v", server)
+	}
+}
+
+func TestTestserverValideringFangarFel(t *testing.T) {
+	saknadCWD := filepath.Join(t.TempDir(), "katalog-som-saknas")
+	fall := []struct {
+		namn    string
+		server  TestserverKonfig
+		alias   string
+		feltext string
+	}{
+		{namn: "kommando saknas", alias: "demo", server: TestserverKonfig{Args: []string{"{port}"}}, feltext: "saknar kommando"},
+		{namn: "port saknas", alias: "demo", server: TestserverKonfig{Kommando: "go"}, feltext: "saknar både fast port och {port}"},
+		{namn: "cwd saknas", alias: "demo", server: TestserverKonfig{Kommando: "go", Args: []string{"{port}"}, CWD: saknadCWD}, feltext: saknadCWD},
+		{namn: "alias saknas", alias: "okant", server: TestserverKonfig{Kommando: "go", Args: []string{"{port}"}}, feltext: "projektet \"okant\" som inte finns"},
+	}
+	for _, fall := range fall {
+		t.Run(fall.namn, func(t *testing.T) {
+			k := StandardKonfig()
+			k.Testserver = map[string]TestserverKonfig{fall.alias: fall.server}
+			err := k.Validera("demo")
+			if err == nil || !strings.Contains(err.Error(), fall.feltext) {
+				t.Fatalf("väntade fel med %q, fick %v", fall.feltext, err)
+			}
+		})
+	}
+}
+
+func TestLasKonfigAvvisarOkantProjektalias(t *testing.T) {
+	dir := skrivKonfig(t, `
+[testserver.okant]
+kommando = "go"
+args = ["--port", "{port}"]
+`)
+	skrivProjektDB(t, dir, "demo")
+	_, err := LasKonfig(dir)
+	if err == nil || !strings.Contains(err.Error(), "okant") {
+		t.Fatalf("väntade fel om okänt projektalias, fick %v", err)
+	}
+}
+
+func TestTestserverRundtripp(t *testing.T) {
+	dir := t.TempDir()
+	cwd := t.TempDir()
+	skrivProjektDB(t, dir, "demo")
+	fore := StandardKonfig()
+	fore.Testserver = map[string]TestserverKonfig{
+		"demo": {
+			Kommando: "npm", Args: []string{"run", "dev", "--", "--port={port}"},
+			CWD: cwd, Halsa: "/status", Miljo: map[string]string{"NODE_ENV": "test"},
+		},
+	}
+	if err := SkrivKonfig(dir, fore); err != nil {
+		t.Fatal(err)
+	}
+	efter, err := LasKonfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := efter.Testserver["demo"]
+	if server.Kommando != "npm" || server.CWD != cwd || server.Halsa != "/status" {
+		t.Fatalf("rundtrippen ändrade testservern: %+v", server)
+	}
+	if strings.Join(server.Args, "|") != "run|dev|--|--port={port}" || server.Miljo["NODE_ENV"] != "test" {
+		t.Fatalf("rundtrippen ändrade args eller miljö: %+v", server)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, KonfigFil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "[testserver.demo]") {
+		t.Fatalf("pm.toml saknar testserversektionen: %s", data)
 	}
 }

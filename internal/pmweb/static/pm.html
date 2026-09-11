@@ -193,8 +193,8 @@
     </section>
 
     <section class="view" id="v-konfig">
-      <h1>Agenter och regler</h1>
-      <p class="lead">Här väljer du vilka agenter PM kan använda och hur PM startar dem. När du sparar använder PM inställningarna vid nästa utdelning.</p>
+      <h1>Konfiguration</h1>
+      <p class="lead">Här konfigurerar du agenter, regler och projektens testservrar. PM startar ingen testserver från den här vyn.</p>
       <p class="konfig-meta" id="konfigMeta">Läser konfigurationen...</p>
       <p class="notis konfig-varning">När du sparar skriver PM om hela filen. Kommentarer och okända nycklar försvinner.</p>
       <aside class="kommandoexempel">
@@ -258,6 +258,15 @@
           </div>
           <p class="regel">Den första matchande regeln väljer agent. Flytta reglerna med pilknapparna.</p>
           <div id="regelkort" class="kortlista"></div>
+        </section>
+
+        <section class="konfigsektion">
+          <div class="sektionshuvud">
+            <h2>Testservrar</h2>
+          </div>
+          <p class="regel">Konfigurationen sparar bara kommandot. PM startar ingen testserver här.</p>
+          <p class="regel">Lämna arbetskatalogen tom för projektets <code>repo_path</code>. Ange en fast port eller använd <code>{port}</code> i args.</p>
+          <div id="testserverkort" class="kortlista"></div>
         </section>
 
         <details class="konfigsektion kroksektion">

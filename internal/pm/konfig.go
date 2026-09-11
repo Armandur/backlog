@@ -2,12 +2,15 @@ package pm
 
 import (
 	"bytes"
+	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	_ "modernc.org/sqlite"
 )
 
 // KonfigFil är namnet på PM-konfigurationen i profilens workspace-katalog.
@@ -56,12 +59,24 @@ type Krok struct {
 	Miljo    map[string]string `toml:"miljo" json:"miljo"`
 }
 
+// TestserverKonfig beskriver hur ett projekts testserver senare ska startas.
+// Den här konfigurationen startar ingen process.
+type TestserverKonfig struct {
+	Kommando string            `toml:"kommando" json:"kommando"`
+	Args     []string          `toml:"args" json:"args"`
+	CWD      string            `toml:"cwd" json:"cwd"`
+	Port     int               `toml:"port" json:"port"`
+	Halsa    string            `toml:"halsa" json:"halsa"`
+	Miljo    map[string]string `toml:"miljo" json:"miljo"`
+}
+
 // Konfig är hela PM-konfigurationen.
 type Konfig struct {
-	DefaultAgent string                 `toml:"default_agent" json:"default_agent"`
-	Agenter      map[string]AgentKonfig `toml:"agenter" json:"agenter"`
-	Regler       []Regel                `toml:"regler" json:"regler"`
-	Krok         Krok                   `toml:"krok" json:"krok"`
+	DefaultAgent string                      `toml:"default_agent" json:"default_agent"`
+	Agenter      map[string]AgentKonfig      `toml:"agenter" json:"agenter"`
+	Regler       []Regel                     `toml:"regler" json:"regler"`
+	Krok         Krok                        `toml:"krok" json:"krok"`
+	Testserver   map[string]TestserverKonfig `toml:"testserver" json:"testserver"`
 	// Kalla är sökvägen konfigurationen kommer från, tom när PM använder defaulterna.
 	Kalla string `toml:"-" json:"-"`
 }
@@ -125,7 +140,11 @@ func LasKonfig(workspaceDir string) (Konfig, error) {
 	for namn, a := range k.Agenter {
 		k.Agenter[namn] = fyllIStandard(a)
 	}
-	if err := k.Validera(); err != nil {
+	projektalias, err := lasProjektalias(workspaceDir)
+	if err != nil {
+		return Konfig{}, err
+	}
+	if err := k.Validera(projektalias...); err != nil {
 		return Konfig{}, err
 	}
 	return k, nil
@@ -133,7 +152,11 @@ func LasKonfig(workspaceDir string) (Konfig, error) {
 
 // SkrivKonfig validerar och ersätter pm.toml atomiskt.
 func SkrivKonfig(workspaceDir string, k Konfig) error {
-	if err := k.Validera(); err != nil {
+	projektalias, err := lasProjektalias(workspaceDir)
+	if err != nil {
+		return err
+	}
+	if err := k.Validera(projektalias...); err != nil {
 		return err
 	}
 
@@ -191,7 +214,7 @@ func fyllIStandard(a AgentKonfig) AgentKonfig {
 }
 
 // Validera fångar konfigfel innan PM startar en körning.
-func (k Konfig) Validera() error {
+func (k Konfig) Validera(projektalias ...string) error {
 	for namn, a := range k.Agenter {
 		if a.Kommando == "" {
 			return fmt.Errorf("agenten %q saknar kommando i konfigurationen", namn)
@@ -231,7 +254,66 @@ func (k Konfig) Validera() error {
 			return fmt.Errorf("default_agent %q finns inte bland agenterna", k.DefaultAgent)
 		}
 	}
+	projekt := make(map[string]bool, len(projektalias))
+	for _, alias := range projektalias {
+		projekt[alias] = true
+	}
+	for alias, server := range k.Testserver {
+		if projektalias != nil && !projekt[alias] {
+			return fmt.Errorf("testservern pekar på projektet %q som inte finns", alias)
+		}
+		if strings.TrimSpace(server.Kommando) == "" {
+			return fmt.Errorf("testservern för projektet %q saknar kommando", alias)
+		}
+		if server.Port == 0 && !harPlatshallare(server.Args, "{port}") {
+			return fmt.Errorf("testservern för projektet %q saknar både fast port och {port} i args", alias)
+		}
+		if server.CWD != "" {
+			info, err := os.Stat(server.CWD)
+			if os.IsNotExist(err) {
+				return fmt.Errorf("testservern för projektet %q har cwd %q, men katalogen saknas", alias, server.CWD)
+			}
+			if err != nil {
+				return fmt.Errorf("kunde inte kontrollera cwd %q för projektet %q: %w", server.CWD, alias, err)
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("testservern för projektet %q har cwd %q, men sökvägen är ingen katalog", alias, server.CWD)
+			}
+		}
+	}
 	return nil
+}
+
+func lasProjektalias(workspaceDir string) ([]string, error) {
+	databas := filepath.Join(workspaceDir, "backlog.db")
+	if _, err := os.Stat(databas); os.IsNotExist(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("kunde inte kontrollera projektdatabasen: %w", err)
+	}
+	uri := (&url.URL{Scheme: "file", Path: databas, RawQuery: "mode=ro"}).String()
+	db, err := sql.Open("sqlite", uri)
+	if err != nil {
+		return nil, fmt.Errorf("kunde inte öppna projektdatabasen: %w", err)
+	}
+	defer db.Close()
+	rader, err := db.Query("SELECT alias FROM projects WHERE archived_at IS NULL")
+	if err != nil {
+		return nil, fmt.Errorf("kunde inte läsa projekten: %w", err)
+	}
+	defer rader.Close()
+	alias := make([]string, 0)
+	for rader.Next() {
+		var namn string
+		if err := rader.Scan(&namn); err != nil {
+			return nil, fmt.Errorf("kunde inte läsa ett projektalias: %w", err)
+		}
+		alias = append(alias, namn)
+	}
+	if err := rader.Err(); err != nil {
+		return nil, fmt.Errorf("kunde inte läsa projekten: %w", err)
+	}
+	return alias, nil
 }
 
 func harPlatshallare(args []string, namn string) bool {

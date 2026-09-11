@@ -1,5 +1,6 @@
 // Konfigvyn: agenter, regler och krok. Laddas efter pm.js.
 let konfig = null;
+let konfigProjekt = [];
 const agentutkast = new Set();
 const AGENTMALLAR = {
   tom: { namn: "ny-agent", kommando: "", args: ["{brief}"], brief: "arg", svar: "stdout", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: false },
@@ -37,11 +38,37 @@ function agentAlternativ(vald) {
 function normaliseraKonfig(data) {
   data.agenter ||= {};
   data.regler ||= [];
+  data.testserver ||= {};
   data.krok ||= {};
   data.krok.anspraka ||= [];
   data.krok.slapp ||= [];
   data.krok.miljo ||= {};
   return data;
+}
+
+
+function renderaTestservrar() {
+  $("#testserverkort").innerHTML = konfigProjekt.map((projekt) => {
+    const server = konfig.testserver[projekt.alias];
+    const aktiv = Boolean(server);
+    const t = server || {};
+    return `<article class="konfigkort testserverkort" data-testserver="${esc(projekt.alias)}">
+      <div class="korthuvud testserverhuvud">
+        <strong>${esc(projekt.name)} <span class="mono">(${esc(projekt.alias)})</span></strong>
+        <label class="kryss testserveraktiv"><input type="checkbox" data-testserverfalt="aktiv"${aktiv ? " checked" : ""}> Konfigurera testserver</label>
+      </div>
+      <fieldset class="testserverfalt"${aktiv ? "" : " disabled"}>
+        <div class="faltgrid testservergrid">
+          <label class="falt">Kommando<input data-testserverfalt="kommando" value="${esc(t.kommando || "")}" spellcheck="false"></label>
+          <label class="falt">Arbetskatalog, valfri<input data-testserverfalt="cwd" value="${esc(t.cwd || "")}" placeholder="${esc(projekt.repo_path || "Projektets repo_path")}" spellcheck="false"></label>
+          <label class="falt">Fast port, valfri<input data-testserverfalt="port" type="number" min="1" max="65535" value="${t.port || ""}"></label>
+          <label class="falt">Hälsosökväg, valfri<input data-testserverfalt="halsa" value="${esc(t.halsa || "")}" placeholder="/" spellcheck="false"></label>
+        </div>
+        <label class="falt">Args, ett argument per rad<textarea data-testserverfalt="args" rows="4" spellcheck="false">${esc(rader(t.args))}</textarea></label>
+        <label class="falt"><span>Miljö, en <code>NYCKEL=värde</code> per rad</span><textarea data-testserverfalt="miljo" rows="3" spellcheck="false">${esc(miljoRader(t.miljo))}</textarea></label>
+      </fieldset>
+    </article>`;
+  }).join("") || '<div class="tom">Inga projekt finns att konfigurera.</div>';
 }
 
 function renderaKonfig() {
@@ -107,6 +134,8 @@ function renderaKonfig() {
     </div>
   </article>`).join("") || '<div class="tom">Inga regler. Den förvalda agenten används.</div>';
 
+  renderaTestservrar();
+
   $("#krokAnspraka").value = rader(konfig.krok?.anspraka);
   $("#krokSlapp").value = rader(konfig.krok?.slapp);
   $("#krokMiljo").value = miljoRader(konfig.krok?.miljo);
@@ -144,12 +173,27 @@ function samlaKonfig() {
       modell: hamta("modell").trim(), anstrangning: hamta("anstrangning").trim(),
     };
   });
+  const testserverNy = {};
+  document.querySelectorAll(".testserverkort").forEach((kort) => {
+    const hamta = (falt) => kort.querySelector(`[data-testserverfalt="${falt}"]`);
+    if (!hamta("aktiv").checked) return;
+    const port = hamta("port").value.trim();
+    testserverNy[kort.dataset.testserver] = {
+      kommando: hamta("kommando").value.trim(),
+      args: lasLista(hamta("args").value, "\n"),
+      cwd: hamta("cwd").value.trim(),
+      port: port ? Number(port) : 0,
+      halsa: hamta("halsa").value.trim(),
+      miljo: lasMiljo(hamta("miljo").value, `Testservermiljön för ${kort.dataset.testserver}`),
+    };
+  });
   const forval = namnbyten[$("#defaultAgent").value] || $("#defaultAgent").value;
   return {
     // Metadatan följer med utkastet, annars tappar metaraden sökvägen.
     sokvag: konfig?.sokvag,
     saknas: konfig?.saknas,
     default_agent: forval, agenter: agenterNy, regler: reglerNy,
+    testserver: testserverNy,
     krok: {
       anspraka: lasLista($("#krokAnspraka").value, "\n"),
       slapp: lasLista($("#krokSlapp").value, "\n"),
@@ -160,7 +204,9 @@ function samlaKonfig() {
 
 async function laddaKonfig() {
   try {
-    konfig = normaliseraKonfig(await hamta("/api/konfig"));
+    const [konfigdata, projektdata] = await Promise.all([hamta("/api/konfig"), hamta("/api/projects")]);
+    konfig = normaliseraKonfig(konfigdata);
+    konfigProjekt = (projektdata.projects || []).slice().sort((a, b) => a.name.localeCompare(b.name, "sv"));
     renderaKonfig();
   } catch (err) {
     $("#konfigFel").textContent = err.message;
@@ -202,6 +248,11 @@ $("#laggTillRegel").onclick = () => {
   konfig.regler.push({ namn: "", typ: [], etiketter: [], nyckelord: [], agent: konfig.default_agent });
   renderaKonfig();
 };
+$("#testserverkort").addEventListener("change", (e) => {
+  const aktiv = e.target.closest('[data-testserverfalt="aktiv"]');
+  if (!aktiv) return;
+  aktiv.closest(".testserverkort").querySelector(".testserverfalt").disabled = !aktiv.checked;
+});
 $("#v-konfig").addEventListener("click", async (e) => {
   const agentkort = e.target.closest(".agentkort");
   const regelkort = e.target.closest(".regelkort");
