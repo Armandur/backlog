@@ -205,3 +205,16 @@ func TestByggArgsBehallerFlaggaSomInteHorIhopMedVardet(t *testing.T) {
 		t.Fatalf("fick %q", args)
 	}
 }
+
+// Ett argument som bär båda platshållarna får inte tappa det värde som finns.
+func TestByggArgsTapparInteSattVardeNarDetAndraArTomt(t *testing.T) {
+	mall := []string{"--extra={modell},{anstrangning}", "{brief}"}
+	args := byggArgs(mall, KorInput{Brief: "x", Modell: "sonnet"})
+	if len(args) != 2 || args[0] != "--extra=sonnet," {
+		t.Fatalf("fick %q", args)
+	}
+	tomma := byggArgs(mall, KorInput{Brief: "x"})
+	if len(tomma) != 1 || tomma[0] != "x" {
+		t.Fatalf("bada tomma skulle ta bort argumentet, fick %q", tomma)
+	}
+}

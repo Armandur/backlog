@@ -277,14 +277,22 @@ func byggArgs(mall []string, in KorInput) []string {
 	valfria := map[string]string{"{modell}": in.Modell, "{anstrangning}": in.Anstrangning}
 	args := make([]string, 0, len(mall)+3)
 	for _, arg := range mall {
-		tom, baraPlatshallare := false, false
+		// Argumentet faller bort bara när ALLA dess valfria platshållare är
+		// tomma. Annars skulle ett satt värde försvinna tyst tillsammans med
+		// ett tomt, i ett argument som bär båda.
+		tomma, satta, baraPlatshallare := 0, 0, false
 		for platshallare, varde := range valfria {
-			if !strings.Contains(arg, platshallare) || strings.TrimSpace(varde) != "" {
+			if !strings.Contains(arg, platshallare) {
 				continue
 			}
-			tom = true
-			baraPlatshallare = strings.TrimSpace(arg) == platshallare
+			if strings.TrimSpace(varde) == "" {
+				tomma++
+				baraPlatshallare = strings.TrimSpace(arg) == platshallare
+			} else {
+				satta++
+			}
 		}
+		tom := tomma > 0 && satta == 0
 		if tom {
 			// Flaggan före faller bort när den hör ihop med värdet. Det gör
 			// den när platshållaren står ensam, som i --model {modell}, eller
