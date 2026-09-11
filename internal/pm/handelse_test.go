@@ -131,3 +131,26 @@ func TestIngenHandelsefilUtanStrom(t *testing.T) {
 		t.Fatalf("händelsefilen skapades trots att agenten inte strömmar: %v", err)
 	}
 }
+
+func TestSvarUrClaudeStromGerSvaretInteStrommen(t *testing.T) {
+	strom := strings.Join([]string{
+		`{"type":"system","subtype":"init"}`,
+		`{"type":"assistant","message":{"content":[{"type":"text","text":"Jag tittar på filen."}]}}`,
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"a.go"}}]}}`,
+		`{"type":"result","is_error":false,"result":"Klart. Tavlan har tre kolumner."}`,
+	}, "\n")
+	svar := SvarUrClaudeStrom(strom)
+	if svar != "Klart. Tavlan har tre kolumner." {
+		t.Fatalf("fick %q", svar)
+	}
+	if strings.Contains(svar, "tool_use") || strings.Contains(svar, "\"type\"") {
+		t.Fatalf("svaret bär råa strömrader: %q", svar)
+	}
+}
+
+func TestSvarUrClaudeStromFallerTillbakaPaTexten(t *testing.T) {
+	strom := `{"type":"assistant","message":{"content":[{"type":"text","text":"Enda svaret."}]}}`
+	if svar := SvarUrClaudeStrom(strom); svar != "Enda svaret." {
+		t.Fatalf("fick %q", svar)
+	}
+}

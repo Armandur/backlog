@@ -187,6 +187,12 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 	}
 
 	res.Utdata = samladUtdata
+	if a.konfig.Strom == "claude-json" {
+		// Strömmen är maskinläsbar. Kommentaren på tasken ska bära svaret.
+		if svar := SvarUrClaudeStrom(samladUtdata); svar != "" {
+			res.Utdata = svar
+		}
+	}
 	if a.konfig.Svar == "fil" {
 		if data, err := os.ReadFile(in.Svarsfil); err == nil && strings.TrimSpace(string(data)) != "" {
 			res.Utdata = string(data)

@@ -28,6 +28,11 @@ function koText(k, alla) {
 // Statusvärdena i databasen är ASCII, etiketten i vyn är svensk.
 const STATUS_ETIKETT = { koad: "Köad", kor: "Kör", klar: "Klar", fel: "Fel" };
 function pill(status) { return `<span class="pill p-${esc(status)}">${esc(STATUS_ETIKETT[status] || status)}</span>`; }
+// Referensen går till backlog-UI:t, som i projektvyn. Kommentarsknappen är
+// vägen till agentens rapport utan att lämna PM.
+function taskLank(ref) {
+  return `<a class="mono ref" href="/tasks/${encodeURIComponent(ref)}" title="Öppna i backlog-UI:t">${esc(ref)}</a>`;
+}
 function korningKnappar(id) { return `<button class="btn sm pri" data-forlopp="${id}">Förlopp</button><button class="btn sm" data-logg="${id}">Logg</button>`; }
 function rad(html) {
   const el = document.createElement("div");
@@ -60,7 +65,7 @@ async function laddaOversikt() {
   $("#nPagaende").textContent = o.korningar.length;
   $("#nRun").textContent = o.korningar.length || "";
   fyll("#pagaende", o.korningar, (k) => {
-    const el = rad(`<span class="mono ref">${k.task_ref}</span>
+    const el = rad(`${taskLank(k.task_ref)}
       <div class="t"><span class="mono">${esc(k.agent)}</span> ${esc(k.motivering)}
         <span class="meta">${koText(k, o.korningar)}</span></div>
       <div class="act">${pill(k.status)}${korningKnappar(k.id)}</div>`);
@@ -123,10 +128,10 @@ $("#taskform").addEventListener("submit", async (e) => {
 });
 async function laddaKorningar() {
   const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/korningar`);
-  fyll("#korningar", data.korningar, (k) => rad(`<span class="mono ref">${k.task_ref}</span>
+  fyll("#korningar", data.korningar, (k) => rad(`${taskLank(k.task_ref)}
     <div class="t"><span class="mono">${esc(k.agent)}</span> ${esc(k.motivering)}
       <span class="meta">${tid(k.skapad_at)}${k.exit_kod !== undefined ? " · exit " + k.exit_kod : ""}</span></div>
-    <div class="act">${pill(k.status)}${korningKnappar(k.id)}</div>`), "Inga körningar än.");
+    <div class="act">${pill(k.status)}<button class="btn sm" data-kommentarer="${esc(k.task_ref)}">Kommentarer</button>${korningKnappar(k.id)}</div>`), "Inga körningar än.");
 }
 async function visaLogg(id) {
   stangKorningStrom();

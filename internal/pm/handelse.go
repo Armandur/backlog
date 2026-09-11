@@ -294,3 +294,58 @@ func SkrivAvbrottshandelse(logg string) {
 	}
 	_, _ = fil.Write(append(data, '\n'))
 }
+
+// SvarUrClaudeStrom plockar agentens svar ur en stream-json-utdata. Utan det
+// hamnar hela strömmen som kommentar på tasken, och den är oläslig.
+func SvarUrClaudeStrom(utdata string) string {
+	var resultat string
+	var texter []string
+	for _, rad := range strings.Split(utdata, "\n") {
+		rad = strings.TrimSpace(rad)
+		if rad == "" {
+			continue
+		}
+		var post claudeRad
+		if json.Unmarshal([]byte(rad), &post) != nil {
+			continue
+		}
+		switch post.Type {
+		case "result":
+			if strings.TrimSpace(post.Result) != "" {
+				resultat = post.Result
+			}
+		case "assistant":
+			for _, del := range claudeTextblock(post) {
+				texter = append(texter, del)
+			}
+		}
+	}
+	if strings.TrimSpace(resultat) != "" {
+		return resultat
+	}
+	return strings.TrimSpace(strings.Join(texter, "\n\n"))
+}
+
+// claudeTextblock ger textdelarna i ett assistentmeddelande.
+func claudeTextblock(post claudeRad) []string {
+	innehall := post.Content
+	if len(post.Message) > 0 {
+		var meddelande struct {
+			Content json.RawMessage `json:"content"`
+		}
+		if json.Unmarshal(post.Message, &meddelande) == nil && len(meddelande.Content) > 0 {
+			innehall = meddelande.Content
+		}
+	}
+	var block []claudeBlock
+	if json.Unmarshal(innehall, &block) != nil {
+		return nil
+	}
+	var ut []string
+	for _, del := range block {
+		if del.Type == "text" && strings.TrimSpace(del.Text) != "" {
+			ut = append(ut, strings.TrimSpace(del.Text))
+		}
+	}
+	return ut
+}
