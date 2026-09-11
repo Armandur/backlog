@@ -93,13 +93,15 @@ h2 .n { font-weight: 500; background: var(--sankt); border-radius: 10px; padding
 .btn.pri { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .btn.sm { padding: 3px 8px; font-size: 12px; }
 .btn:disabled { opacity: .5; cursor: default; }
-.trad { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: .75rem; max-width: 72ch; }
-.inlagg { background: var(--yta); border: 1px solid var(--kant); border-radius: 10px; padding: .75rem .9rem; }
+.trad { list-style: none; margin: 0 0 14px; padding: 12px; display: flex; flex-direction: column; gap: .75rem; max-width: 72ch; height: clamp(300px, calc(100vh - 330px), 700px); overflow-y: auto; overscroll-behavior: contain; background: var(--sankt); border: 1px solid var(--kant); border-radius: 10px; }
+.inlagg { background: var(--yta); border: 1px solid var(--kant); border-radius: 10px; padding: .75rem .9rem; max-width: 80%; }
+.inlagg.jag { align-self: flex-end; }
+.inlagg.ai { align-self: flex-start; }
 .inlagg.ai { background: var(--accent-mjuk); border-color: var(--accent); }
 .inlagg .meta { color: var(--svag); font-size: .8rem; display: flex; gap: .5rem; flex-wrap: wrap; }
 .inlagg .aktor { font-weight: 600; color: var(--text); }
 .inlagg .text { margin: .35rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.skriv { position: sticky; bottom: 0; background: var(--yta); border: 1px solid var(--kant); border-radius: 10px; padding: .75rem; display: flex; flex-direction: column; gap: .5rem; max-width: 72ch; }
+.skriv { background: var(--yta); border: 1px solid var(--kant); border-radius: 10px; padding: .75rem; display: flex; flex-direction: column; gap: .5rem; max-width: 72ch; }
 textarea, input:not([type=checkbox]), select { width: 100%; font: inherit; color: inherit; background: var(--ground); border: 1px solid var(--kant); border-radius: 8px; padding: .5rem .6rem; }
 textarea { resize: vertical; }
 .rad { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
@@ -137,7 +139,7 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
   .grid > .stack:last-child { order: -1; }
   .rad-post { grid-template-columns: auto minmax(0, 1fr); row-gap: 6px; }
   .rad-post .act { grid-column: 1/-1; justify-content: flex-end; }
-  .skriv { bottom: 56px; }
+  .trad { height: clamp(260px, calc(100vh - 300px), 520px); }
 }
 
 /* Projektformuläret */

@@ -126,11 +126,24 @@ async function visaLogg(id) {
 }
 
 // ---------- samtal ----------
+// Tråden ritas om vid varje pollning. Har du skrollat upp ska positionen
+// ligga kvar, annars rycks läsningen undan var fjärde sekund.
+let samtalLaddat = false;
+function vidBotten(ruta) {
+  return ruta.scrollHeight - ruta.scrollTop - ruta.clientHeight < 40;
+}
+function skrollaNed(ruta) {
+  ruta.scrollTop = ruta.scrollHeight;
+}
+
 async function laddaSamtal() {
+  const ruta = $("#trad");
+  const foljMed = !samtalLaddat || vidBotten(ruta);
   const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/samtal`);
+  const forePosition = ruta.scrollTop;
   fyll("#trad", data.samtal || [], (p) => {
     const li = document.createElement("li");
-    li.className = "inlagg" + (p.actor.kind === "ai" ? " ai" : "");
+    li.className = "inlagg " + (p.actor.kind === "ai" ? "ai" : "jag");
     const meta = document.createElement("div");
     meta.className = "meta";
     const aktor = document.createElement("span");
@@ -145,6 +158,12 @@ async function laddaSamtal() {
     li.append(meta, text);
     return li;
   }, "Tråden är tom. Skriv det första inlägget.");
+  if (foljMed) {
+    skrollaNed(ruta);
+  } else {
+    ruta.scrollTop = forePosition;
+  }
+  samtalLaddat = true;
 }
 
 $("#skrivform").addEventListener("submit", async (e) => {
@@ -163,6 +182,7 @@ $("#skrivform").addEventListener("submit", async (e) => {
     });
     $("#text").value = "";
     await laddaSamtal();
+    skrollaNed($("#trad"));
   } catch (err) {
     toast(err.message);
   } finally {
