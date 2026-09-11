@@ -101,6 +101,9 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 	if a.konfig.Strom == "claude-json" {
 		args = append(args, "--output-format", "stream-json", "--verbose")
 	}
+	if a.konfig.Strom == "codex-json" {
+		args = append(args, "--json")
+	}
 	if a.konfig.MCP {
 		if cfg, stad, err := mcpConfigFil(in.PMBinar, in.Profil, "ai:"+a.namn); err == nil && cfg != "" {
 			defer stad()
@@ -152,10 +155,18 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 		}
 		if err := lasRader(stdout, func(rad []byte) {
 			utdata.skrivRad(rad)
-			if a.konfig.Strom == "claude-json" && in.VidHandelse != nil {
-				for _, handelse := range tolkaClaudeRad(rad) {
-					in.VidHandelse(handelse)
-				}
+			if in.VidHandelse == nil {
+				return
+			}
+			var handelser []Handelse
+			switch a.konfig.Strom {
+			case "claude-json":
+				handelser = tolkaClaudeRad(rad)
+			case "codex-json":
+				handelser = tolkaCodexRad(rad)
+			}
+			for _, handelse := range handelser {
+				in.VidHandelse(handelse)
 			}
 		}, forLang); err != nil {
 			lasfel <- err
