@@ -52,6 +52,36 @@ func TestLasKonfigUtanFilGerStandard(t *testing.T) {
 	if len(k.Testserver) != 0 {
 		t.Fatal("standardkonfigurationen ska sakna testservrar")
 	}
+	if k.Portar.Fran != 8100 || k.Portar.Till != 8199 {
+		t.Fatalf("standardintervallet ska vara 8100 till 8199: %+v", k.Portar)
+	}
+}
+
+func TestLasKonfigLaserPortintervall(t *testing.T) {
+	dir := skrivKonfig(t, `
+[portar]
+fran = 9200
+till = 9299
+`)
+	k, err := LasKonfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k.Portar.Fran != 9200 || k.Portar.Till != 9299 {
+		t.Fatalf("konfigurationen gav fel portintervall: %+v", k.Portar)
+	}
+}
+
+func TestKonfigAvvisarOgiltigtPortintervall(t *testing.T) {
+	dir := skrivKonfig(t, `
+[portar]
+fran = 9000
+till = 8000
+`)
+	_, err := LasKonfig(dir)
+	if err == nil || !strings.Contains(err.Error(), "portintervallet") {
+		t.Fatalf("PM godtog ett ogiltigt portintervall: %v", err)
+	}
 }
 
 // En tredje agent ska gå att lägga till utan kodändring.

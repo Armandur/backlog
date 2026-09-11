@@ -70,12 +70,19 @@ type TestserverKonfig struct {
 	Miljo    map[string]string `toml:"miljo" json:"miljo"`
 }
 
+// PortKonfig anger intervallet som PM använder för automatiska portar.
+type PortKonfig struct {
+	Fran int `toml:"fran" json:"fran"`
+	Till int `toml:"till" json:"till"`
+}
+
 // Konfig är hela PM-konfigurationen.
 type Konfig struct {
 	DefaultAgent string                      `toml:"default_agent" json:"default_agent"`
 	Agenter      map[string]AgentKonfig      `toml:"agenter" json:"agenter"`
 	Regler       []Regel                     `toml:"regler" json:"regler"`
 	Krok         Krok                        `toml:"krok" json:"krok"`
+	Portar       PortKonfig                  `toml:"portar" json:"portar"`
 	Testserver   map[string]TestserverKonfig `toml:"testserver" json:"testserver"`
 	// Kalla är sökvägen konfigurationen kommer från, tom när PM använder defaulterna.
 	Kalla string `toml:"-" json:"-"`
@@ -85,6 +92,7 @@ type Konfig struct {
 func StandardKonfig() Konfig {
 	return Konfig{
 		DefaultAgent: "claude",
+		Portar:       PortKonfig{Fran: 8100, Till: 8199},
 		Agenter: map[string]AgentKonfig{
 			"claude": {
 				Kommando:        "claude",
@@ -125,6 +133,9 @@ func LasKonfig(workspaceDir string) (Konfig, error) {
 	}
 	k.Kalla = sokvag
 	std := StandardKonfig()
+	if k.Portar.Fran == 0 && k.Portar.Till == 0 {
+		k.Portar = std.Portar
+	}
 	if len(k.Agenter) == 0 {
 		k.Agenter = std.Agenter
 	}
@@ -216,6 +227,13 @@ func fyllIStandard(a AgentKonfig) AgentKonfig {
 
 // Validera fångar konfigfel innan PM startar en körning.
 func (k Konfig) Validera(projektalias ...string) error {
+	portar := k.Portar
+	if portar.Fran == 0 && portar.Till == 0 {
+		portar = PortKonfig{Fran: 8100, Till: 8199}
+	}
+	if err := (PortIntervall{Fran: portar.Fran, Till: portar.Till}).validera(); err != nil {
+		return err
+	}
 	for namn, a := range k.Agenter {
 		if a.Kommando == "" {
 			return fmt.Errorf("agenten %q saknar kommando i konfigurationen", namn)
