@@ -39,6 +39,14 @@ function nyNod(taggnamn) {
       this.barn = [];
       this.append(...nya);
     },
+    // Renderaren får inte bygga med innerHTML. Attrappen tolkar ingen HTML, så
+    // en sådan regression hade blivit tyst utan den här vakten.
+    set innerHTML(varde) {
+      throw new Error("renderaren satte innerHTML: " + String(varde).slice(0, 40));
+    },
+    setAttribute(namn, varde) {
+      this.attribut[namn] = String(varde);
+    },
   };
   return nod;
 }
@@ -85,6 +93,11 @@ const fientliga = [
   "`<script>alert(1)</script>`",
   "```\n<script>alert(1)</script>\n```",
   "**<img src=x onerror=alert(1)>**",
+  "<ScRiPt>window.pwn = 1;</ScRiPt>",
+  "[ond](java\tscript:alert(1))",
+  "[ond](javascript&#58;alert(1))",
+  "<object data=x></object> och <embed src=x> och <form><input></form>",
+  "Text med <style>body{display:none}</style> i mitten",
 ];
 
 for (const text of fientliga) {
@@ -93,6 +106,8 @@ for (const text of fientliga) {
   const noder = alla(rot);
   for (const nod of noder) {
     provaa(`ingen farlig nod för ${JSON.stringify(text)}`, !farliga.includes(nod.taggnamn));
+    const farligaAttribut = Object.keys(nod.attribut).filter((a) => a.toLowerCase().startsWith("on"));
+    provaa(`inga händelseattribut för ${JSON.stringify(text)}`, farligaAttribut.length === 0);
     if (nod.taggnamn === "a") {
       provaa(`bara http eller https i href för ${JSON.stringify(text)}`,
         /^https?:\/\//i.test(nod.attribut.href || ""));
