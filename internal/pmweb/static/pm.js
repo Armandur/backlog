@@ -106,6 +106,32 @@ async function laddaOversikt() {
   textrader.forEach((el) => el.setAttribute("title", el.textContent.trim()));
 }
 
+$("#taskform").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const knapp = $("#skapaTask");
+  $("#taskFel").textContent = "";
+  knapp.disabled = true;
+  try {
+    const task = await hamta(`/api/projects/${encodeURIComponent(alias)}/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        titel: $("#taskTitel").value,
+        beskrivning: $("#taskBeskrivning").value,
+        typ: $("#taskTyp").value,
+        prioritet: Number($("#taskPrioritet").value),
+      }),
+    });
+    $("#taskform").reset();
+    await laddaOversikt();
+    toast(`${task.ref} har lagts till.`);
+  } catch (err) {
+    $("#taskFel").textContent = err.message;
+  } finally {
+    knapp.disabled = false;
+  }
+});
+
 // ---------- körningar ----------
 async function laddaKorningar() {
   const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/korningar`);

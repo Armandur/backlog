@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -43,6 +44,16 @@ const (
 	maxDescriptionLen = 65535
 )
 
+// Sentinel errors let callers classify validation failures without matching
+// the complete message, while the CLI keeps the existing English wording.
+var (
+	ErrTaskTitleRequired = errors.New("title is required")
+	ErrTaskTitleTooLong  = errors.New("title exceeds max length of 255 characters")
+	ErrTaskTypeInvalid   = errors.New("invalid type")
+	ErrTaskStatusInvalid = errors.New("invalid status")
+	ErrTaskPriority      = errors.New("priority must be 1-5")
+)
+
 func joinTaskTypes() string {
 	parts := make([]string, 0, len(models.AllTaskTypes()))
 	for _, t := range models.AllTaskTypes() {
@@ -61,10 +72,10 @@ func joinTaskStatuses() string {
 
 func (s *TaskService) Create(ctx context.Context, in models.CreateTaskInput) (*models.Task, error) {
 	if in.Title == "" {
-		return nil, fmt.Errorf("title is required")
+		return nil, ErrTaskTitleRequired
 	}
 	if len(in.Title) > maxTitleLen {
-		return nil, fmt.Errorf("title exceeds max length of %d characters", maxTitleLen)
+		return nil, ErrTaskTitleTooLong
 	}
 	if len(in.Description) > maxDescriptionLen {
 		return nil, fmt.Errorf("description exceeds max length of %d characters", maxDescriptionLen)
@@ -76,19 +87,19 @@ func (s *TaskService) Create(ctx context.Context, in models.CreateTaskInput) (*m
 		in.Type = models.TaskTypeTask
 	}
 	if !in.Type.Valid() {
-		return nil, fmt.Errorf("invalid type %q (valid: %s)", in.Type, joinTaskTypes())
+		return nil, fmt.Errorf("%w %q (valid: %s)", ErrTaskTypeInvalid, in.Type, joinTaskTypes())
 	}
 	if in.Status == "" {
 		in.Status = models.TaskStatusTodo
 	}
 	if !in.Status.Valid() {
-		return nil, fmt.Errorf("invalid status %q (valid: %s)", in.Status, joinTaskStatuses())
+		return nil, fmt.Errorf("%w %q (valid: %s)", ErrTaskStatusInvalid, in.Status, joinTaskStatuses())
 	}
 	if in.Priority == 0 {
 		in.Priority = 3
 	}
 	if in.Priority < 1 || in.Priority > 5 {
-		return nil, fmt.Errorf("priority must be 1-5")
+		return nil, ErrTaskPriority
 	}
 
 	now := timeutil.Now()

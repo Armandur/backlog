@@ -195,6 +195,62 @@ func TestOversiktsroutenGerSektionerna(t *testing.T) {
 	}
 }
 
+func TestSkapaTaskRoutenLaggerTaskenIRattProjekt(t *testing.T) {
+	srv, db := testServer(t)
+	w := httptest.NewRecorder()
+	kropp := bytes.NewBufferString(`{"titel":"Ny task","beskrivning":"Från PM-webben"}`)
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/tasks", kropp))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST gav %d: %s", w.Code, w.Body.String())
+	}
+	var svar struct {
+		Ref   string `json:"ref"`
+		Titel string `json:"titel"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&svar); err != nil {
+		t.Fatal(err)
+	}
+	if svar.Ref == "" || svar.Titel != "Ny task" {
+		t.Fatalf("oväntat svar: %+v", svar)
+	}
+	var alias, beskrivning, typ string
+	var prioritet int
+	if err := db.QueryRow(`SELECT p.alias, t.description, t.type, t.priority
+		FROM tasks t JOIN projects p ON p.id=t.project_id WHERE t.title=?`, "Ny task").
+		Scan(&alias, &beskrivning, &typ, &prioritet); err != nil {
+		t.Fatal(err)
+	}
+	if alias != "demo" || beskrivning != "Från PM-webben" || typ != "task" || prioritet != 3 {
+		t.Fatalf("tasken fick fel projekt eller standardvärden: %q %q %q P%d", alias, beskrivning, typ, prioritet)
+	}
+}
+
+func TestSkapaTaskRoutenAvvisarTomTitel(t *testing.T) {
+	srv, _ := testServer(t)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/tasks",
+		bytes.NewBufferString(`{"titel":"  "}`)))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("tom titel gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "ange taskens titel") {
+		t.Fatalf("väntade svenskt fel, fick %s", w.Body.String())
+	}
+}
+
+func TestSkapaTaskRoutenGer404ForOkantProjekt(t *testing.T) {
+	srv, _ := testServer(t)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/finns-inte/tasks",
+		bytes.NewBufferString(`{"titel":"Ny task"}`)))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("okänt projekt gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "finns inte i PM-workspacet") {
+		t.Fatalf("väntade svenskt fel, fick %s", w.Body.String())
+	}
+}
+
 // Ett obesvarat agentinlägg i tråden ska visas som en fråga.
 func TestOversiktVisarObesvaradAgentfraga(t *testing.T) {
 	srv, db := testServer(t)

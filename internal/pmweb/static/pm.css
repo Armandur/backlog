@@ -108,6 +108,11 @@ textarea { resize: vertical; }
 .rad input:not([type=checkbox]) { flex: 1 1 12rem; min-width: 0; }
 .kryss { display: flex; align-items: center; gap: .35rem; font-size: .9rem; white-space: nowrap; width: auto; }
 .kryss input { width: auto; }
+.taskform { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: grid; gap: 10px; }
+.taskfalt { display: grid; grid-template-columns: minmax(0, 1fr) 150px 100px; gap: 10px; }
+.tasktitel, .taskbeskrivning { grid-column: 1/-1; }
+.taskfot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.taskfot p { flex: 1; margin: 0; }
 .logg { background: #0f1512; color: #cfe1d6; border-radius: 6px; padding: 12px 14px; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-x: auto; }
 .scrim { position: fixed; inset: 0; background: rgba(10,15,12,.45); display: none; z-index: 20; }
 .scrim.on { display: block; }
@@ -140,6 +145,8 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
   .rad-post { grid-template-columns: auto minmax(0, 1fr); row-gap: 6px; }
   .rad-post .act { grid-column: 1/-1; justify-content: flex-end; }
   .trad { height: clamp(260px, calc(100vh - 300px), 520px); }
+  .taskfalt { grid-template-columns: minmax(0, 1fr) 100px; }
+  .tasktitel, .taskbeskrivning { grid-column: 1/-1; }
 }
 
 /* Projektformuläret */

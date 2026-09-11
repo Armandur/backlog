@@ -3,7 +3,10 @@ package pmweb
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/mazen160/backlog/internal/models"
@@ -41,6 +44,61 @@ type VantarPost struct {
 	TaskID    string `json:"task_id,omitempty"`
 	Text      string `json:"text"`
 	KorningID string `json:"korning_id,omitempty"`
+}
+
+type skapaTaskBody struct {
+	Titel       string          `json:"titel"`
+	Beskrivning string          `json:"beskrivning"`
+	Typ         models.TaskType `json:"typ"`
+	Prioritet   int             `json:"prioritet"`
+}
+
+func (s *Server) skapaTask(w http.ResponseWriter, r *http.Request) {
+	alias := r.PathValue("alias")
+	projekt, err := service.NewProjectService(s.db).GetByAlias(r.Context(), alias)
+	if err != nil {
+		svaraFel(w, fmt.Errorf("projektet %q finns inte i PM-workspacet", alias), http.StatusNotFound)
+		return
+	}
+
+	var body skapaTaskBody
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+		svaraFel(w, errors.New("kunde inte läsa taskens uppgifter"), http.StatusBadRequest)
+		return
+	}
+	uppgift, err := service.NewTaskService(s.db, service.NewPlanService(s.db), service.NewLabelService(s.db)).Create(
+		r.Context(), models.CreateTaskInput{
+			ProjectID: projekt.ID,
+			Title:     strings.TrimSpace(body.Titel), Description: strings.TrimSpace(body.Beskrivning),
+			Type: body.Typ, Priority: body.Prioritet, Actor: s.aktor,
+		},
+	)
+	if err != nil {
+		meddelande, kod := begripligtTaskfel(err)
+		svaraFel(w, errors.New(meddelande), kod)
+		return
+	}
+	svaraJSON(w, http.StatusCreated, map[string]any{
+		"ref":   fmt.Sprintf("TASK-%d", uppgift.Seq),
+		"titel": uppgift.Title,
+	})
+}
+
+func begripligtTaskfel(err error) (string, int) {
+	switch {
+	case errors.Is(err, service.ErrTaskTitleRequired):
+		return "ange taskens titel", http.StatusBadRequest
+	case errors.Is(err, service.ErrTaskTitleTooLong):
+		return "taskens titel får innehålla högst 255 tecken", http.StatusBadRequest
+	case errors.Is(err, service.ErrTaskTypeInvalid):
+		return "välj en giltig typ", http.StatusBadRequest
+	case errors.Is(err, service.ErrTaskStatusInvalid):
+		return "välj en giltig status", http.StatusBadRequest
+	case errors.Is(err, service.ErrTaskPriority):
+		return "prioriteten måste vara P1-P5", http.StatusBadRequest
+	default:
+		return "PM kunde inte lägga till tasken", http.StatusInternalServerError
+	}
 }
 
 // byggOversikt samlar allt projektvyn visar.

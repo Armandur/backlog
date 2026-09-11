@@ -59,6 +59,7 @@ func (s *Server) rutter(upstream http.Handler) {
 		svaraFel(w, fmt.Errorf("metoden %s stöds inte på samtalsrouten", r.Method), http.StatusMethodNotAllowed)
 	})
 	s.mux.HandleFunc("GET /api/projects/{alias}/oversikt", s.hamtaOversikt)
+	s.mux.HandleFunc("POST /api/projects/{alias}/tasks", s.skapaTask)
 	s.mux.HandleFunc("POST /api/projects/{alias}/dela-ut", s.delaUt)
 	s.mux.HandleFunc("GET /api/projects/{alias}/korningar", s.hamtaKorningar)
 	s.mux.HandleFunc("GET /api/korningar/{id}", s.hamtaKorning)

@@ -70,6 +70,42 @@
           </section>
           <section>
             <h2>Tasks <span class="n" id="nTasks"></span></h2>
+            <form id="taskform" class="taskform">
+              <div class="taskfalt">
+                <label class="falt tasktitel" for="taskTitel">Titel
+                  <input id="taskTitel" name="titel" required maxlength="255" placeholder="Vad behöver göras?">
+                </label>
+                <label class="falt" for="taskTyp">Typ
+                  <select id="taskTyp" name="typ">
+                    <option value="task" selected>Task</option>
+                    <option value="bug">Bugg</option>
+                    <option value="issue">Problem</option>
+                    <option value="improvement">Förbättring</option>
+                    <option value="feature">Funktion</option>
+                    <option value="vulnerability">Sårbarhet</option>
+                    <option value="chore">Underhåll</option>
+                    <option value="spike">Utredning</option>
+                    <option value="bucket-list">Idé</option>
+                  </select>
+                </label>
+                <label class="falt" for="taskPrioritet">Prioritet
+                  <select id="taskPrioritet" name="prioritet">
+                    <option value="1">P1</option>
+                    <option value="2">P2</option>
+                    <option value="3" selected>P3</option>
+                    <option value="4">P4</option>
+                    <option value="5">P5</option>
+                  </select>
+                </label>
+                <label class="falt taskbeskrivning" for="taskBeskrivning">Beskrivning, valfri
+                  <textarea id="taskBeskrivning" name="beskrivning" rows="2"></textarea>
+                </label>
+              </div>
+              <div class="taskfot">
+                <p class="fel-text" id="taskFel" role="alert"></p>
+                <button type="submit" class="btn pri" id="skapaTask">Lägg till task</button>
+              </div>
+            </form>
             <div class="list" id="tasks"></div>
           </section>
         </div>
