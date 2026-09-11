@@ -319,6 +319,9 @@ async function laddaAgenter() {
   try {
     const data = await hamta("/api/agenter");
     agenter = data.agenter || [];
+    $("#fragatips").textContent = data.forval
+      ? `Med bock skickar PM inlägget till ${data.forval}, som svarar i tråden. Agenten ser öppna tasks, projektminnet och de senaste inläggen. Utan bock sparar PM bara inlägget.`
+      : "Utan bock sparar PM bara inlägget i tråden.";
   } catch {
     agenter = [];
   }

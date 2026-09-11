@@ -234,7 +234,8 @@ func (s *Server) hamtaKorningar(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) hamtaAgenter(w http.ResponseWriter, r *http.Request) {
-	svaraJSON(w, http.StatusOK, map[string]any{"agenter": s.aktuelltRegister().Namn()})
+	reg := s.aktuelltRegister()
+	svaraJSON(w, http.StatusOK, map[string]any{"agenter": reg.Namn(), "forval": reg.Forval()})
 }
 
 // aktuelltRegister läser konfigurationen per anrop, så en agent som lagts till

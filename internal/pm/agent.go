@@ -44,6 +44,9 @@ func (r *AgentRegister) Registrera(a Agent) {
 // SattForval pekar ut vilken agent som används utan --agent.
 func (r *AgentRegister) SattForval(namn string) { r.forval = namn }
 
+// Forval ger namnet på agenten som svarar när inget namn anges.
+func (r *AgentRegister) Forval() string { return r.forval }
+
 // Hamta ger agenten med namnet, eller förvalet om namnet är tomt.
 func (r *AgentRegister) Hamta(namn string) (Agent, error) {
 	if namn == "" {
