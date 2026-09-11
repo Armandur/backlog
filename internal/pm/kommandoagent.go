@@ -1,11 +1,15 @@
 package pm
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,13 +30,14 @@ type Korare interface {
 // KorInput är det en körning behöver: briefen, repo-katalogen och var loggen
 // och agentens svarsfil ska ligga.
 type KorInput struct {
-	Brief    string
-	Repo     string
-	Logg     string
-	Svarsfil string
-	Profil   string
-	TaskRef  string
-	PMBinar  string
+	Brief       string
+	Repo        string
+	Logg        string
+	Svarsfil    string
+	Profil      string
+	TaskRef     string
+	PMBinar     string
+	VidHandelse func(Handelse)
 }
 
 // KommandoAgent är den enda agentimplementationen. Allt som skiljer claude
@@ -87,9 +92,12 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 	ctx, avbryt := context.WithTimeout(ctx, time.Duration(a.konfig.TimeoutSekunder)*time.Second)
 	defer avbryt()
 
-	args := make([]string, 0, len(a.konfig.Args)+2)
+	args := make([]string, 0, len(a.konfig.Args)+3)
 	for _, arg := range a.konfig.Args {
 		args = append(args, ersattPlatshallare(arg, in))
+	}
+	if a.konfig.Strom == "claude-json" {
+		args = append(args, "--output-format", "stream-json", "--verbose")
 	}
 	if a.konfig.MCP {
 		if cfg, stad, err := mcpConfigFil(in.PMBinar, in.Profil, "ai:"+a.namn); err == nil && cfg != "" {
@@ -115,7 +123,51 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 		}
 	}
 
-	utdata, korfel := cmd.CombinedOutput()
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return Resultat{}, fmt.Errorf("kunde inte läsa standardutdata från agenten %s: %w", a.namn, err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return Resultat{}, fmt.Errorf("kunde inte läsa felutdata från agenten %s: %w", a.namn, err)
+	}
+	if err := cmd.Start(); err != nil {
+		return Resultat{}, fmt.Errorf("kunde inte köra agenten %s (%s): %w", a.namn, a.konfig.Kommando, err)
+	}
+
+	var utdata synkadUtdata
+	var lasare sync.WaitGroup
+	lasfel := make(chan error, 2)
+	lasare.Add(2)
+	go func() {
+		defer lasare.Done()
+		if err := lasRader(stdout, func(rad []byte) {
+			utdata.skrivRad(rad)
+			if a.konfig.Strom == "claude-json" && in.VidHandelse != nil {
+				for _, handelse := range tolkaClaudeRad(rad) {
+					in.VidHandelse(handelse)
+				}
+			}
+		}); err != nil {
+			lasfel <- err
+		}
+	}()
+	go func() {
+		defer lasare.Done()
+		if err := lasRader(stderr, utdata.skrivRad); err != nil {
+			lasfel <- err
+		}
+	}()
+	lasare.Wait()
+	korfel := cmd.Wait()
+	close(lasfel)
+	for err := range lasfel {
+		if korfel == nil {
+			korfel = fmt.Errorf("kunde inte läsa agentens utdata: %w", err)
+		}
+	}
+
+	samladUtdata := utdata.String()
 	res := Resultat{ExitKod: cmd.ProcessState.ExitCode(), Logg: in.Logg}
 	if res.ExitKod < 0 {
 		res.ExitKod = 1
@@ -124,22 +176,60 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 		res.ExitKod = 124
 	}
 
-	res.Utdata = string(utdata)
+	res.Utdata = samladUtdata
 	if a.konfig.Svar == "fil" {
 		if data, err := os.ReadFile(in.Svarsfil); err == nil && strings.TrimSpace(string(data)) != "" {
 			res.Utdata = string(data)
 		}
 	}
 	if in.Logg != "" {
-		skrivLogg(in.Logg, a.namn, in.Brief, string(utdata), res.ExitKod)
+		skrivLogg(in.Logg, a.namn, in.Brief, samladUtdata, res.ExitKod)
 	}
 	if korfel != nil {
 		if _, ok := korfel.(*exec.ExitError); !ok {
-			// Kommandot gick inte att starta alls.
-			return res, fmt.Errorf("kunde inte köra agenten %s (%s): %w", a.namn, a.konfig.Kommando, korfel)
+			return res, fmt.Errorf("kunde inte slutföra agenten %s (%s): %w", a.namn, a.konfig.Kommando, korfel)
 		}
 	}
 	return res, nil
+}
+
+const storstaUtdataRad = 16 * 1024 * 1024
+
+type synkadUtdata struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (u *synkadUtdata) skrivRad(rad []byte) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.b.Write(rad)
+}
+
+func (u *synkadUtdata) String() string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.b.String()
+}
+
+func lasRader(r io.Reader, hantera func([]byte)) error {
+	skanner := bufio.NewScanner(r)
+	skanner.Split(delaUtdataRader)
+	skanner.Buffer(make([]byte, 64*1024), storstaUtdataRad)
+	for skanner.Scan() {
+		hantera(skanner.Bytes())
+	}
+	return skanner.Err()
+}
+
+func delaUtdataRader(data []byte, vidSlut bool) (flytta int, del []byte, err error) {
+	if i := bytes.IndexByte(data, '\n'); i >= 0 {
+		return i + 1, data[:i+1], nil
+	}
+	if vidSlut && len(data) > 0 {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
 }
 
 func ersattPlatshallare(arg string, in KorInput) string {

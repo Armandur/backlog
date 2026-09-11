@@ -22,6 +22,8 @@ type AgentKonfig struct {
 	Brief string `toml:"brief" json:"brief"`
 	// Svar: "stdout" eller "fil" (läses från {svarsfil}).
 	Svar string `toml:"svar" json:"svar"`
+	// Strom: "claude-json", "codex-json" eller tomt för vanlig utdata.
+	Strom string `toml:"strom" json:"strom"`
 	// Stdin: "devnull" stänger stdin, vilket codex kräver.
 	Stdin           string            `toml:"stdin" json:"stdin"`
 	TimeoutSekunder int               `toml:"timeout_sekunder" json:"timeout_sekunder"`
@@ -196,6 +198,11 @@ func (k Konfig) Validera() error {
 		case "stdout", "fil":
 		default:
 			return fmt.Errorf("agenten %q har okänt svar-läge %q, använd stdout eller fil", namn, a.Svar)
+		}
+		switch a.Strom {
+		case "", "claude-json", "codex-json":
+		default:
+			return fmt.Errorf("agenten %q har okänt strömformat %q, använd claude-json eller codex-json", namn, a.Strom)
 		}
 		if a.Svar == "fil" && !harPlatshallare(a.Args, "{svarsfil}") {
 			return fmt.Errorf("agenten %q läser svaret från fil men saknar {svarsfil} i args", namn)

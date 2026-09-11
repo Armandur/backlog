@@ -118,11 +118,23 @@ func (u *Utdelare) kor(ctx context.Context, store *KorningStore, korare Korare, 
 		return korning, err
 	}
 
-	res, korfel := korare.Kor(ctx, KorInput{
-		Brief: brief, Repo: fakta.RepoPath, Logg: korning.Logg,
-		Profil: in.Profil, TaskRef: fakta.Ref, PMBinar: in.PMBinar,
-		Svarsfil: filepath.Join(LoggKatalog(in.WorkspaceDir), korning.ID+".svar.txt"),
-	})
+	var res Resultat
+	var korfel error
+	handelser, err := nyHandelseSkrivare(korning.Logg)
+	if err != nil {
+		res = Resultat{ExitKod: 1, Logg: korning.Logg}
+		korfel = fmt.Errorf("kunde inte skapa händelseloggen: %w", err)
+	} else {
+		res, korfel = korare.Kor(ctx, KorInput{
+			Brief: brief, Repo: fakta.RepoPath, Logg: korning.Logg,
+			Profil: in.Profil, TaskRef: fakta.Ref, PMBinar: in.PMBinar,
+			Svarsfil:    filepath.Join(LoggKatalog(in.WorkspaceDir), korning.ID+".svar.txt"),
+			VidHandelse: handelser.Skriv,
+		})
+		if err := handelser.Stang(); err != nil && korfel == nil {
+			korfel = fmt.Errorf("kunde inte skriva händelseloggen: %w", err)
+		}
+	}
 
 	status := StatusKlar
 	nyStatus := models.TaskStatus("done")
