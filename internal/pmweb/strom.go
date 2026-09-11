@@ -49,6 +49,17 @@ func (s *Server) strommaKorning(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
+	// En körning vars process är borta ska säga det, även om den aldrig hann
+	// skriva en händelse. Städningen skriver då raden åt oss.
+	if uppdaterad, stadad, stadfel := store.StadaOmOvergiven(r.Context(), korning.ID); stadfel == nil {
+		korning = uppdaterad
+		if stadad && fil == nil {
+			if oppnad, oppningsfel := os.Open(sokvag); oppningsfel == nil {
+				fil = oppnad
+			}
+		}
+	}
+
 	// Filen skapas först när agenten skickar sin första händelse. En körning
 	// som just startat har alltså ingen fil än, och då väntar vi in den.
 	if fil == nil && avslutad(korning.Status) {

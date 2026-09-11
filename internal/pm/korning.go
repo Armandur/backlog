@@ -125,6 +125,7 @@ func (s *KorningStore) StadaOvergivna(ctx context.Context) (int, error) {
 		if err := s.Avsluta(ctx, k.ID, StatusFel, 1, k.Logg); err != nil {
 			return antal, err
 		}
+		SkrivAvbrottshandelse(k.Logg)
 		antal++
 	}
 	return antal, nil
@@ -148,6 +149,7 @@ func (s *KorningStore) StadaOmOvergiven(ctx context.Context, id string) (*Kornin
 	if err := s.Avsluta(ctx, k.ID, StatusFel, 1, k.Logg); err != nil {
 		return k, false, err
 	}
+	SkrivAvbrottshandelse(k.Logg)
 	uppdaterad, err := s.Hamta(ctx, id)
 	if err != nil {
 		return k, true, err

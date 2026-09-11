@@ -1161,3 +1161,36 @@ func TestStromKallarEttVanligtFelForFelInteAvbrott(t *testing.T) {
 		t.Fatalf("ett vanligt fel beskrevs som avbrott: %s", kropp)
 	}
 }
+
+func TestStromSagerAvbrottAvenUtanTidigareHandelser(t *testing.T) {
+	srv, db := testServer(t)
+	dir := t.TempDir()
+	logg := filepath.Join(dir, "k.log")
+	var projektID string
+	if err := db.QueryRow(`SELECT id FROM projects LIMIT 1`).Scan(&projektID); err != nil {
+		t.Fatal(err)
+	}
+	taskID := ids.New()
+	nu := timeutil.Now()
+	if _, err := db.Exec(`INSERT INTO tasks(id, project_id, task_seq, title, status, type, priority, created_at, updated_at)
+		VALUES(?,?,?,?,?,?,?,?,?)`, taskID, projektID, 3, "Prov", "doing", "task", 3, nu, nu); err != nil {
+		t.Fatal(err)
+	}
+	// Köad körning med död process, utan händelsefil.
+	id := ids.New()
+	if _, err := db.Exec(`INSERT INTO pm_korningar(id, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, logg_sokvag, skapad_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		id, projektID, taskID, "TASK-3", "claude", "", pm.StatusKoad, dir, 999999, logg, nu); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/korningar/"+id+"/strom", nil))
+	kropp := w.Body.String()
+	if !strings.Contains(kropp, "avbröts") {
+		t.Fatalf("en övergiven köad körning sa inte att den avbröts: %s", kropp)
+	}
+	if strings.Contains(kropp, "strömmar inte") {
+		t.Fatalf("beskedet blev missvisande: %s", kropp)
+	}
+}

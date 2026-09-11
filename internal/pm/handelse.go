@@ -275,3 +275,22 @@ func kortaHandelsetext(text string) string {
 		langd = nyLangd
 	}
 }
+
+// SkrivAvbrottshandelse lägger en sista rad i körningens händelsefil när
+// städningen hittar en körning vars process är borta. Då ser även den som
+// ansluter långt efteråt varför körningen tog slut.
+func SkrivAvbrottshandelse(logg string) {
+	if logg == "" {
+		return
+	}
+	fil, err := os.OpenFile(HandelseSokvag(logg), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer fil.Close()
+	data, err := json.Marshal(nyHandelse("fel", "körningen avbröts, processen finns inte längre"))
+	if err != nil {
+		return
+	}
+	_, _ = fil.Write(append(data, '\n'))
+}
