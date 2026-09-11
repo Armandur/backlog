@@ -75,7 +75,19 @@
           </section>
           <section>
             <h2>Tasks <span class="n" id="nTasks"></span></h2>
-            <form id="taskform" class="taskform">
+            <fieldset class="tasklage" aria-label="Sätt att lägga till task">
+              <label><input type="radio" name="tasklage" value="auto"> Auto</label>
+              <label><input type="radio" name="tasklage" value="avancerat"> Avancerat</label>
+            </fieldset>
+            <form id="autotaskform" class="taskform autotaskform">
+              <label class="dold" for="autoTaskText">Vad behöver göras?</label>
+              <textarea id="autoTaskText" name="text" rows="3" maxlength="255" required placeholder="Vad behöver göras?"></textarea>
+              <div class="taskfot">
+                <p id="autoTaskStatus" role="status"></p>
+                <button type="submit" class="btn pri" id="skapaAutoTask">Lägg till task</button>
+              </div>
+            </form>
+            <form id="taskform" class="taskform" hidden>
               <div class="taskfalt">
                 <label class="falt tasktitel" for="taskTitel">Titel
                   <input id="taskTitel" name="titel" required maxlength="255" placeholder="Vad behöver göras?">

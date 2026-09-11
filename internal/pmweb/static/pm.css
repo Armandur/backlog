@@ -109,6 +109,11 @@ textarea { resize: vertical; }
 .kryss { display: flex; align-items: center; gap: .35rem; font-size: .9rem; white-space: nowrap; width: auto; }
 .kryss input { width: auto; }
 .taskform { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: grid; gap: 10px; }
+.taskform[hidden] { display: none; }
+.tasklage { border: 0; padding: 0; margin: 0 0 8px; display: flex; gap: 14px; }
+.tasklage label { display: flex; align-items: center; gap: 5px; }
+.tasklage input { width: auto; }
+.autotaskform textarea { min-height: 84px; }
 .taskfalt { display: grid; grid-template-columns: minmax(0, 1fr) 150px 100px; gap: 10px; }
 .tasktitel, .taskbeskrivning { grid-column: 1/-1; }
 .taskfot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }

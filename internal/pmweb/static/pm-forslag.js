@@ -1,4 +1,129 @@
 let taskforslagRef = "";
+const TASKLAGE_NYCKEL = "backlog-pm-tasklage";
+const TASKTYP_ETIKETT = {
+  task: "task", bug: "bugg", issue: "problem", improvement: "förbättring",
+  feature: "funktion", vulnerability: "sårbarhet", chore: "underhåll",
+  spike: "utredning", "bucket-list": "idé",
+};
+
+function sparatTasklage() {
+  try {
+    return localStorage.getItem(TASKLAGE_NYCKEL);
+  } catch {
+    return null;
+  }
+}
+
+function visaTasklage(lage) {
+  const auto = lage !== "avancerat";
+  $("#autotaskform").hidden = !auto;
+  $("#taskform").hidden = auto;
+  document.querySelector(`input[name="tasklage"][value="${auto ? "auto" : "avancerat"}"]`).checked = true;
+}
+
+function sparaTasklage(lage) {
+  try {
+    localStorage.setItem(TASKLAGE_NYCKEL, lage);
+  } catch {
+    // Läget fungerar fortfarande under besöket när webbläsaren nekar lagring.
+  }
+}
+
+function sattAutoStatus(text, fel = false) {
+  const status = $("#autoTaskStatus");
+  status.textContent = text;
+  status.classList.toggle("fel-text", fel);
+}
+
+async function hamtaAutoTaskforslag(ref, sort) {
+  return hamta(`/api/tasks/${encodeURIComponent(ref)}/foresla`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sort }),
+  });
+}
+
+async function laddaAutoOversikt() {
+  try {
+    await laddaOversikt();
+  } catch (err) {
+    console.error("Kunde inte uppdatera tasklistan:", err);
+  }
+}
+
+document.querySelectorAll('input[name="tasklage"]').forEach((val) => {
+  val.addEventListener("change", (event) => {
+    const lage = event.target.value;
+    visaTasklage(lage);
+    sparaTasklage(lage);
+  });
+});
+visaTasklage(sparatTasklage() || "auto");
+
+$("#autotaskform").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const knapp = $("#skapaAutoTask");
+  const text = $("#autoTaskText").value;
+  knapp.disabled = true;
+  sattAutoStatus("Lägger till tasken...");
+  let task;
+  try {
+    task = await hamta(`/api/projects/${encodeURIComponent(alias)}/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ titel: text }),
+    });
+  } catch (err) {
+    sattAutoStatus(err.message, true);
+    knapp.disabled = false;
+    return;
+  }
+
+  sattAutoStatus(`${task.ref} skapad. PM klassar tasken...`);
+  let klassning;
+  try {
+    klassning = await hamtaAutoTaskforslag(task.ref, "klassning");
+  } catch (err) {
+    sattAutoStatus(`${task.ref} skapad, men klassningen misslyckades: ${err.message}`, true);
+    await laddaAutoOversikt();
+    knapp.disabled = false;
+    return;
+  }
+
+  sattAutoStatus(`${task.ref} skapad och klassad. PM berikar tasken...`);
+  let berikning;
+  try {
+    berikning = await hamtaAutoTaskforslag(task.ref, "berikning");
+  } catch (err) {
+    sattAutoStatus(`${task.ref} skapad, men berikningen misslyckades: ${err.message}`, true);
+    await laddaAutoOversikt();
+    knapp.disabled = false;
+    return;
+  }
+
+  sattAutoStatus(`${task.ref} skapad och berikad. PM sparar resultatet...`);
+  try {
+    await hamta(`/api/tasks/${encodeURIComponent(task.ref)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        titel: berikning.titel,
+        beskrivning: berikning.beskrivning,
+        typ: klassning.typ,
+        prioritet: klassning.prioritet,
+      }),
+    });
+    $("#autotaskform").reset();
+    const typ = TASKTYP_ETIKETT[klassning.typ] || klassning.typ;
+    sattAutoStatus(`${task.ref} skapad, klassad som ${typ} P${klassning.prioritet} och berikad.`);
+    await laddaAutoOversikt();
+  } catch (err) {
+    sattAutoStatus(`${task.ref} skapad, men resultatet kunde inte sparas: ${err.message}`, true);
+    await laddaAutoOversikt();
+  } finally {
+    knapp.disabled = false;
+  }
+});
 
 function stangTaskforslag() {
   $("#forslagsdrawer").classList.remove("on");
