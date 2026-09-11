@@ -76,7 +76,7 @@ async function laddaOversikt() {
     const knapp = t.status === "done" || kor ? "" : `<button class="btn sm pri" data-dela="${t.ref}">Dela ut</button>`;
     const kommentarknapp = `<button class="btn sm" data-kommentarer="${esc(t.ref)}">Kommentarer</button>`;
     const sista = t.sista_korning ? ` · senaste körning ${t.sista_korning.status}${t.sista_korning.exit_kod !== undefined ? " (exit " + t.sista_korning.exit_kod + ")" : ""}` : "";
-    return rad(`<span class="mono ref">${t.ref}</span>
+    return rad(`<a class="mono ref" href="/tasks/${encodeURIComponent(t.ref)}" title="Öppna i backlog-UI:t">${t.ref}</a>
       <div class="t"><span class="prio">P${t.prioritet}</span> ${esc(t.titel)}
         <span class="meta">${esc(t.typ)}${t.etiketter.length ? " · " + esc(t.etiketter.join(", ")) : ""}${sista}</span></div>
       <div class="act">${status}${kommentarknapp}${knapp}</div>`);
@@ -90,7 +90,7 @@ async function laddaOversikt() {
     return el;
   }, "Inget väntar på dig.");
   $("#nBlockerat").textContent = o.blockerat.length;
-  fyll("#blockerat", o.blockerat, (t) => rad(`<span class="mono ref">${t.ref}</span>
+  fyll("#blockerat", o.blockerat, (t) => rad(`<a class="mono ref" href="/tasks/${encodeURIComponent(t.ref)}">${t.ref}</a>
     <div class="t">${esc(t.titel)}<span class="meta">${esc(t.skal)}</span></div>
     <div class="act"><button class="btn sm" data-kommentarer="${esc(t.ref)}">Kommentarer</button></div>`), "Inget blockerat.");
   const textrader = Array.from(document.querySelectorAll(".rad-post .t"));
@@ -210,6 +210,7 @@ function kunskapskort(meta, text) {
 async function visaKommentarer(ref) {
   $("#kommentarTitel").textContent = `${ref} · kommentarer`;
   $("#kommentarer").innerHTML = '<div class="tom">Läser kommentarer...</div>';
+  stangDela();
   $("#kommentarsdrawer").classList.add("on");
   $("#scrim").classList.add("on");
   try {
@@ -248,6 +249,8 @@ async function laddaKunskap() {
 // ---------- utdelning ----------
 let delaRef = null;
 function oppnaDela(ref) {
+  // Panelerna ligger på samma plats, så bara en i taget får vara öppen.
+  stangKommentarer();
   delaRef = ref;
   $("#dTask").textContent = ref;
   $("#dAgent").innerHTML = `<option value="">regelvald agent</option>` + agenter.map((a) => `<option value="${esc(a)}">${esc(a)}</option>`).join("");
