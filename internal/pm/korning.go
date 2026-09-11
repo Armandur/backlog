@@ -32,9 +32,12 @@ type Korning struct {
 	PID        int    `json:"pid"`
 	ExitKod    *int   `json:"exit_kod,omitempty"`
 	Logg       string `json:"logg_sokvag,omitempty"`
-	SkapadAt   int64  `json:"skapad_at"`
-	StartadAt  *int64 `json:"startad_at,omitempty"`
-	SlutAt     *int64 `json:"slut_at,omitempty"`
+	// Modell och Anstrangning är vad som begärdes, inte vad agenten svarade med.
+	Modell       string `json:"modell,omitempty"`
+	Anstrangning string `json:"anstrangning,omitempty"`
+	SkapadAt     int64  `json:"skapad_at"`
+	StartadAt    *int64 `json:"startad_at,omitempty"`
+	SlutAt       *int64 `json:"slut_at,omitempty"`
 }
 
 // KorningStore läser och skriver körningar.
@@ -50,9 +53,9 @@ func (s *KorningStore) Skapa(ctx context.Context, k *Korning) error {
 	}
 	k.PID = os.Getpid()
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO pm_korningar(id, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, logg_sokvag, skapad_at)
-		 VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-		k.ID, k.ProjectID, k.TaskID, k.TaskRef, k.Agent, k.Motivering, k.Status, k.RepoPath, k.PID, k.Logg, k.SkapadAt)
+		`INSERT INTO pm_korningar(id, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, logg_sokvag, modell, anstrangning, skapad_at)
+		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		k.ID, k.ProjectID, k.TaskID, k.TaskRef, k.Agent, k.Motivering, k.Status, k.RepoPath, k.PID, k.Logg, k.Modell, k.Anstrangning, k.SkapadAt)
 	if err != nil {
 		return fmt.Errorf("skapa körning: %w", err)
 	}
@@ -157,7 +160,7 @@ func (s *KorningStore) StadaOmOvergiven(ctx context.Context, id string) (*Kornin
 	return uppdaterad, true, nil
 }
 
-const kolumner = `id, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, exit_kod, logg_sokvag, skapad_at, startad_at, slut_at`
+const kolumner = `id, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, exit_kod, logg_sokvag, modell, anstrangning, skapad_at, startad_at, slut_at`
 
 func (s *KorningStore) fraga(ctx context.Context, q string, args ...any) ([]Korning, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -171,7 +174,7 @@ func (s *KorningStore) fraga(ctx context.Context, q string, args ...any) ([]Korn
 		var exit sql.NullInt64
 		var startad, slut sql.NullInt64
 		if err := rows.Scan(&k.ID, &k.ProjectID, &k.TaskID, &k.TaskRef, &k.Agent, &k.Motivering, &k.Status,
-			&k.RepoPath, &k.PID, &exit, &k.Logg, &k.SkapadAt, &startad, &slut); err != nil {
+			&k.RepoPath, &k.PID, &exit, &k.Logg, &k.Modell, &k.Anstrangning, &k.SkapadAt, &startad, &slut); err != nil {
 			return nil, err
 		}
 		if exit.Valid {

@@ -24,6 +24,9 @@ type TaskFakta struct {
 type AgentVal struct {
 	Agent      string
 	Motivering string
+	// Modell och Anstrangning kommer från regeln som matchade, om den sa något.
+	Modell       string
+	Anstrangning string
 }
 
 // ValjAgent följer första matchande regel. Overstyrning vinner alltid, och
@@ -41,7 +44,12 @@ func ValjAgent(k Konfig, fakta TaskFakta, overstyrning string) (AgentVal, error)
 			if namn == "" {
 				namn = fmt.Sprintf("regel %d", i+1)
 			}
-			return AgentVal{Agent: r.Agent, Motivering: fmt.Sprintf("regeln %q matchade (%s)", namn, skal)}, nil
+			return AgentVal{
+				Agent:        r.Agent,
+				Motivering:   fmt.Sprintf("regeln %q matchade (%s)", namn, skal),
+				Modell:       r.Modell,
+				Anstrangning: r.Anstrangning,
+			}, nil
 		}
 	}
 	if k.DefaultAgent == "" {

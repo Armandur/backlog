@@ -439,7 +439,7 @@ svar = "stdout"
 	}
 
 	startade := make(chan string, 1)
-	srv.MedUtdelare(func(taskID, agent string) string {
+	srv.MedUtdelare(func(taskID, agent, modell, anstrangning string) string {
 		startade <- agent
 		return "startad"
 	})
@@ -1192,5 +1192,33 @@ func TestStromSagerAvbrottAvenUtanTidigareHandelser(t *testing.T) {
 	}
 	if strings.Contains(kropp, "strömmar inte") {
 		t.Fatalf("beskedet blev missvisande: %s", kropp)
+	}
+}
+
+func TestDelaUtSkickarModellOchAnstrangning(t *testing.T) {
+	srv, db := testServer(t)
+	projektID := ""
+	if err := db.QueryRow(`SELECT id FROM projects LIMIT 1`).Scan(&projektID); err != nil {
+		t.Fatal(err)
+	}
+	nu := timeutil.Now()
+	if _, err := db.Exec(`INSERT INTO tasks(id, project_id, task_seq, title, status, type, priority, created_at, updated_at)
+		VALUES(?,?,?,?,?,?,?,?,?)`, ids.New(), projektID, 44, "Prov", "todo", "task", 3, nu, nu); err != nil {
+		t.Fatal(err)
+	}
+	sett := make(chan [2]string, 1)
+	srv.MedUtdelare(func(taskID, agent, modell, anstrangning string) string {
+		sett <- [2]string{modell, anstrangning}
+		return "startad"
+	})
+	kropp := bytes.NewBufferString(`{"task":"TASK-44","modell":" opus ","anstrangning":"hog"}`)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/dela-ut", kropp))
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("utdelningen gav %d: %s", w.Code, w.Body.String())
+	}
+	got := <-sett
+	if got[0] != "opus" || got[1] != "hog" {
+		t.Fatalf("utdelaren fick %q", got)
 	}
 }

@@ -32,14 +32,17 @@ type Korare interface {
 // KorInput är det en körning behöver: briefen, repo-katalogen och var loggen
 // och agentens svarsfil ska ligga.
 type KorInput struct {
-	Brief       string
-	Repo        string
-	Logg        string
-	Svarsfil    string
-	Profil      string
-	TaskRef     string
-	PMBinar     string
-	VidHandelse func(Handelse)
+	// Modell och Anstrangning fyller {modell} och {anstrangning} i args.
+	Modell       string
+	Anstrangning string
+	Brief        string
+	Repo         string
+	Logg         string
+	Svarsfil     string
+	Profil       string
+	TaskRef      string
+	PMBinar      string
+	VidHandelse  func(Handelse)
 }
 
 // KommandoAgent är den enda agentimplementationen. Allt som skiljer claude
@@ -94,10 +97,7 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 	ctx, avbryt := context.WithTimeout(ctx, time.Duration(a.konfig.TimeoutSekunder)*time.Second)
 	defer avbryt()
 
-	args := make([]string, 0, len(a.konfig.Args)+3)
-	for _, arg := range a.konfig.Args {
-		args = append(args, ersattPlatshallare(arg, in))
-	}
+	args := byggArgs(a.konfig.Args, in)
 	if a.konfig.Strom == "claude-json" {
 		args = append(args, "--output-format", "stream-json", "--verbose")
 	}
@@ -269,6 +269,40 @@ func lasRader(r io.Reader, hantera func([]byte), forLang func(int)) error {
 	}
 }
 
+// byggArgs fyller platshållarna och tar bort de argument som blir tomma.
+// {modell} och {anstrangning} är valfria: saknas värdet ska varken värdet
+// eller flaggan före det stå kvar, för ett tomt argument får flera CLI:er att
+// fela.
+func byggArgs(mall []string, in KorInput) []string {
+	valfria := map[string]string{"{modell}": in.Modell, "{anstrangning}": in.Anstrangning}
+	args := make([]string, 0, len(mall)+3)
+	for _, arg := range mall {
+		tom, baraPlatshallare := false, false
+		for platshallare, varde := range valfria {
+			if !strings.Contains(arg, platshallare) || strings.TrimSpace(varde) != "" {
+				continue
+			}
+			tom = true
+			baraPlatshallare = strings.TrimSpace(arg) == platshallare
+		}
+		if tom {
+			// Flaggan före faller bort när den hör ihop med värdet. Det gör
+			// den när platshållaren står ensam, som i --model {modell}, eller
+			// när flaggan är kort och bär värdet, som codex -c nyckel={x}. En
+			// lång flagga som --verbose står för sig själv och blir kvar.
+			if n := len(args); n > 0 && strings.HasPrefix(args[n-1], "-") && !strings.Contains(args[n-1], "=") {
+				kortFlagga := len(args[n-1]) == 2 && !strings.HasPrefix(args[n-1], "--")
+				if baraPlatshallare || kortFlagga {
+					args = args[:n-1]
+				}
+			}
+			continue
+		}
+		args = append(args, ersattPlatshallare(arg, in))
+	}
+	return args
+}
+
 func ersattPlatshallare(arg string, in KorInput) string {
 	byten := strings.NewReplacer(
 		"{brief}", in.Brief,
@@ -277,6 +311,8 @@ func ersattPlatshallare(arg string, in KorInput) string {
 		"{logg}", in.Logg,
 		"{task}", in.TaskRef,
 		"{profil}", in.Profil,
+		"{modell}", in.Modell,
+		"{anstrangning}", in.Anstrangning,
 	)
 	return byten.Replace(arg)
 }

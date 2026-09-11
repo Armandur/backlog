@@ -25,7 +25,7 @@ var staticFiles embed.FS
 // Server hanterar PM-rutterna och skickar resten vidare till upstream.
 // Utdelarfunktion startar en körning i bakgrunden och ger ett kvitto att
 // visa i UI:t. Servern äger inte utdelningen, web-kommandot kopplar in den.
-type Utdelarfunktion func(taskID, agent string) string
+type Utdelarfunktion func(taskID, agent, modell, anstrangning string) string
 
 type Server struct {
 	db       *sql.DB
@@ -189,8 +189,10 @@ func (s *Server) hamtaOversikt(w http.ResponseWriter, r *http.Request) {
 }
 
 type utdelBody struct {
-	Task  string `json:"task"`
-	Agent string `json:"agent"`
+	Task         string `json:"task"`
+	Agent        string `json:"agent"`
+	Modell       string `json:"modell"`
+	Anstrangning string `json:"anstrangning"`
 }
 
 // delaUt startar körningen i bakgrunden och svarar direkt. Vyn följer
@@ -228,8 +230,11 @@ func (s *Server) delaUt(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	klart := s.utdelare(taskID, body.Agent)
-	svaraJSON(w, http.StatusAccepted, map[string]any{"startad": true, "task": body.Task, "agent": body.Agent, "kvitto": klart})
+	klart := s.utdelare(taskID, body.Agent, strings.TrimSpace(body.Modell), strings.TrimSpace(body.Anstrangning))
+	svaraJSON(w, http.StatusAccepted, map[string]any{
+		"startad": true, "task": body.Task, "agent": body.Agent,
+		"modell": strings.TrimSpace(body.Modell), "kvitto": klart,
+	})
 }
 
 func (s *Server) hamtaKorningar(w http.ResponseWriter, r *http.Request) {

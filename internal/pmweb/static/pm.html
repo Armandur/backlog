@@ -282,6 +282,16 @@
       <select id="dAgent"></select>
       <p class="regel" id="dRegel">Tomt val betyder att regelfilen väljer agent.</p>
     </div>
+    <div class="falt">
+      <label for="dModell">Modell, valfri</label>
+      <input id="dModell" spellcheck="false" placeholder="opus">
+      <p class="regel">Tomt betyder att regeln eller agentens förval gäller. Agenten måste ha {modell} i sina args.</p>
+    </div>
+    <div class="falt">
+      <label for="dAnstrangning">Ansträngning, valfri</label>
+      <input id="dAnstrangning" spellcheck="false" placeholder="high">
+      <p class="regel">Bara agenter som stöder det, till exempel Codex. Kräver {anstrangning} i args.</p>
+    </div>
     <div class="falt"><label>Så här går det till</label>
       <p class="brief">Briefen bär taskens beskrivning, projektminnet och de senaste samtalsinläggen. PM flyttar tasken till <code>doing</code> när körningen startar. Agentens svar landar som kommentar från <code>ai:&lt;agent&gt;</code>. Exitkod 0 stänger tasken, annars går den tillbaka till <code>todo</code>.</p>
     </div>

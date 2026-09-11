@@ -22,7 +22,9 @@ type UtdelInput struct {
 	Profil       string
 	PMBinar      string
 	KoTimeout    time.Duration
-	Neka         bool // neka i stället för att köa när repot är upptaget
+	Neka         bool   // neka i stället för att köa när repot är upptaget
+	Modell       string // överstyr modellen för just den här körningen
+	Anstrangning string
 }
 
 // Utdelare kör en task via en agent och för tillbaka resultatet till tavlan.
@@ -59,9 +61,15 @@ func (u *Utdelare) DelaUt(ctx context.Context, in UtdelInput) (*Korning, error) 
 		return nil, err
 	}
 
+	// Utdelningen vinner över regeln, och regeln över agentens förval.
+	agentkonfig := u.konfig.Agenter[val.Agent]
+	modell := forstaIckeTomma(in.Modell, val.Modell, agentkonfig.Modell)
+	anstrangning := forstaIckeTomma(in.Anstrangning, val.Anstrangning, agentkonfig.Anstrangning)
+
 	korning := &Korning{
 		ProjectID: fakta.ProjectID, TaskID: fakta.ID, TaskRef: fakta.Ref,
 		Agent: val.Agent, Motivering: val.Motivering, RepoPath: fakta.RepoPath, Status: StatusKoad,
+		Modell: modell, Anstrangning: anstrangning,
 	}
 	if err := store.Skapa(ctx, korning); err != nil {
 		return nil, err
@@ -128,6 +136,7 @@ func (u *Utdelare) kor(ctx context.Context, store *KorningStore, korare Korare, 
 		res, korfel = korare.Kor(ctx, KorInput{
 			Brief: brief, Repo: fakta.RepoPath, Logg: korning.Logg,
 			Profil: in.Profil, TaskRef: fakta.Ref, PMBinar: in.PMBinar,
+			Modell: korning.Modell, Anstrangning: korning.Anstrangning,
 			Svarsfil:    filepath.Join(LoggKatalog(in.WorkspaceDir), korning.ID+".svar.txt"),
 			VidHandelse: handelser.Skriv,
 		})
@@ -231,3 +240,13 @@ func krokMiljo(extra map[string]string, in UtdelInput) []string {
 
 // LoggKatalog pekar ut var körningarna skriver sina loggar.
 func LoggKatalog(workspaceDir string) string { return filepath.Join(workspaceDir, "korningar") }
+
+// forstaIckeTomma ger det första värdet som inte är tomt.
+func forstaIckeTomma(varden ...string) string {
+	for _, v := range varden {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}

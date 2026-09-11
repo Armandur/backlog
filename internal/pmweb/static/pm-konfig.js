@@ -69,6 +69,8 @@ function renderaKonfig() {
       <details><summary>Fler inställningar</summary>
         <div class="faltgrid">
           <label class="falt">Stdin<input data-agentfalt="stdin" value="${esc(a.stdin || "")}" spellcheck="false"></label>
+          <label class="falt">Modell, valfri<input data-agentfalt="modell" value="${esc(a.modell || "")}" spellcheck="false"></label>
+          <label class="falt">Ansträngning, valfri<input data-agentfalt="anstrangning" value="${esc(a.anstrangning || "")}" spellcheck="false"></label>
           <label class="falt">Strömmande utdata<select data-agentfalt="strom"><option value=""${!a.strom ? " selected" : ""}>ingen</option><option value="claude-json"${a.strom === "claude-json" ? " selected" : ""}>claude-json</option><option value="codex-json"${a.strom === "codex-json" ? " selected" : ""}>codex-json</option></select></label>
           <label class="kryss detaljkryss"><input data-agentfalt="mcp" type="checkbox"${a.mcp ? " checked" : ""}> Lägg till MCP-konfiguration</label>
         </div>
@@ -99,6 +101,10 @@ function renderaKonfig() {
       <label class="falt">Etiketter, kommaseparerade<input data-regelfalt="etiketter" value="${esc(kommaseparerat(regel.etiketter))}"></label>
     </div>
     <label class="falt">Nyckelord, kommaseparerade<input data-regelfalt="nyckelord" value="${esc(kommaseparerat(regel.nyckelord))}"></label>
+    <div class="faltgrid regelgrid">
+      <label class="falt">Modell, valfri<input data-regelfalt="modell" value="${esc(regel.modell || "")}" spellcheck="false"></label>
+      <label class="falt">Ansträngning, valfri<input data-regelfalt="anstrangning" value="${esc(regel.anstrangning || "")}" spellcheck="false"></label>
+    </div>
   </article>`).join("") || '<div class="tom">Inga regler. Den förvalda agenten används.</div>';
 
   $("#krokAnspraka").value = rader(konfig.krok?.anspraka);
@@ -125,6 +131,8 @@ function samlaKonfig() {
       miljo: lasMiljo(hamta("miljo").value, `Miljön för ${namn}`),
       mcp: hamta("mcp").checked,
       strom: hamta("strom").value,
+      modell: hamta("modell").value.trim(),
+      anstrangning: hamta("anstrangning").value.trim(),
     };
   });
   const reglerNy = Array.from(document.querySelectorAll(".regelkort")).map((kort) => {
@@ -133,6 +141,7 @@ function samlaKonfig() {
       namn: hamta("namn").trim(), agent: namnbyten[hamta("agent")] || hamta("agent"),
       typ: lasLista(hamta("typ"), ","), etiketter: lasLista(hamta("etiketter"), ","),
       nyckelord: lasLista(hamta("nyckelord"), ","),
+      modell: hamta("modell").trim(), anstrangning: hamta("anstrangning").trim(),
     };
   });
   const forval = namnbyten[$("#defaultAgent").value] || $("#defaultAgent").value;

@@ -174,3 +174,34 @@ func TestKorHangerInteNarRadenArForLang(t *testing.T) {
 		t.Fatalf("raden efter den överlånga tolkades inte: %s", sammanslaget)
 	}
 }
+
+func TestByggArgsTarBortTommaValfriaArgument(t *testing.T) {
+	mall := []string{"-p", "--model", "{modell}", "-c", "effort={anstrangning}", "{brief}"}
+
+	utan := byggArgs(mall, KorInput{Brief: "gör X"})
+	vill := []string{"-p", "gör X"}
+	if len(utan) != len(vill) {
+		t.Fatalf("tomma värden lämnade skräp: %q", utan)
+	}
+	for i := range vill {
+		if utan[i] != vill[i] {
+			t.Fatalf("fick %q, vill ha %q", utan, vill)
+		}
+	}
+
+	med := byggArgs(mall, KorInput{Brief: "gör X", Modell: "opus", Anstrangning: "hog"})
+	vill = []string{"-p", "--model", "opus", "-c", "effort=hog", "gör X"}
+	for i := range vill {
+		if med[i] != vill[i] {
+			t.Fatalf("fick %q, vill ha %q", med, vill)
+		}
+	}
+}
+
+func TestByggArgsBehallerFlaggaSomInteHorIhopMedVardet(t *testing.T) {
+	// --verbose står för sig själv och ska inte försvinna med modellen.
+	args := byggArgs([]string{"--verbose", "--model={modell}", "{brief}"}, KorInput{Brief: "x"})
+	if len(args) != 2 || args[0] != "--verbose" || args[1] != "x" {
+		t.Fatalf("fick %q", args)
+	}
+}

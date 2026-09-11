@@ -41,7 +41,7 @@ func NewWebCmd(hamtaRegister func() (*pm.AgentRegister, error)) *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "Städade %d övergiven körning som saknade process.\n", antal)
 			}
 			srv := New(cli.DB(), cli.CurrentActor(), reg).MedUtdelare(
-				func(taskID, agent string) string {
+				func(taskID, agent, modell, anstrangning string) string {
 					// Körningen lever längre än HTTP-anropet.
 					go func() {
 						// Konfigurationen läses vid varje utdelning, så en agent
@@ -54,6 +54,7 @@ func NewWebCmd(hamtaRegister func() (*pm.AgentRegister, error)) *cobra.Command {
 						utdelare := pm.NewUtdelare(cli.DB(), konfig, pm.FranKonfig(konfig))
 						_, err = utdelare.DelaUt(context.Background(), pm.UtdelInput{
 							TaskID: taskID, Overstyrning: agent,
+							Modell: modell, Anstrangning: anstrangning,
 							WorkspaceDir: workspace, Profil: profil, PMBinar: pm.PMBinar(),
 						})
 						if err != nil {

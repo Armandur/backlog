@@ -30,6 +30,10 @@ type AgentKonfig struct {
 	Miljo           map[string]string `toml:"miljo" json:"miljo"`
 	// MCP lägger till --mcp-config mot PM-profilen (claude headless).
 	MCP bool `toml:"mcp" json:"mcp"`
+	// Modell och Anstrangning fyller {modell} och {anstrangning} i args när
+	// varken utdelningen eller regeln säger något annat.
+	Modell       string `toml:"modell" json:"modell"`
+	Anstrangning string `toml:"anstrangning" json:"anstrangning"`
 }
 
 // Regel väljer agent utifrån taskens typ, etiketter och nyckelord.
@@ -39,6 +43,9 @@ type Regel struct {
 	Etiketter []string `toml:"etiketter" json:"etiketter"`
 	Nyckelord []string `toml:"nyckelord" json:"nyckelord"`
 	Agent     string   `toml:"agent" json:"agent"`
+	// Regeln får sätta modell och ansträngning för de tasks den fångar.
+	Modell       string `toml:"modell" json:"modell"`
+	Anstrangning string `toml:"anstrangning" json:"anstrangning"`
 }
 
 // Krok kan anropa ett externt anspråkskommando, t.ex. arbetar. Kön fungerar

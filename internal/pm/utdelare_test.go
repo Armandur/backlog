@@ -345,3 +345,33 @@ func TestKonFungerarUtanKrok(t *testing.T) {
 		t.Fatalf("körning utan krok ska bli klar, fick %+v %v", k, err)
 	}
 }
+
+// Utdelningen vinner över regeln, och regeln över agentens förval.
+func TestModellValjsIRattOrdning(t *testing.T) {
+	agent := AgentKonfig{Kommando: "true", Args: []string{"{brief}"}, Brief: "arg", Svar: "stdout", Modell: "forval"}
+	k := Konfig{
+		DefaultAgent: "a",
+		Agenter:      map[string]AgentKonfig{"a": agent},
+		Regler:       []Regel{{Namn: "buggar", Typ: []string{"bug"}, Agent: "a", Modell: "regelmodell"}},
+	}
+	val, err := ValjAgent(k, TaskFakta{Typ: "bug"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val.Modell != "regelmodell" {
+		t.Fatalf("regeln bar inte sin modell: %+v", val)
+	}
+	if got := forstaIckeTomma("", val.Modell, agent.Modell); got != "regelmodell" {
+		t.Fatalf("regeln skulle vinna över förvalet, fick %q", got)
+	}
+	if got := forstaIckeTomma("handplockad", val.Modell, agent.Modell); got != "handplockad" {
+		t.Fatalf("utdelningen skulle vinna, fick %q", got)
+	}
+	utanRegel, err := ValjAgent(Konfig{DefaultAgent: "a", Agenter: k.Agenter}, TaskFakta{Typ: "task"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := forstaIckeTomma("", utanRegel.Modell, agent.Modell); got != "forval" {
+		t.Fatalf("agentens förval skulle gälla, fick %q", got)
+	}
+}

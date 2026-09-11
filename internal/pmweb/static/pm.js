@@ -130,7 +130,7 @@ async function laddaKorningar() {
   const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/korningar`);
   fyll("#korningar", data.korningar, (k) => rad(`${taskLank(k.task_ref)}
     <div class="t"><span class="mono">${esc(k.agent)}</span> ${esc(k.motivering)}
-      <span class="meta">${tid(k.skapad_at)}${k.exit_kod !== undefined ? " · exit " + k.exit_kod : ""}</span></div>
+      <span class="meta">${tid(k.skapad_at)}${k.modell ? " · modell " + esc(k.modell) : ""}${k.exit_kod !== undefined ? " · exit " + k.exit_kod : ""}</span></div>
     <div class="act">${pill(k.status)}<button class="btn sm" data-kommentarer="${esc(k.task_ref)}">Kommentarer</button>${korningKnappar(k.id)}</div>`), "Inga körningar än.");
 }
 async function visaLogg(id) {
@@ -267,7 +267,12 @@ $("#dStarta").onclick = async () => {
     await hamta(`/api/projects/${encodeURIComponent(alias)}/dela-ut`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ task: delaRef, agent: $("#dAgent").value }),
+      body: JSON.stringify({
+        task: delaRef,
+        agent: $("#dAgent").value,
+        modell: $("#dModell").value,
+        anstrangning: $("#dAnstrangning").value,
+      }),
     });
     stangDela();
     toast(`${delaRef} utdelad. Följ körningen under pågående.`);
