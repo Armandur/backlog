@@ -102,7 +102,7 @@ h2 .n { font-weight: 500; background: var(--sankt); border-radius: 10px; padding
 .inlagg .aktor { font-weight: 600; color: var(--text); }
 .inlagg .text { margin: .35rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .skriv { background: var(--yta); border: 1px solid var(--kant); border-radius: 10px; padding: .75rem; display: flex; flex-direction: column; gap: .5rem; max-width: 72ch; }
-textarea, input:not([type=checkbox]), select { width: 100%; font: inherit; color: inherit; background: var(--ground); border: 1px solid var(--kant); border-radius: 8px; padding: .5rem .6rem; }
+textarea, input:not([type=checkbox]):not([type=radio]), select { width: 100%; font: inherit; color: inherit; background: var(--ground); border: 1px solid var(--kant); border-radius: 8px; padding: .5rem .6rem; }
 textarea { resize: vertical; }
 .rad { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 .rad input:not([type=checkbox]) { flex: 1 1 12rem; min-width: 0; }
@@ -146,8 +146,9 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 .projektform { max-width: 760px; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 16px; display: grid; gap: 16px; }
 .lageval { border: 0; padding: 0; margin: 0; display: flex; gap: 18px; flex-wrap: wrap; }
 .lageval legend { color: var(--svag); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
-.lageval label { display: flex; align-items: center; gap: 6px; }
-.projektfalt { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.lageval label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.lageval input { flex: none; width: auto; }
+.projektfalt { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
 .projektfalt .hel { grid-column: 1/-1; }
 .projektfot { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
 .projektfot p { flex: 1; margin: 0; }
