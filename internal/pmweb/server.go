@@ -59,6 +59,18 @@ func (s *Server) rutter(upstream http.Handler) {
 		svaraFel(w, fmt.Errorf("metoden %s stöds inte på samtalsrouten", r.Method), http.StatusMethodNotAllowed)
 	})
 	s.mux.HandleFunc("GET /api/projects/{alias}/oversikt", s.hamtaOversikt)
+	s.mux.HandleFunc("GET /api/tasks/{id}/kommentarer", s.hamtaKommentarer)
+	s.mux.HandleFunc("GET /api/projects/{alias}/docs", s.listaDocs)
+	s.mux.HandleFunc("GET /api/docs/{id}", s.hamtaDoc)
+	s.mux.HandleFunc("GET /api/projects/{alias}/minne", s.listaMinne)
+	endastLasning := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Allow", "GET")
+		svaraFel(w, fmt.Errorf("metoden %s stöds inte på läsrouten", r.Method), http.StatusMethodNotAllowed)
+	}
+	s.mux.HandleFunc("/api/tasks/{id}/kommentarer", endastLasning)
+	s.mux.HandleFunc("/api/projects/{alias}/docs", endastLasning)
+	s.mux.HandleFunc("/api/docs/{id}", endastLasning)
+	s.mux.HandleFunc("/api/projects/{alias}/minne", endastLasning)
 	s.mux.HandleFunc("POST /api/projects/{alias}/tasks", s.skapaTask)
 	s.mux.HandleFunc("POST /api/projects/{alias}/dela-ut", s.delaUt)
 	s.mux.HandleFunc("GET /api/projects/{alias}/korningar", s.hamtaKorningar)

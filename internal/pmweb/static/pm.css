@@ -149,6 +149,22 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
   .tasktitel, .taskbeskrivning { grid-column: 1/-1; }
 }
 
+/* Läsvyer för docs, minne och kommentarer */
+.kunskap-grid { display: grid; grid-template-columns: minmax(260px, .55fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.kunskapslista, .kommentarlista { display: grid; gap: 10px; min-width: 0; }
+.kunskapspost, .dokument { min-width: 0; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 12px 14px; }
+.kunskapspost .meta, .dokument .meta { color: var(--svag); font-size: 12px; overflow-wrap: anywhere; }
+.kunskapspost pre, .dokument pre { margin: 8px 0 0; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 100%; }
+.dokument { position: sticky; top: 20px; max-height: calc(100vh - 92px); overflow: auto; }
+.dokument h2 { color: var(--text); font-size: 18px; text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
+#docs .rad-post { grid-template-columns: minmax(0, 1fr) auto; }
+#kommentarer .tom { border: 1px solid var(--kant); border-radius: 8px; }
+@media (max-width: 760px) {
+  .rail button { font-size: 11px; }
+  .kunskap-grid { grid-template-columns: minmax(0, 1fr); }
+  .dokument { position: static; max-height: none; }
+}
+
 /* Projektformuläret */
 .projektform { max-width: 760px; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 16px; display: grid; gap: 16px; }
 .lageval { border: 0; padding: 0; margin: 0; display: flex; gap: 18px; flex-wrap: wrap; }

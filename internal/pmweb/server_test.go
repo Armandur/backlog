@@ -195,6 +195,135 @@ func TestOversiktsroutenGerSektionerna(t *testing.T) {
 	}
 }
 
+func TestKommentarerKanLasasViaTaskRef(t *testing.T) {
+	srv, db := testServer(t)
+	projekt, err := service.NewProjectService(db).GetByAlias(context.Background(), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := service.NewTaskService(db, service.NewPlanService(db), service.NewLabelService(db)).Create(
+		context.Background(), models.CreateTaskInput{
+			ProjectID: projekt.ID, Title: "Rapporttask", Type: models.TaskType("task"),
+			Priority: 3, Actor: models.Actor{Kind: models.ActorKindHuman, Name: "rasmus"},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aktor := models.Actor{Kind: models.ActorKindAI, Name: "testagent"}
+	if _, err := service.NewCommentService(db).Create(context.Background(), models.CreateCommentInput{
+		TaskID: task.ID, Body: "Rapport med <tagg>.", Actor: aktor,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	url := fmt.Sprintf("/api/tasks/TASK-%d/kommentarer", task.Seq)
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, url, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("kommentarer gav %d: %s", w.Code, w.Body.String())
+	}
+	var svar struct {
+		Kommentarer []models.Comment `json:"kommentarer"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&svar); err != nil {
+		t.Fatal(err)
+	}
+	if len(svar.Kommentarer) != 1 || svar.Kommentarer[0].Body != "Rapport med <tagg>." {
+		t.Fatalf("fel kommentarer: %+v", svar.Kommentarer)
+	}
+	if svar.Kommentarer[0].Actor != aktor || svar.Kommentarer[0].CreatedAt == 0 {
+		t.Fatalf("aktör eller tid saknas: %+v", svar.Kommentarer[0])
+	}
+}
+
+func TestKunskapsrutterVisarDocsOchMinne(t *testing.T) {
+	srv, db := testServer(t)
+	projekt, err := service.NewProjectService(db).GetByAlias(context.Background(), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	aktor := models.Actor{Kind: models.ActorKindAI, Name: "testagent"}
+	doc, err := service.NewDocService(db).Create(context.Background(), "demo", models.CreateDocInput{
+		Title: "Utredning", Body: "# Rubrik\nOformaterad text", Actor: aktor,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.NewMemoryService(db).Add(context.Background(), models.CreateMemoryInput{
+		ProjectID: projekt.ID, Body: "Ett bestående beslut", Tags: "beslut", Actor: aktor,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tester := []struct {
+		namn, url, innehall string
+	}{
+		{"docs", "/api/projects/demo/docs", `"title":"Utredning"`},
+		{"doc", "/api/docs/" + doc.ID, `"body":"# Rubrik\nOformaterad text"`},
+		{"minne", "/api/projects/demo/minne", `"body":"Ett bestående beslut"`},
+	}
+	for _, test := range tester {
+		t.Run(test.namn, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, test.url, nil))
+			if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), test.innehall) {
+				t.Fatalf("GET %s gav %d: %s", test.url, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestLasrutterGerSvensk404(t *testing.T) {
+	srv, _ := testServer(t)
+	tester := []struct {
+		namn, url, text string
+	}{
+		{"task", "/api/tasks/TASK-9999/kommentarer", "tasken"},
+		{"docs", "/api/projects/finns-inte/docs", "projektet"},
+		{"doc", "/api/docs/finns-inte", "dokumentet"},
+		{"minne", "/api/projects/finns-inte/minne", "projektet"},
+	}
+	for _, test := range tester {
+		t.Run(test.namn, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, test.url, nil))
+			if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), test.text) {
+				t.Fatalf("GET %s gav %d: %s", test.url, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestLasrutterAvvisarSkrivmetoder(t *testing.T) {
+	srv, _ := testServer(t)
+	for _, url := range []string{
+		"/api/tasks/TASK-1/kommentarer",
+		"/api/projects/demo/docs",
+		"/api/docs/ett-id",
+		"/api/projects/demo/minne",
+	} {
+		for _, metod := range []string{http.MethodPost, http.MethodPut} {
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(metod, url, strings.NewReader(`{}`)))
+			if w.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("%s %s gav %d, väntade 405", metod, url, w.Code)
+			}
+		}
+	}
+}
+
+func TestPMVyInnehallerKunskapOchKommentarspanel(t *testing.T) {
+	srv, _ := testServer(t)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/pm/demo", nil))
+	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`} {
+		if !strings.Contains(w.Body.String(), innehall) {
+			t.Fatalf("PM-vyn saknar %s", innehall)
+		}
+	}
+}
+
 func TestSkapaTaskRoutenLaggerTaskenIRattProjekt(t *testing.T) {
 	srv, db := testServer(t)
 	w := httptest.NewRecorder()

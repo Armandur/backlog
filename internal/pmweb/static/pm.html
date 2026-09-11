@@ -21,6 +21,7 @@
     <button data-v="projekt" class="on">Projekt</button>
     <button data-v="projekt-nytt">Nytt projekt</button>
     <button data-v="samtal">Samtal</button>
+    <button data-v="kunskap">Kunskap</button>
     <button data-v="korningar">Körningar <span class="n" id="nRun"></span></button>
     <button data-v="konfig">Konfig</button>
   </nav>
@@ -123,6 +124,28 @@
             <div class="list" id="blockerat"></div>
           </section>
         </div>
+      </div>
+    </section>
+
+    <section class="view" id="v-kunskap">
+      <h1>Kunskap</h1>
+      <p class="lead">Här finns projektets dokument och bestående minne.</p>
+      <div class="kunskap-grid">
+        <div class="stack">
+          <section>
+            <h2>Docs</h2>
+            <div class="list" id="docs"></div>
+          </section>
+          <section>
+            <h2>Projektminne</h2>
+            <div class="kunskapslista" id="minne"></div>
+          </section>
+        </div>
+        <section class="dokument" id="dokument" hidden>
+          <h2 id="dokumentTitel"></h2>
+          <p class="meta" id="dokumentMeta"></p>
+          <pre id="dokumentText"></pre>
+        </section>
       </div>
     </section>
 
@@ -263,6 +286,12 @@
     <button class="btn" id="dAvbryt">Avbryt</button>
     <button class="btn pri" id="dStarta">Starta körning</button>
   </footer>
+</aside>
+<aside class="drawer" id="kommentarsdrawer" aria-label="Taskens kommentarer">
+  <header><h3 id="kommentarTitel">Kommentarer</h3><button class="x" id="kommentarStang" aria-label="Stäng">×</button></header>
+  <div class="bd">
+    <div class="kommentarlista" id="kommentarer"></div>
+  </div>
 </aside>
 <div class="toast" id="toast"></div>
 
