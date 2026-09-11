@@ -34,6 +34,12 @@ func NewWebCmd(hamtaRegister func() (*pm.AgentRegister, error)) *cobra.Command {
 			}
 			workspace := cli.WorkDir()
 			profil := profilNamn()
+			// En körning som dog med förra servern ska inte se ut att pågå.
+			if antal, err := pm.NewKorningStore(cli.DB()).StadaOvergivna(cmd.Context()); err != nil {
+				fmt.Fprintf(os.Stderr, "kunde inte städa övergivna körningar: %v\n", err)
+			} else if antal > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "Städade %d övergiven körning som saknade process.\n", antal)
+			}
 			srv := New(cli.DB(), cli.CurrentActor(), reg).MedUtdelare(
 				func(taskID, agent string) string {
 					// Körningen lever längre än HTTP-anropet.

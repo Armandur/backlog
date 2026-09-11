@@ -130,6 +130,26 @@ func (s *KorningStore) StadaOvergivna(ctx context.Context) (int, error) {
 	return antal, nil
 }
 
+// StadaOmOvergiven markerar EN körning som fel om processen som startade den
+// är borta. Strömvyn frågar per anrop, så en körning som dog med servern inte
+// ser ut att pågå för evigt.
+func (s *KorningStore) StadaOmOvergiven(ctx context.Context, id string) (*Korning, error) {
+	k, err := s.Hamta(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if k.Status != StatusKoad && k.Status != StatusKor {
+		return k, nil
+	}
+	if k.PID == 0 || k.PID == os.Getpid() || processLever(k.PID) {
+		return k, nil
+	}
+	if err := s.Avsluta(ctx, k.ID, StatusFel, 1, k.Logg); err != nil {
+		return k, err
+	}
+	return s.Hamta(ctx, id)
+}
+
 const kolumner = `id, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, exit_kod, logg_sokvag, skapad_at, startad_at, slut_at`
 
 func (s *KorningStore) fraga(ctx context.Context, q string, args ...any) ([]Korning, error) {

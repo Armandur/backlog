@@ -59,6 +59,7 @@ func (s *Server) strommaKorning(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var ofullstandig []byte
+	avbruten := false
 	for {
 		if fil == nil {
 			if oppnad, oppningsfel := os.Open(sokvag); oppningsfel == nil {
@@ -75,10 +76,13 @@ func (s *Server) strommaKorning(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		korning, err = store.Hamta(r.Context(), korning.ID)
+		foreStatus := korning.Status
+		korning, err = store.StadaOmOvergiven(r.Context(), korning.ID)
 		if err != nil {
 			return
 		}
+		// Bytte status under vår egen poll saknar processen, alltså avbröts den.
+		avbruten = avbruten || (!avslutad(foreStatus) && korning.Status == pm.StatusFel)
 		if avslutad(korning.Status) && len(ofullstandig) == 0 {
 			if fil == nil {
 				// Körningen hann bli klar utan att skicka en enda händelse.
@@ -87,7 +91,7 @@ func (s *Server) strommaKorning(w http.ResponseWriter, r *http.Request) {
 				})
 				return
 			}
-			_ = skrivStromHandelse(w, flusher, "slut", slutHandelse(korning))
+			_ = skrivStromHandelse(w, flusher, "slut", slutHandelse(korning, avbruten))
 			return
 		}
 
@@ -155,7 +159,7 @@ func skrivStromHandelse(w io.Writer, flusher http.Flusher, namn string, handelse
 
 func avslutad(status string) bool { return status == pm.StatusKlar || status == pm.StatusFel }
 
-func slutHandelse(korning *pm.Korning) pm.Handelse {
+func slutHandelse(korning *pm.Korning, avbruten bool) pm.Handelse {
 	tid := time.Now().UnixNano()
 	if korning.SlutAt != nil {
 		tid = *korning.SlutAt
@@ -169,6 +173,10 @@ func slutHandelse(korning *pm.Korning) pm.Handelse {
 	if korning.Status == pm.StatusFel {
 		sort = "fel"
 		text = "körningen avslutades med fel"
+	}
+	if avbruten {
+		sort = "fel"
+		text = "körningen avbröts, processen finns inte längre"
 	}
 	return pm.Handelse{Tid: tid, Sort: sort, Text: fmt.Sprintf("%s (exitkod %s)", text, exitkod)}
 }

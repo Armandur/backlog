@@ -1084,3 +1084,39 @@ func TestKorningStromGerSvensk404ForOkandKorning(t *testing.T) {
 		t.Fatalf("väntade svensk 404, fick %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestStromAvslutarOvergivenKorning(t *testing.T) {
+	srv, db := testServer(t)
+	dir := t.TempDir()
+	logg := filepath.Join(dir, "k.log")
+	if err := os.WriteFile(pm.HandelseSokvag(logg), []byte(`{"tid":1,"sort":"text","text":"började"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var projektID string
+	if err := db.QueryRow(`SELECT id FROM projects LIMIT 1`).Scan(&projektID); err != nil {
+		t.Fatal(err)
+	}
+	taskID := ids.New()
+	nu := timeutil.Now()
+	if _, err := db.Exec(`INSERT INTO tasks(id, project_id, task_seq, title, status, type, priority, created_at, updated_at)
+		VALUES(?,?,?,?,?,?,?,?,?)`, taskID, projektID, 1, "Prov", "doing", "task", 3, nu, nu); err != nil {
+		t.Fatal(err)
+	}
+	// PID 0 hoppas över av städningen, så vi pekar ut en död process.
+	id := ids.New()
+	if _, err := db.Exec(`INSERT INTO pm_korningar(id, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, logg_sokvag, skapad_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		id, projektID, taskID, "TASK-1", "claude", "", pm.StatusKor, dir, 999999, logg, nu); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/korningar/"+id+"/strom", nil))
+	kropp := w.Body.String()
+	if !strings.Contains(kropp, "började") {
+		t.Fatalf("strömmen spelade inte upp händelsen: %s", kropp)
+	}
+	if !strings.Contains(kropp, "avbröts") {
+		t.Fatalf("strömmen sa inte att körningen avbröts: %s", kropp)
+	}
+}
