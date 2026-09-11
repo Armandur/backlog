@@ -92,7 +92,7 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 		args = append(args, ersattPlatshallare(arg, in))
 	}
 	if a.konfig.MCP {
-		if cfg, stad, err := mcpConfigFil(in.PMBinar, in.Profil); err == nil && cfg != "" {
+		if cfg, stad, err := mcpConfigFil(in.PMBinar, in.Profil, "ai:"+a.namn); err == nil && cfg != "" {
 			defer stad()
 			args = append(args, "--mcp-config", cfg)
 		}
@@ -164,7 +164,9 @@ func skrivLogg(sokvag, agent, brief, utdata string, exitkod int) {
 		agent, time.Now().Format(time.RFC3339), brief, utdata, exitkod)
 }
 
-func mcpConfigFil(pmBinar, profil string) (string, func(), error) {
+// mcpConfigFil skriver MCP-konfigen agenten får. Aktören måste med, annars
+// faller backlog tillbaka på $USER och skriver agentens arbete i Rasmus namn.
+func mcpConfigFil(pmBinar, profil, aktor string) (string, func(), error) {
 	if pmBinar == "" || profil == "" {
 		return "", func() {}, nil
 	}
@@ -172,7 +174,7 @@ func mcpConfigFil(pmBinar, profil string) (string, func(), error) {
 	if err != nil {
 		return "", func() {}, err
 	}
-	cfg := fmt.Sprintf(`{"mcpServers":{"backlog-pm":{"command":%q,"args":["--profile",%q,"mcp","serve"]}}}`, pmBinar, profil)
+	cfg := fmt.Sprintf(`{"mcpServers":{"backlog-pm":{"command":%q,"args":["--profile",%q,"--as",%q,"mcp","serve"]}}}`, pmBinar, profil, aktor)
 	if _, err := f.WriteString(cfg); err != nil {
 		f.Close()
 		os.Remove(f.Name())
