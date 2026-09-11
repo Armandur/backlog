@@ -60,10 +60,23 @@ document.querySelectorAll('input[name="tasklage"]').forEach((val) => {
 });
 visaTasklage(sparatTasklage() || "auto");
 
+// Rutan tar emot allt från en mening till en inklistrad logg. Första raden
+// blir titeln, resten beskrivningen. Berikningen skriver ändå om båda.
+function delaAutotext(text) {
+  const rader = text.trim().split("\n");
+  let titel = rader[0].trim();
+  let resten = rader.slice(1).join("\n").trim();
+  if (titel.length > 255) {
+    resten = (titel.slice(255) + "\n" + resten).trim();
+    titel = titel.slice(0, 255).trim();
+  }
+  return { titel, beskrivning: resten };
+}
+
 $("#autotaskform").addEventListener("submit", async (event) => {
   event.preventDefault();
   const knapp = $("#skapaAutoTask");
-  const text = $("#autoTaskText").value;
+  const { titel, beskrivning } = delaAutotext($("#autoTaskText").value);
   knapp.disabled = true;
   sattAutoStatus("Lägger till tasken...");
   let task;
@@ -71,7 +84,7 @@ $("#autotaskform").addEventListener("submit", async (event) => {
     task = await hamta(`/api/projects/${encodeURIComponent(alias)}/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ titel: text }),
+      body: JSON.stringify({ titel, beskrivning }),
     });
   } catch (err) {
     sattAutoStatus(err.message, true);
