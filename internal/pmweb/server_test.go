@@ -338,7 +338,7 @@ func TestPMVyInnehallerKunskapOchKommentarspanel(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/pm/demo", nil))
 	body := w.Body.String()
-	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`, `id="testserverKnapp"`, `id="testserverLank"`} {
+	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`, `id="testserverKnapp"`, `id="testserverLank"`, `id="testserverBadge"`} {
 		if !strings.Contains(body, innehall) {
 			t.Fatalf("PM-vyn saknar %s", innehall)
 		}
@@ -1754,10 +1754,11 @@ func TestTestserverrutterStartarVisarOchStoppar(t *testing.T) {
 		t.Fatalf("start gav %d: %s", start.Code, start.Body.String())
 	}
 	var server struct {
-		PID   int    `json:"pid"`
-		Port  int    `json:"port"`
-		Lever bool   `json:"lever"`
-		Lank  string `json:"lank"`
+		PID    int    `json:"pid"`
+		Port   int    `json:"port"`
+		Lever  bool   `json:"lever"`
+		Status string `json:"status"`
+		Lank   string `json:"lank"`
 	}
 	if err := json.NewDecoder(start.Body).Decode(&server); err != nil {
 		t.Fatal(err)
@@ -1770,18 +1771,21 @@ func TestTestserverrutterStartarVisarOchStoppar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !server.Lever || server.PID <= 0 || server.Lank != fmt.Sprintf("http://%s:%d/", vard, server.Port) {
+	if !server.Lever || server.Status != pm.TestserverStartar ||
+		server.PID <= 0 || server.Lank != fmt.Sprintf("http://%s:%d/", vard, server.Port) {
 		t.Fatalf("fel startsvar: %+v", server)
 	}
 
 	status := httptest.NewRecorder()
 	srv.ServeHTTP(status, httptest.NewRequest(http.MethodGet, "/api/projects/demo/testserver", nil))
-	if status.Code != http.StatusOK || !strings.Contains(status.Body.String(), `"lever":true`) {
+	if status.Code != http.StatusOK ||
+		!strings.Contains(status.Body.String(), `"status":"startar"`) {
 		t.Fatalf("status gav %d: %s", status.Code, status.Body.String())
 	}
 	stopp := httptest.NewRecorder()
 	srv.ServeHTTP(stopp, httptest.NewRequest(http.MethodPost, "/api/projects/demo/testserver/stop", nil))
-	if stopp.Code != http.StatusOK || !strings.Contains(stopp.Body.String(), `"lever":false`) {
+	if stopp.Code != http.StatusOK ||
+		!strings.Contains(stopp.Body.String(), `"status":"nere"`) {
 		t.Fatalf("stopp gav %d: %s", stopp.Code, stopp.Body.String())
 	}
 }

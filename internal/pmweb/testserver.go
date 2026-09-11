@@ -1,8 +1,6 @@
 package pmweb
 
 import (
-	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,6 +15,8 @@ type testserverSvar struct {
 	StartadAt    int64  `json:"startad_at"`
 	Logg         string `json:"logg_sokvag"`
 	Lever        bool   `json:"lever"`
+	Status       string `json:"status"`
+	Exitkod      *int   `json:"exitkod,omitempty"`
 	Konfigurerad bool   `json:"konfigurerad"`
 	Lank         string `json:"lank,omitempty"`
 }
@@ -40,11 +40,7 @@ func (s *Server) hamtaTestserver(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, err, http.StatusInternalServerError)
 		return
 	}
-	server, err := store.Hamta(r.Context(), alias)
-	if errors.Is(err, sql.ErrNoRows) {
-		svaraJSON(w, http.StatusOK, testserverTillSvar(alias, nil, konfig))
-		return
-	}
+	server, err := store.Status(r.Context(), alias)
 	if err != nil {
 		svaraFel(w, err, http.StatusInternalServerError)
 		return
@@ -91,6 +87,8 @@ func testserverTillSvar(alias string, server *pm.Testserver, konfig pm.Konfig) t
 	svar.StartadAt = server.StartadAt
 	svar.Logg = server.Logg
 	svar.Lever = server.Lever
+	svar.Status = server.Status
+	svar.Exitkod = server.Exitkod
 	if server.Lever {
 		vard, err := os.Hostname()
 		if err == nil && vard != "" {

@@ -5,18 +5,29 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/mazen160/backlog/internal/timeutil"
 )
 
-const testserverStopptid = 10 * time.Second
+const (
+	testserverStopptid     = 10 * time.Second
+	testserverHalsotimeout = 2 * time.Second
+	testserverCachetid     = 3 * time.Second
+
+	TestserverNere    = "nere"
+	TestserverStartar = "startar"
+	TestserverUppe    = "uppe"
+	TestserverKrasch  = "krasch"
+)
 
 // Testserver beskriver en process som PM har startat och därför får stoppa.
 type Testserver struct {
@@ -26,6 +37,8 @@ type Testserver struct {
 	StartadAt int64  `json:"startad_at"`
 	Logg      string `json:"logg_sokvag"`
 	Lever     bool   `json:"lever"`
+	Status    string `json:"status"`
+	Exitkod   *int   `json:"exitkod,omitempty"`
 }
 
 // TestserverStore äger testserverprocesser och deras databasrader.
@@ -34,10 +47,34 @@ type TestserverStore struct {
 	konfig    Konfig
 	workspace string
 	stopptid  time.Duration
+	halsotid  time.Duration
+	cachetid  time.Duration
 }
 
+type testserverHalsoNyckel struct {
+	db           *sql.DB
+	alias, halsa string
+	pid, port    int
+}
+
+type testserverHalsoSvar struct {
+	klar       chan struct{}
+	uppe       bool
+	giltigTill time.Time
+}
+
+var testserverHalsocache = struct {
+	sync.Mutex
+	svar map[testserverHalsoNyckel]*testserverHalsoSvar
+}{svar: make(map[testserverHalsoNyckel]*testserverHalsoSvar)}
+
+var testserverExitkoder sync.Map
+
 func NewTestserverStore(db *sql.DB, konfig Konfig, workspace string) *TestserverStore {
-	return &TestserverStore{db: db, konfig: konfig, workspace: workspace, stopptid: testserverStopptid}
+	return &TestserverStore{
+		db: db, konfig: konfig, workspace: workspace, stopptid: testserverStopptid,
+		halsotid: testserverHalsotimeout, cachetid: testserverCachetid,
+	}
 }
 
 // Starta reserverar porten, startar en processgrupp och sparar dess ägarskap.
@@ -116,7 +153,22 @@ func (s *TestserverStore) Starta(ctx context.Context, alias string) (*Testserver
 		return nil, fmt.Errorf("kunde inte starta testservern för %q: %w", alias, err)
 	}
 	pid := kommando.Process.Pid
-	go func() { _ = kommando.Wait() }()
+	exitfil := testserverExitfil(logg, pid)
+	testserverExitkoder.Delete(exitfil)
+	if err := os.Remove(exitfil); err != nil && !errors.Is(err, os.ErrNotExist) {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		_ = kommando.Wait()
+		return nil, fmt.Errorf("kunde inte rensa testserverns gamla exitkod: %w", err)
+	}
+	go func() {
+		_ = kommando.Wait()
+		if kommando.ProcessState == nil {
+			return
+		}
+		exitkod := kommando.ProcessState.ExitCode()
+		testserverExitkoder.Store(exitfil, exitkod)
+		_ = os.WriteFile(exitfil, []byte(strconv.Itoa(exitkod)+"\n"), 0o600)
+	}()
 	if err := s.kopplaProcess(ctx, alias, reservation.Port, pid); err != nil {
 		_ = syscall.Kill(-pid, syscall.SIGKILL)
 		return nil, err
@@ -124,10 +176,39 @@ func (s *TestserverStore) Starta(ctx context.Context, alias string) (*Testserver
 
 	reserverad = false
 	radSparad = false
-	return &Testserver{Alias: alias, PID: pid, Port: reservation.Port, StartadAt: nu, Logg: logg, Lever: true}, nil
+	return &Testserver{
+		Alias: alias, PID: pid, Port: reservation.Port, StartadAt: nu,
+		Logg: logg, Lever: true, Status: TestserverStartar,
+	}, nil
 }
 
-// Hamta läser status utan att ändra raden.
+// Status kontrollerar både processen och om dess HTTP-port svarar.
+func (s *TestserverStore) Status(ctx context.Context, alias string) (*Testserver, error) {
+	server, err := s.Hamta(ctx, alias)
+	if errors.Is(err, sql.ErrNoRows) {
+		return &Testserver{Alias: alias, Status: TestserverNere}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !server.Lever {
+		server.Status = TestserverKrasch
+		server.Exitkod = lasTestserverExitkod(server.Logg, server.PID)
+		return server, nil
+	}
+	halsa := s.konfig.Testserver[alias].Halsa
+	if halsa == "" {
+		halsa = "/"
+	}
+	if s.halsaSvarar(ctx, server, halsa) {
+		server.Status = TestserverUppe
+	} else {
+		server.Status = TestserverStartar
+	}
+	return server, nil
+}
+
+// Hamta läser processraden utan att göra en hälsokontroll.
 func (s *TestserverStore) Hamta(ctx context.Context, alias string) (*Testserver, error) {
 	var server Testserver
 	err := s.db.QueryRowContext(ctx,
@@ -186,7 +267,98 @@ func (s *TestserverStore) Stoppa(ctx context.Context, alias string) (*Testserver
 		return nil, err
 	}
 	server.Lever = false
+	server.Status = TestserverNere
 	return server, nil
+}
+
+func (s *TestserverStore) halsaSvarar(ctx context.Context, server *Testserver, halsa string) bool {
+	if !strings.HasPrefix(halsa, "/") {
+		halsa = "/" + halsa
+	}
+	nyckel := testserverHalsoNyckel{
+		db: s.db, alias: server.Alias, pid: server.PID, port: server.Port, halsa: halsa,
+	}
+	for {
+		nu := time.Now()
+		testserverHalsocache.Lock()
+		for gammalNyckel, gammaltSvar := range testserverHalsocache.svar {
+			select {
+			case <-gammaltSvar.klar:
+				if !nu.Before(gammaltSvar.giltigTill) {
+					delete(testserverHalsocache.svar, gammalNyckel)
+				}
+			default:
+			}
+		}
+		befintligt := testserverHalsocache.svar[nyckel]
+		if befintligt != nil {
+			select {
+			case <-befintligt.klar:
+				if nu.Before(befintligt.giltigTill) {
+					uppe := befintligt.uppe
+					testserverHalsocache.Unlock()
+					return uppe
+				}
+				delete(testserverHalsocache.svar, nyckel)
+			default:
+				klar := befintligt.klar
+				testserverHalsocache.Unlock()
+				select {
+				case <-ctx.Done():
+					return false
+				case <-klar:
+					continue
+				}
+			}
+		}
+		svar := &testserverHalsoSvar{klar: make(chan struct{})}
+		testserverHalsocache.svar[nyckel] = svar
+		testserverHalsocache.Unlock()
+
+		klient := &http.Client{
+			Timeout: s.halsotid,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		adress := fmt.Sprintf("http://localhost:%d%s", server.Port, halsa)
+		begaran, err := http.NewRequestWithContext(ctx, http.MethodGet, adress, nil)
+		uppe := false
+		if err == nil {
+			if httpSvar, anropsfel := klient.Do(begaran); anropsfel == nil {
+				uppe = true
+				httpSvar.Body.Close()
+			}
+		}
+
+		testserverHalsocache.Lock()
+		svar.uppe = uppe
+		svar.giltigTill = time.Now().Add(s.cachetid)
+		close(svar.klar)
+		testserverHalsocache.Unlock()
+		return uppe
+	}
+}
+
+func testserverExitfil(logg string, pid int) string {
+	return fmt.Sprintf("%s.%d.exitkod", logg, pid)
+}
+
+func lasTestserverExitkod(logg string, pid int) *int {
+	exitfil := testserverExitfil(logg, pid)
+	if sparad, finns := testserverExitkoder.Load(exitfil); finns {
+		exitkod := sparad.(int)
+		return &exitkod
+	}
+	data, err := os.ReadFile(exitfil)
+	if err != nil {
+		return nil
+	}
+	exitkod, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		return nil
+	}
+	return &exitkod
 }
 
 // StadaDoda tar bort rader vars processgrupp inte längre finns.

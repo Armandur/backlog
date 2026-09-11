@@ -4,11 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -154,4 +159,138 @@ func TestStoppRorInteProcessUtanDatabasrad(t *testing.T) {
 	if err := syscall.Kill(pid, syscall.Signal(0)); err != nil {
 		t.Fatalf("processen utan databasrad rördes: %v", err)
 	}
+}
+
+func TestTestserverStatusHarFyraTillstand(t *testing.T) {
+	t.Run("nere", func(t *testing.T) {
+		store, _, _ := testserverStore(t)
+		server, err := store.Status(context.Background(), "demo")
+		if err != nil || server.Status != TestserverNere {
+			t.Fatalf("status blev %+v, %v", server, err)
+		}
+	})
+
+	t.Run("startar", func(t *testing.T) {
+		store, db, dir := testserverStore(t)
+		pid := startaTestprocess(t)
+		laggTillTestserverrad(t, db, pid, 1, filepath.Join(dir, "startar.logg"))
+		server, err := store.Status(context.Background(), "demo")
+		if err != nil || server.Status != TestserverStartar || !server.Lever {
+			t.Fatalf("status blev %+v, %v", server, err)
+		}
+	})
+
+	t.Run("uppe", func(t *testing.T) {
+		var anrop atomic.Int32
+		halsoserver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			anrop.Add(1)
+			if r.URL.Path != "/halsa" {
+				t.Errorf("hälsokontrollen gick mot %q", r.URL.Path)
+			}
+			if !strings.HasPrefix(r.Host, "localhost:") {
+				t.Errorf("hälsokontrollen använde värden %q", r.Host)
+			}
+			http.Error(w, "avsiktligt fel", http.StatusInternalServerError)
+		}))
+		t.Cleanup(halsoserver.Close)
+
+		store, db, dir := testserverStore(t)
+		store.konfig.Testserver["demo"] = TestserverKonfig{Halsa: "/halsa"}
+		pid := startaTestprocess(t)
+		laggTillTestserverrad(t, db, pid, testserverPort(t, halsoserver.URL), filepath.Join(dir, "uppe.logg"))
+		for i := 0; i < 2; i++ {
+			server, err := store.Status(context.Background(), "demo")
+			if err != nil || server.Status != TestserverUppe {
+				t.Fatalf("status blev %+v, %v", server, err)
+			}
+		}
+		if anrop.Load() != 1 {
+			t.Fatalf("två statusanrop gav %d hälsokontroller, väntade 1", anrop.Load())
+		}
+	})
+
+	t.Run("krasch", func(t *testing.T) {
+		store, db, dir := testserverStore(t)
+		logg := filepath.Join(dir, "krasch.logg")
+		laggTillTestserverrad(t, db, 99999999, 18123, logg)
+		if err := os.WriteFile(testserverExitfil(logg, 99999999), []byte("23\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		server, err := store.Status(context.Background(), "demo")
+		if err != nil || server.Status != TestserverKrasch || server.Lever {
+			t.Fatalf("status blev %+v, %v", server, err)
+		}
+		if server.Exitkod == nil || *server.Exitkod != 23 {
+			t.Fatalf("exitkod blev %v", server.Exitkod)
+		}
+	})
+}
+
+func TestTestserverHalsaHarForvalOchTimeout(t *testing.T) {
+	halsoserver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			t.Errorf("förvald hälsosökväg blev %q", r.URL.Path)
+		}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(halsoserver.Close)
+
+	store, db, dir := testserverStore(t)
+	store.halsotid = 75 * time.Millisecond
+	store.cachetid = time.Millisecond
+	pid := startaTestprocess(t)
+	laggTillTestserverrad(t, db, pid, testserverPort(t, halsoserver.URL), filepath.Join(dir, "timeout.logg"))
+
+	start := time.Now()
+	server, err := store.Status(context.Background(), "demo")
+	if err != nil || server.Status != TestserverStartar {
+		t.Fatalf("status blev %+v, %v", server, err)
+	}
+	if tid := time.Since(start); tid > 500*time.Millisecond {
+		t.Fatalf("hälsokontrollen tog %s", tid)
+	}
+	if testserverHalsotimeout > 2*time.Second {
+		t.Fatalf("produktionstimeouten är %s", testserverHalsotimeout)
+	}
+}
+
+func startaTestprocess(t *testing.T) int {
+	t.Helper()
+	kommando := exec.Command("sleep", "300")
+	kommando.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := kommando.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = syscall.Kill(-kommando.Process.Pid, syscall.SIGKILL)
+		_, _ = kommando.Process.Wait()
+	})
+	return kommando.Process.Pid
+}
+
+func laggTillTestserverrad(t *testing.T, db *sql.DB, pid, port int, logg string) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO pm_testservrar(alias,pid,port,startad_at,logg_sokvag) VALUES(?,?,?,?,?)`,
+		"demo", pid, port, timeutil.Now(), logg,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testserverPort(t *testing.T, serverURL string) int {
+	t.Helper()
+	parsed, err := url.Parse(serverURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, porttext, err := net.SplitHostPort(parsed.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(porttext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return port
 }
