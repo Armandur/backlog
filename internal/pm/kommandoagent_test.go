@@ -134,3 +134,43 @@ func TestKorBevararUtdataUtanRadbrytning(t *testing.T) {
 		t.Fatalf("utdata blev %q, vill ha exakt innehåll", res.Utdata)
 	}
 }
+
+// En rad större än taket får inte hänga körningen.
+func TestKorHangerInteNarRadenArForLang(t *testing.T) {
+	dir := t.TempDir()
+	logg := filepath.Join(dir, "k.log")
+	skript := filepath.Join(dir, "stor.sh")
+	kropp := "#!/bin/sh\nhead -c 20000000 /dev/zero | tr '\\0' 'x'\necho\necho '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"efter\"}]}}'\n"
+	if err := os.WriteFile(skript, []byte(kropp), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	agent := NewKommandoAgent("stor", AgentKonfig{Kommando: skript, Args: []string{}, Brief: "stdin", Svar: "stdout", Strom: "claude-json", TimeoutSekunder: 60})
+	var handelser []Handelse
+	klar := make(chan struct{})
+	go func() {
+		defer close(klar)
+		res, err := agent.Kor(t.Context(), KorInput{Brief: "x", Logg: logg, VidHandelse: func(h Handelse) { handelser = append(handelser, h) }})
+		if err != nil {
+			t.Error(err)
+		}
+		if res.ExitKod != 0 {
+			t.Errorf("exitkod %d", res.ExitKod)
+		}
+	}()
+	select {
+	case <-klar:
+	case <-time.After(30 * time.Second):
+		t.Fatal("körningen hängde på en överlång rad")
+	}
+	var sorter []string
+	for _, h := range handelser {
+		sorter = append(sorter, h.Sort+":"+h.Text)
+	}
+	sammanslaget := strings.Join(sorter, " | ")
+	if !strings.Contains(sammanslaget, "hoppade över") {
+		t.Fatalf("inget besked om den överlånga raden: %s", sammanslaget)
+	}
+	if !strings.Contains(sammanslaget, "efter") {
+		t.Fatalf("raden efter den överlånga tolkades inte: %s", sammanslaget)
+	}
+}

@@ -141,6 +141,13 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 	lasare.Add(2)
 	go func() {
 		defer lasare.Done()
+		forLang := func(tecken int) {
+			text := fmt.Sprintf("agenten skrev en rad på %d tecken, som PM hoppade över", tecken)
+			utdata.skrivRad([]byte("[PM] " + text + "\n"))
+			if in.VidHandelse != nil {
+				in.VidHandelse(nyHandelse("fel", text))
+			}
+		}
 		if err := lasRader(stdout, func(rad []byte) {
 			utdata.skrivRad(rad)
 			if a.konfig.Strom == "claude-json" && in.VidHandelse != nil {
@@ -148,13 +155,13 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 					in.VidHandelse(handelse)
 				}
 			}
-		}); err != nil {
+		}, forLang); err != nil {
 			lasfel <- err
 		}
 	}()
 	go func() {
 		defer lasare.Done()
-		if err := lasRader(stderr, utdata.skrivRad); err != nil {
+		if err := lasRader(stderr, utdata.skrivRad, nil); err != nil {
 			lasfel <- err
 		}
 	}()
@@ -212,24 +219,40 @@ func (u *synkadUtdata) String() string {
 	return u.b.String()
 }
 
-func lasRader(r io.Reader, hantera func([]byte)) error {
-	skanner := bufio.NewScanner(r)
-	skanner.Split(delaUtdataRader)
-	skanner.Buffer(make([]byte, 64*1024), storstaUtdataRad)
-	for skanner.Scan() {
-		hantera(skanner.Bytes())
+// lasRader läser utdata rad för rad. En rad som är större än taket kastas i
+// bitar i stället för att stoppa läsningen. Slutar vi läsa fylls processens
+// pipe, och agenten hänger sedan tills timeouten slår till.
+func lasRader(r io.Reader, hantera func([]byte), forLang func(int)) error {
+	lasare := bufio.NewReaderSize(r, 64*1024)
+	var rad []byte
+	kastat := 0
+	for {
+		del, err := lasare.ReadSlice('\n')
+		if len(rad)+kastat+len(del) > storstaUtdataRad {
+			kastat += len(del)
+		} else {
+			rad = append(rad, del...)
+		}
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		klar := len(rad) > 0 || kastat > 0
+		switch {
+		case kastat > 0:
+			if forLang != nil {
+				forLang(len(rad) + kastat)
+			}
+		case klar:
+			hantera(rad)
+		}
+		rad, kastat = rad[:0], 0
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
 	}
-	return skanner.Err()
-}
-
-func delaUtdataRader(data []byte, vidSlut bool) (flytta int, del []byte, err error) {
-	if i := bytes.IndexByte(data, '\n'); i >= 0 {
-		return i + 1, data[:i+1], nil
-	}
-	if vidSlut && len(data) > 0 {
-		return len(data), data, nil
-	}
-	return 0, nil, nil
 }
 
 func ersattPlatshallare(arg string, in KorInput) string {

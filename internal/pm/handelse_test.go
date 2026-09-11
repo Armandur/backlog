@@ -1,6 +1,8 @@
 package pm
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -107,5 +109,25 @@ func TestTolkaClaudeRadGerBadeTextOchVerktyg(t *testing.T) {
 	}
 	if handelser[1].Text != "läste app/main.go" {
 		t.Fatalf("fel text på verktygshändelsen: %q", handelser[1].Text)
+	}
+}
+
+// En agent utan strömning ska inte lämna en tom händelsefil efter sig.
+func TestIngenHandelsefilUtanStrom(t *testing.T) {
+	dir := t.TempDir()
+	logg := filepath.Join(dir, "k.log")
+	skrivare, err := nyHandelseSkrivare(logg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := NewKommandoAgent("tyst", AgentKonfig{Kommando: "/bin/echo", Args: []string{"hej"}, Brief: "stdin", Svar: "stdout"})
+	if _, err := agent.Kor(t.Context(), KorInput{Brief: "x", Logg: logg, VidHandelse: skrivare.Skriv}); err != nil {
+		t.Fatal(err)
+	}
+	if err := skrivare.Stang(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(handelseSokvag(logg)); !os.IsNotExist(err) {
+		t.Fatalf("händelsefilen skapades trots att agenten inte strömmar: %v", err)
 	}
 }
