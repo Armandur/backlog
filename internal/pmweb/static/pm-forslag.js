@@ -1,4 +1,5 @@
 let taskforslagRef = "";
+let autoTaskPagar = false;
 const TASKLAGE_NYCKEL = "backlog-pm-tasklage";
 const TASKTYP_ETIKETT = {
   task: "task", bug: "bugg", issue: "problem", improvement: "förbättring",
@@ -35,14 +36,6 @@ function sattAutoStatus(text, fel = false) {
   status.classList.toggle("fel-text", fel);
 }
 
-async function hamtaAutoTaskforslag(ref, sort) {
-  return hamta(`/api/tasks/${encodeURIComponent(ref)}/foresla`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sort }),
-  });
-}
-
 async function laddaAutoOversikt() {
   try {
     await laddaOversikt();
@@ -60,96 +53,42 @@ document.querySelectorAll('input[name="tasklage"]').forEach((val) => {
 });
 visaTasklage(sparatTasklage() || "auto");
 
-// Servern mäter titeln i byte, inte i tecken. Ett svenskt å tar två byte, så
-// 255 tecken kan vara för långt. Klipp därför på byte, men aldrig mitt i ett
-// tecken.
-const TITEL_MAX_BYTE = 255;
-function byteLangd(text) {
-  return new TextEncoder().encode(text).length;
-}
-function kortaTillByte(text, max) {
-  let tecken = Array.from(text);
-  while (byteLangd(tecken.join("")) > max) {
-    tecken = tecken.slice(0, -1);
-  }
-  return tecken.join("");
-}
-
-// Rutan tar emot allt från en mening till en inklistrad logg. Första raden
-// blir titeln, resten beskrivningen. Berikningen skriver ändå om båda.
-function delaAutotext(text) {
-  const rader = text.trim().split("\n");
-  let titel = rader[0].trim();
-  let resten = rader.slice(1).join("\n").trim();
-  if (byteLangd(titel) > TITEL_MAX_BYTE) {
-    const kortad = kortaTillByte(titel, TITEL_MAX_BYTE);
-    resten = (titel.slice(kortad.length) + "\n" + resten).trim();
-    titel = kortad.trim();
-  }
-  return { titel, beskrivning: resten };
-}
-
 $("#autotaskform").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (autoTaskPagar) return;
+
+  const formular = $("#autotaskform");
   const knapp = $("#skapaAutoTask");
-  const { titel, beskrivning } = delaAutotext($("#autoTaskText").value);
+  const text = $("#autoTaskText").value;
+  autoTaskPagar = true;
   knapp.disabled = true;
-  sattAutoStatus("Lägger till tasken...");
-  let task;
+  sattAutoStatus("PM skapar ett förslag...");
+
   try {
-    task = await hamta(`/api/projects/${encodeURIComponent(alias)}/tasks`, {
+    const forslag = await hamta(`/api/projects/${encodeURIComponent(alias)}/foresla-task`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ titel, beskrivning }),
+      body: JSON.stringify({ text }),
     });
-  } catch (err) {
-    sattAutoStatus(err.message, true);
-    knapp.disabled = false;
-    return;
-  }
-
-  sattAutoStatus(`${task.ref} skapad. PM klassar tasken...`);
-  let klassning;
-  try {
-    klassning = await hamtaAutoTaskforslag(task.ref, "klassning");
-  } catch (err) {
-    sattAutoStatus(`${task.ref} skapad, men klassningen misslyckades: ${err.message}`, true);
-    await laddaAutoOversikt();
-    knapp.disabled = false;
-    return;
-  }
-
-  sattAutoStatus(`${task.ref} skapad och klassad. PM berikar tasken...`);
-  let berikning;
-  try {
-    berikning = await hamtaAutoTaskforslag(task.ref, "berikning");
-  } catch (err) {
-    sattAutoStatus(`${task.ref} skapad, men berikningen misslyckades: ${err.message}`, true);
-    await laddaAutoOversikt();
-    knapp.disabled = false;
-    return;
-  }
-
-  sattAutoStatus(`${task.ref} skapad och berikad. PM sparar resultatet...`);
-  try {
-    await hamta(`/api/tasks/${encodeURIComponent(task.ref)}`, {
-      method: "PATCH",
+    sattAutoStatus("Förslaget är klart. PM lägger till tasken...");
+    const task = await hamta(`/api/projects/${encodeURIComponent(alias)}/tasks`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        titel: berikning.titel,
-        beskrivning: berikning.beskrivning,
-        typ: klassning.typ,
-        prioritet: klassning.prioritet,
+        titel: forslag.titel,
+        beskrivning: forslag.beskrivning,
+        typ: forslag.typ,
+        prioritet: forslag.prioritet,
       }),
     });
-    $("#autotaskform").reset();
-    const typ = TASKTYP_ETIKETT[klassning.typ] || klassning.typ;
-    sattAutoStatus(`${task.ref} skapad, klassad som ${typ} P${klassning.prioritet} och berikad.`);
+    formular.reset();
+    const typ = TASKTYP_ETIKETT[forslag.typ] || forslag.typ;
+    sattAutoStatus(`${task.ref} skapad som ${typ} P${forslag.prioritet} med agentens titel och beskrivning.`);
     await laddaAutoOversikt();
   } catch (err) {
-    sattAutoStatus(`${task.ref} skapad, men resultatet kunde inte sparas: ${err.message}`, true);
-    await laddaAutoOversikt();
+    sattAutoStatus(err.message, true);
   } finally {
+    autoTaskPagar = false;
     knapp.disabled = false;
   }
 });

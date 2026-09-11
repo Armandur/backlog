@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mazen160/backlog/internal/models"
 	"github.com/mazen160/backlog/internal/service"
@@ -21,6 +22,11 @@ var taskForslagTimeout = provTimeout
 
 type foreslaTaskBody struct {
 	Sort  string `json:"sort"`
+	Agent string `json:"agent"`
+}
+
+type foreslaNyTaskBody struct {
+	Text  string `json:"text"`
 	Agent string `json:"agent"`
 }
 
@@ -47,11 +53,121 @@ type taskUtkast struct {
 	Anstrangning string          `json:"anstrangning"`
 }
 
+type nyttTaskForslag struct {
+	Titel       string          `json:"titel"`
+	Beskrivning string          `json:"beskrivning"`
+	Typ         models.TaskType `json:"typ"`
+	Prioritet   int             `json:"prioritet"`
+}
+
 type uppdateraTaskBody struct {
 	Titel       *string          `json:"titel"`
 	Beskrivning *string          `json:"beskrivning"`
 	Typ         *models.TaskType `json:"typ"`
 	Prioritet   *int             `json:"prioritet"`
+}
+
+func (s *Server) foreslaNyTask(w http.ResponseWriter, r *http.Request) {
+	alias := r.PathValue("alias")
+	if _, err := service.NewProjectService(s.db).GetByAlias(r.Context(), alias); err != nil {
+		svaraFel(w, fmt.Errorf("projektet %q finns inte i PM-workspacet", alias), http.StatusNotFound)
+		return
+	}
+
+	var body foreslaNyTaskBody
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+		svaraFel(w, errors.New("kunde inte läsa texten som ska bli en task"), http.StatusBadRequest)
+		return
+	}
+	body.Text = strings.TrimSpace(body.Text)
+	if body.Text == "" {
+		svaraFel(w, errors.New("ange texten som ska bli en task"), http.StatusBadRequest)
+		return
+	}
+	if len([]rune(body.Text)) < 10 {
+		svaraFel(w, errors.New("texten måste innehålla minst tio tecken"), http.StatusBadRequest)
+		return
+	}
+
+	agent, err := s.aktuelltRegister().Hamta(strings.TrimSpace(body.Agent))
+	if err != nil {
+		svaraFel(w, err, http.StatusBadRequest)
+		return
+	}
+	ctx, avbryt := context.WithTimeout(r.Context(), taskForslagTimeout)
+	defer avbryt()
+	svar, err := agent.Fraga(ctx, byggNyttTaskForslagsprompt(body.Text))
+	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			svaraFel(w, errors.New("agenten hann inte skapa ett förslag"), http.StatusGatewayTimeout)
+			return
+		}
+		svaraFel(w, fmt.Errorf("agenten kunde inte skapa förslaget: %w", err), http.StatusBadGateway)
+		return
+	}
+
+	var forslag nyttTaskForslag
+	if err := tolkaNyttTaskForslag(strings.TrimSpace(svar), &forslag); err != nil {
+		meddelande, kod := begripligtTaskfel(err)
+		if errors.Is(err, service.ErrTaskDescRequired) {
+			meddelande = "agentens förslag saknar en beskrivning"
+		} else if strings.Contains(err.Error(), "giltig JSON") {
+			meddelande = err.Error()
+		} else if kod == http.StatusInternalServerError {
+			meddelande = err.Error()
+		}
+		svaraFel(w, errors.New(meddelande), http.StatusBadGateway)
+		return
+	}
+	svaraJSON(w, http.StatusOK, forslag)
+}
+
+func tolkaNyttTaskForslag(svar string, forslag *nyttTaskForslag) error {
+	if err := json.Unmarshal([]byte(svar), forslag); err != nil {
+		return errors.New("agenten svarade inte med giltig JSON")
+	}
+	forslag.Titel = kortaTitelTillByte(strings.TrimSpace(forslag.Titel), 255)
+	forslag.Beskrivning = strings.TrimSpace(forslag.Beskrivning)
+	if err := service.ValidateTaskTitle(forslag.Titel); err != nil {
+		return err
+	}
+	if forslag.Beskrivning == "" {
+		return service.ErrTaskDescRequired
+	}
+	if err := service.ValidateTaskDescription(forslag.Beskrivning); err != nil {
+		return err
+	}
+	if err := service.ValidateTaskType(forslag.Typ); err != nil {
+		return err
+	}
+	return service.ValidateTaskPriority(forslag.Prioritet)
+}
+
+func byggNyttTaskForslagsprompt(text string) string {
+	typer := make([]string, 0, len(models.AllTaskTypes()))
+	for _, taskTyp := range models.AllTaskTypes() {
+		typer = append(typer, string(taskTyp))
+	}
+	return fmt.Sprintf(`Gör om texten till en komplett task på svenska.
+Svara endast med ett JSON-objekt utan kodstaket eller förklaringar.
+Objektet ska ha fälten titel, beskrivning, typ och prioritet.
+Titeln ska vara kort. Beskrivningen ska ha rubrikerna Kontext, Acceptanskriterier och Verifiering.
+Typ måste vara ett av följande värden: %s.
+Prioritet måste vara ett heltal från 1 till 5.
+
+Text:
+%s`, strings.Join(typer, ", "), text)
+}
+
+func kortaTitelTillByte(titel string, maxByte int) string {
+	if len(titel) <= maxByte {
+		return titel
+	}
+	kortad := titel[:maxByte]
+	for !utf8.ValidString(kortad) {
+		kortad = kortad[:len(kortad)-1]
+	}
+	return kortad
 }
 
 func (s *Server) foreslaTask(w http.ResponseWriter, r *http.Request) {

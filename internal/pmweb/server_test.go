@@ -32,6 +32,7 @@ type fakeAgent struct {
 	svar   string
 	fel    error
 	prompt *string
+	anrop  *int
 	vanta  bool
 }
 
@@ -39,6 +40,9 @@ func (f fakeAgent) Namn() string { return "fake-modell" }
 func (f fakeAgent) Fraga(ctx context.Context, prompt string) (string, error) {
 	if f.prompt != nil {
 		*f.prompt = prompt
+	}
+	if f.anrop != nil {
+		(*f.anrop)++
 	}
 	if f.vanta {
 		<-ctx.Done()
@@ -1240,6 +1244,164 @@ func TestDelaUtSkickarModellOchAnstrangning(t *testing.T) {
 	got := <-sett
 	if got[0] != "opus" || got[1] != "hog" {
 		t.Fatalf("utdelaren fick %q", got)
+	}
+}
+
+func TestForeslaNyTaskGerKomplettForslagUtanSkrivning(t *testing.T) {
+	srv, db := testServer(t)
+	var prompt string
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{
+		svar:   `{"titel":"Kort agenttitel","beskrivning":"## Kontext\nBakgrund.\n\n## Acceptanskriterier\n- Klart.\n\n## Verifiering\n- Testa.","typ":"improvement","prioritet":2}`,
+		prompt: &prompt,
+	})
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/foresla-task",
+		strings.NewReader(`{"text":"Bygg om taskflödet så agenten föreslår alla fält först."}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("förslaget gav %d: %s", w.Code, w.Body.String())
+	}
+	var forslag nyttTaskForslag
+	if err := json.NewDecoder(w.Body).Decode(&forslag); err != nil {
+		t.Fatal(err)
+	}
+	if forslag.Titel != "Kort agenttitel" || forslag.Typ != models.TaskTypeImprovement || forslag.Prioritet != 2 {
+		t.Fatalf("oväntat förslag: %+v", forslag)
+	}
+	if !strings.Contains(forslag.Beskrivning, "## Acceptanskriterier") {
+		t.Fatalf("beskrivningen saknar innehåll: %q", forslag.Beskrivning)
+	}
+	for _, taskTyp := range models.AllTaskTypes() {
+		if !strings.Contains(prompt, string(taskTyp)) {
+			t.Fatalf("prompten saknar typen %q", taskTyp)
+		}
+	}
+	for _, rubrik := range []string{"Kontext", "Acceptanskriterier", "Verifiering"} {
+		if !strings.Contains(prompt, rubrik) {
+			t.Fatalf("prompten saknar rubriken %q", rubrik)
+		}
+	}
+	verifieraIngaTasks(t, db)
+}
+
+func TestForeslaNyTaskVisarAgentfelOchOgiltigJSONUtanSkrivning(t *testing.T) {
+	testfall := []struct {
+		namn  string
+		agent fakeAgent
+		text  string
+	}{
+		{"agentfel", fakeAgent{fel: errors.New("verktyget startade inte")}, "agenten kunde inte skapa förslaget"},
+		{"ogiltig JSON", fakeAgent{svar: "Här är mitt förslag."}, "agenten svarade inte med giltig JSON"},
+	}
+	for _, testfall := range testfall {
+		t.Run(testfall.namn, func(t *testing.T) {
+			srv, db := testServer(t)
+			srv.register = pm.NewAgentRegister()
+			srv.register.Registrera(testfall.agent)
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/foresla-task",
+				strings.NewReader(`{"text":"Det här är en tillräckligt lång text."}`)))
+			if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), testfall.text) {
+				t.Fatalf("%s gav %d: %s", testfall.namn, w.Code, w.Body.String())
+			}
+			verifieraIngaTasks(t, db)
+		})
+	}
+}
+
+func TestForeslaNyTaskGerTimeoutUtanSkrivning(t *testing.T) {
+	gammalTimeout := taskForslagTimeout
+	taskForslagTimeout = time.Millisecond
+	t.Cleanup(func() { taskForslagTimeout = gammalTimeout })
+	srv, db := testServer(t)
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{vanta: true})
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/foresla-task",
+		strings.NewReader(`{"text":"Det här är en tillräckligt lång text."}`)))
+	if w.Code != http.StatusGatewayTimeout || !strings.Contains(w.Body.String(), "agenten hann inte skapa ett förslag") {
+		t.Fatalf("timeout gav %d: %s", w.Code, w.Body.String())
+	}
+	verifieraIngaTasks(t, db)
+}
+
+func TestForeslaNyTaskAvvisarKortTextUtanAgentanrop(t *testing.T) {
+	for _, testfall := range []struct {
+		namn string
+		text string
+		fel  string
+	}{
+		{"tom", "   ", "ange texten"},
+		{"kort", "nio teck", "minst tio tecken"},
+	} {
+		t.Run(testfall.namn, func(t *testing.T) {
+			srv, db := testServer(t)
+			anrop := 0
+			srv.register = pm.NewAgentRegister()
+			srv.register.Registrera(fakeAgent{anrop: &anrop})
+			kropp, err := json.Marshal(map[string]string{"text": testfall.text})
+			if err != nil {
+				t.Fatal(err)
+			}
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/foresla-task", bytes.NewReader(kropp)))
+			if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), testfall.fel) {
+				t.Fatalf("%s text gav %d: %s", testfall.namn, w.Code, w.Body.String())
+			}
+			if anrop != 0 {
+				t.Fatalf("kort text anropade agenten %d gånger", anrop)
+			}
+			verifieraIngaTasks(t, db)
+		})
+	}
+}
+
+func TestForeslaNyTaskKortArLangSvenskTitelPaByte(t *testing.T) {
+	srv, db := testServer(t)
+	svar, err := json.Marshal(nyttTaskForslag{
+		Titel: strings.Repeat("å", 300), Beskrivning: "## Kontext\nText", Typ: models.TaskTypeTask, Prioritet: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{svar: string(svar)})
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/foresla-task",
+		strings.NewReader(`{"text":"Det här är en tillräckligt lång text."}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("lång titel gav %d: %s", w.Code, w.Body.String())
+	}
+	var forslag nyttTaskForslag
+	if err := json.NewDecoder(w.Body).Decode(&forslag); err != nil {
+		t.Fatal(err)
+	}
+	if len(forslag.Titel) > 255 || !utf8.ValidString(forslag.Titel) {
+		t.Fatalf("titeln blev %d byte och giltig UTF-8=%t", len(forslag.Titel), utf8.ValidString(forslag.Titel))
+	}
+	verifieraIngaTasks(t, db)
+}
+
+func TestForeslaNyTaskGerSvensk404ForOkantProjekt(t *testing.T) {
+	srv, db := testServer(t)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/finns-inte/foresla-task",
+		strings.NewReader(`{"text":"Det här är en tillräckligt lång text."}`)))
+	if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "finns inte i PM-workspacet") {
+		t.Fatalf("okänt projekt gav %d: %s", w.Code, w.Body.String())
+	}
+	verifieraIngaTasks(t, db)
+}
+
+func verifieraIngaTasks(t *testing.T, db *sql.DB) {
+	t.Helper()
+	var antal int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM tasks`).Scan(&antal); err != nil {
+		t.Fatal(err)
+	}
+	if antal != 0 {
+		t.Fatalf("förslagsanropet skapade %d tasks", antal)
 	}
 }
 
