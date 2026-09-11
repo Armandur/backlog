@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -629,4 +630,27 @@ func TestProjectDeleteCleansAttachmentsAndActivity(t *testing.T) {
 	events, err := activityRepo.List(ctx, p.ID, "", "", "", 100, 0)
 	require.NoError(t, err)
 	require.Empty(t, events)
+}
+
+// Update har alltid tillåtit en tom titel. Create kräver den.
+func TestTaskUpdateTillaterTomTitelMenCreateKraverDen(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	tasks := service.NewTaskService(db, service.NewPlanService(db), service.NewLabelService(db))
+	projekt, err := service.NewProjectService(db).Create(ctx, models.CreateProjectInput{Alias: "p", Name: "P", Actor: testActor})
+	require.NoError(t, err)
+
+	_, err = tasks.Create(ctx, models.CreateTaskInput{ProjectID: projekt.ID, Title: "", Actor: testActor})
+	require.ErrorIs(t, err, service.ErrTaskTitleRequired)
+
+	skapad, err := tasks.Create(ctx, models.CreateTaskInput{ProjectID: projekt.ID, Title: "Har titel", Actor: testActor})
+	require.NoError(t, err)
+
+	tom := ""
+	_, err = tasks.Update(ctx, skapad.ID, models.UpdateTaskInput{Title: &tom}, testActor)
+	require.NoError(t, err, "en uppdatering med tom titel gick förut igenom och ska fortsätta göra det")
+
+	forLang := strings.Repeat("x", 256)
+	_, err = tasks.Update(ctx, skapad.ID, models.UpdateTaskInput{Title: &forLang}, testActor)
+	require.ErrorIs(t, err, service.ErrTaskTitleTooLong)
 }

@@ -121,8 +121,10 @@ func tolkaTaskForslag(svar string, utkast *taskUtkast) error {
 		}
 		utkast.Typ = forslag.Typ
 		utkast.Prioritet = forslag.Prioritet
-		utkast.Modell = strings.TrimSpace(forslag.Modell)
-		utkast.Anstrangning = strings.TrimSpace(forslag.Anstrangning)
+		// Fälten går vidare till en kommandorad, så en lång sträng är inget
+		// svar utan brus. Korta den hellre än att skicka den till vyn.
+		utkast.Modell = kortaForslagsvarde(forslag.Modell)
+		utkast.Anstrangning = kortaForslagsvarde(forslag.Anstrangning)
 		return nil
 	}
 
@@ -206,4 +208,13 @@ func (s *Server) uppdateraTask(w http.ResponseWriter, r *http.Request) {
 
 func nyTaskService(s *Server) *service.TaskService {
 	return service.NewTaskService(s.db, service.NewPlanService(s.db), service.NewLabelService(s.db))
+}
+
+// kortaForslagsvarde håller korta fält korta. Ett modellnamn är aldrig långt.
+func kortaForslagsvarde(varde string) string {
+	varde = strings.TrimSpace(varde)
+	if len(varde) > 80 {
+		return varde[:80]
+	}
+	return varde
 }

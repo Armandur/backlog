@@ -60,6 +60,12 @@ func ValidateTaskTitle(title string) error {
 	if title == "" {
 		return ErrTaskTitleRequired
 	}
+	return ValidateTaskTitleLength(title)
+}
+
+// ValidateTaskTitleLength kollar bara längden. En uppdatering har alltid
+// accepterat en tom titel, och det beteendet ska inte ändras i smyg.
+func ValidateTaskTitleLength(title string) error {
 	if len(title) > maxTitleLen {
 		return ErrTaskTitleTooLong
 	}
@@ -327,7 +333,7 @@ func (s *TaskService) Update(ctx context.Context, ref string, in models.UpdateTa
 	oldStatus := t.Status
 
 	if in.Title != nil {
-		if err := ValidateTaskTitle(*in.Title); err != nil {
+		if err := ValidateTaskTitleLength(*in.Title); err != nil {
 			return nil, err
 		}
 		t.Title = *in.Title
