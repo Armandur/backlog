@@ -60,7 +60,6 @@ async function hamta(url, init) {
 // ---------- projektvy ----------
 async function laddaOversikt() {
   const o = await hamta(`/api/projects/${encodeURIComponent(alias)}/oversikt`);
-  $("#projnamn").textContent = `${o.projekt.name} (${o.projekt.alias})`;
   $("#ptitel").textContent = o.projekt.name;
   $("#pdesc").textContent = [o.projekt.description, o.projekt.repo_path && "Repo: " + o.projekt.repo_path].filter(Boolean).join(" ");
 
@@ -325,9 +324,25 @@ async function laddaAgenter() {
   }
 }
 
+// Väljaren i huvudet listar alla projekt i workspacet. Utan den måste man
+// känna till adressen /pm/<alias> och skriva den för hand.
+async function laddaProjektval() {
+  const valjare = $("#projektval");
+  try {
+    const data = await hamta("/api/projects");
+    const projekt = (data.projects || []).slice().sort((a, b) => a.name.localeCompare(b.name, "sv"));
+    valjare.innerHTML = `<option value="">Välj projekt</option>` +
+      projekt.map((p) => `<option value="${esc(p.alias)}"${p.alias === alias ? " selected" : ""}>${esc(p.name)} (${esc(p.alias)})</option>`).join("");
+  } catch {
+    valjare.innerHTML = `<option value="">Kunde inte läsa projekten</option>`;
+  }
+}
+$("#projektval").addEventListener("change", (e) => {
+  if (e.target.value) window.location.href = `/pm/${encodeURIComponent(e.target.value)}${location.hash}`;
+});
+
 async function ladda() {
   if (!alias) {
-    $("#projnamn").textContent = "Projekt";
     if (vy === "projekt") byt("projekt-nytt");
     return;
   }
@@ -342,6 +357,7 @@ async function ladda() {
 // kod när byt() vill ladda den.
 document.addEventListener("DOMContentLoaded", () => {
   byt(vy);
+  laddaProjektval();
   laddaAgenter().then(ladda);
   // Polling håller pågående körningar aktuella utan omladdning.
   setInterval(ladda, 4000);

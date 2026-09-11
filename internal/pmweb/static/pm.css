@@ -238,3 +238,8 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 @media (min-width: 1500px) {
   .agentgrid, .regelgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+.proj select { width: auto; max-width: 46vw; padding: 4px 8px; font-size: 13px; }
+@media (max-width: 760px) {
+  .proj select { max-width: 42vw; }
+}
