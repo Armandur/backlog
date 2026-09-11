@@ -356,7 +356,6 @@ async function laddaAgenter() {
     agenter = [];
   }
 }
-// Väljaren listar projekten. Annars måste användaren känna till adressen och skriva den själv.
 async function laddaProjektval() {
   const valjare = $("#projektval");
   try {
@@ -377,7 +376,7 @@ async function ladda() {
     return;
   }
   try {
-    await Promise.all([laddaOversikt(), laddaKorningar(), laddaSamtal()]);
+    await Promise.all([laddaOversikt(), laddaKorningar(), laddaSamtal(), laddaTestserver()]);
   } catch (err) {
     toast(err.message);
   }
@@ -385,6 +384,8 @@ async function ladda() {
 // Starta efter båda skriptfilerna. Annars saknas konfigkoden när byt() laddar vyn.
 document.addEventListener("DOMContentLoaded", () => {
   byt(vy);
+  // Väljaren listar projekten. Annars måste användaren känna till adressen
+  // och skriva den själv.
   laddaProjektval();
   laddaAgenter().then(ladda);
   // Polling håller pågående körningar aktuella utan omladdning.

@@ -3,6 +3,7 @@
 package pmweb
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -38,6 +40,12 @@ type Server struct {
 func New(db *sql.DB, aktor models.Actor, register *pm.AgentRegister) *Server {
 	s := &Server{db: db, aktor: aktor, register: register, mux: http.NewServeMux()}
 	s.rutter(web.New(db, aktor))
+	konfig, err := pm.LasKonfig(konfigWorkDir())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "kunde inte läsa testserverkonfigurationen vid städning: %v\n", err)
+	} else if _, err := pm.NewTestserverStore(db, konfig, konfigWorkDir()).StadaDoda(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "kunde inte städa döda testservrar: %v\n", err)
+	}
 	return s
 }
 
@@ -59,6 +67,9 @@ func (s *Server) rutter(upstream http.Handler) {
 		svaraFel(w, fmt.Errorf("metoden %s stöds inte på samtalsrouten", r.Method), http.StatusMethodNotAllowed)
 	})
 	s.mux.HandleFunc("GET /api/projects/{alias}/oversikt", s.hamtaOversikt)
+	s.mux.HandleFunc("GET /api/projects/{alias}/testserver", s.hamtaTestserver)
+	s.mux.HandleFunc("POST /api/projects/{alias}/testserver/start", s.startaTestserver)
+	s.mux.HandleFunc("POST /api/projects/{alias}/testserver/stop", s.stoppaTestserver)
 	s.mux.HandleFunc("GET /api/tasks/{id}/kommentarer", s.hamtaKommentarer)
 	s.mux.HandleFunc("GET /api/projects/{alias}/docs", s.listaDocs)
 	s.mux.HandleFunc("GET /api/docs/{id}", s.hamtaDoc)

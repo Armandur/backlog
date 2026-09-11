@@ -338,7 +338,7 @@ func TestPMVyInnehallerKunskapOchKommentarspanel(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/pm/demo", nil))
 	body := w.Body.String()
-	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`} {
+	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`, `id="testserverKnapp"`, `id="testserverLank"`} {
 		if !strings.Contains(body, innehall) {
 			t.Fatalf("PM-vyn saknar %s", innehall)
 		}
@@ -1727,5 +1727,77 @@ func TestKonfigVisasAvenMedTestserverForRaderatProjekt(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "raderat") {
 		t.Fatalf("blocket kom inte med, då går det inte att ta bort: %s", w.Body.String())
+	}
+}
+
+func TestTestserverrutterStartarVisarOchStoppar(t *testing.T) {
+	srv, db := testServer(t)
+	dir := t.TempDir()
+	gammal := konfigWorkDir
+	konfigWorkDir = func() string { return dir }
+	t.Cleanup(func() { konfigWorkDir = gammal })
+	if _, err := db.Exec(`UPDATE projects SET repo_path=? WHERE alias='demo'`, dir); err != nil {
+		t.Fatal(err)
+	}
+	skript := filepath.Join(dir, "webbserver.sh")
+	if err := os.WriteFile(skript, []byte("#!/bin/sh\ntrap 'exit 0' TERM INT\nwhile :; do sleep 1; done\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	konfig := fmt.Sprintf("[portar]\nfran = 18200\ntill = 18299\n\n[testserver.demo]\nkommando = %q\nargs = [\"{port}\"]\ncwd = %q\n", skript, dir)
+	if err := os.WriteFile(filepath.Join(dir, pm.KonfigFil), []byte(konfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	start := httptest.NewRecorder()
+	srv.ServeHTTP(start, httptest.NewRequest(http.MethodPost, "/api/projects/demo/testserver/start", nil))
+	if start.Code != http.StatusCreated {
+		t.Fatalf("start gav %d: %s", start.Code, start.Body.String())
+	}
+	var server struct {
+		PID   int    `json:"pid"`
+		Port  int    `json:"port"`
+		Lever bool   `json:"lever"`
+		Lank  string `json:"lank"`
+	}
+	if err := json.NewDecoder(start.Body).Decode(&server); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		stopp := httptest.NewRecorder()
+		srv.ServeHTTP(stopp, httptest.NewRequest(http.MethodPost, "/api/projects/demo/testserver/stop", nil))
+	})
+	vard, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !server.Lever || server.PID <= 0 || server.Lank != fmt.Sprintf("http://%s:%d/", vard, server.Port) {
+		t.Fatalf("fel startsvar: %+v", server)
+	}
+
+	status := httptest.NewRecorder()
+	srv.ServeHTTP(status, httptest.NewRequest(http.MethodGet, "/api/projects/demo/testserver", nil))
+	if status.Code != http.StatusOK || !strings.Contains(status.Body.String(), `"lever":true`) {
+		t.Fatalf("status gav %d: %s", status.Code, status.Body.String())
+	}
+	stopp := httptest.NewRecorder()
+	srv.ServeHTTP(stopp, httptest.NewRequest(http.MethodPost, "/api/projects/demo/testserver/stop", nil))
+	if stopp.Code != http.StatusOK || !strings.Contains(stopp.Body.String(), `"lever":false`) {
+		t.Fatalf("stopp gav %d: %s", stopp.Code, stopp.Body.String())
+	}
+}
+
+func TestWebbstartStadarDodTestserverrad(t *testing.T) {
+	_, db := testServer(t)
+	if _, err := db.Exec(`INSERT INTO pm_testservrar(alias,pid,port,startad_at,logg_sokvag) VALUES(?,?,?,?,?)`,
+		"demo", 99999999, 18234, timeutil.Now(), "/tmp/finns-inte.log"); err != nil {
+		t.Fatal(err)
+	}
+	New(db, models.Actor{Kind: models.ActorKindHuman, Name: "rasmus"}, pm.NewAgentRegister())
+	var antal int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pm_testservrar WHERE alias='demo'`).Scan(&antal); err != nil {
+		t.Fatal(err)
+	}
+	if antal != 0 {
+		t.Fatalf("webbstarten lämnade %d död testserverrad", antal)
 	}
 }

@@ -41,6 +41,7 @@ func main() {
 		pm.NewSamtalCmd(pm.RegisterFranProfil),
 		pm.NewDelaUtCmd(profilFlagga),
 		pm.NewKorningCmd(),
+		pm.NewTestserverCmd(),
 		pmweb.NewWebCmd(pm.RegisterFranProfil),
 	}
 	if err := cli.ExecuteRoot("backlog-pm", extra...); err != nil {
