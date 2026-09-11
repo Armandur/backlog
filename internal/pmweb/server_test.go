@@ -1426,10 +1426,11 @@ func skapaForslagsTask(t *testing.T, db *sql.DB) *models.Task {
 func TestForeslaTaskKlassningGerUtkastUtanSkrivning(t *testing.T) {
 	srv, db := testServer(t)
 	task := skapaForslagsTask(t, db)
+	skapaKlassningsKorning(t, db, task, "gpt-5", "")
 	var prompt string
 	srv.register = pm.NewAgentRegister()
 	srv.register.Registrera(fakeAgent{
-		svar:   `{"typ":"feature","prioritet":2,"modell":"gpt-5","anstrangning":"high"}`,
+		svar:   `{"typ":"feature","prioritet":2,"modell":"gpt-5","anstrangning":""}`,
 		prompt: &prompt,
 	})
 
@@ -1443,8 +1444,14 @@ func TestForeslaTaskKlassningGerUtkastUtanSkrivning(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&utkast); err != nil {
 		t.Fatal(err)
 	}
-	if utkast.Typ != models.TaskTypeFeature || utkast.Prioritet != 2 || utkast.Modell != "gpt-5" || utkast.Anstrangning != "high" {
+	if utkast.Typ != models.TaskTypeFeature || utkast.Prioritet != 2 || utkast.Modell != "gpt-5" || utkast.Anstrangning != "" {
 		t.Fatalf("oväntat utkast: %+v", utkast)
+	}
+	if !strings.Contains(prompt, "gpt-5") {
+		t.Fatalf("prompten saknar den historiska modellen: %s", prompt)
+	}
+	if strings.Contains(prompt, "anstrangning") {
+		t.Fatalf("prompten erbjuder ansträngning utan konfigurationsstöd: %s", prompt)
 	}
 	for _, taskTyp := range models.AllTaskTypes() {
 		if !strings.Contains(prompt, string(taskTyp)) {
@@ -1460,6 +1467,107 @@ func TestForeslaTaskKlassningGerUtkastUtanSkrivning(t *testing.T) {
 	if oandrad.Type != models.TaskTypeTask || oandrad.Priority != 3 || oandrad.Title != "Kort titel" ||
 		oandrad.Description != "Kort beskrivning" {
 		t.Fatalf("förslagsanropet ändrade tasken: %+v", oandrad)
+	}
+}
+
+func skapaKlassningsKorning(t *testing.T, db *sql.DB, task *models.Task, modell, anstrangning string) {
+	t.Helper()
+	korning := &pm.Korning{
+		ProjectID: task.ProjectID, TaskID: task.ID, TaskRef: fmt.Sprintf("TASK-%d", task.Seq),
+		Agent: "testagent", Status: pm.StatusKlar, Modell: modell, Anstrangning: anstrangning,
+	}
+	if err := pm.NewKorningStore(db).Skapa(t.Context(), korning); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestKlassningsvardenKommerFranKonfigOchHistorik(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	konfig := pm.Konfig{
+		DefaultAgent: "testagent",
+		Agenter: map[string]pm.AgentKonfig{
+			"testagent": {
+				Kommando: "/bin/true", Brief: "stdin", Svar: "stdout",
+				Modell: "konfig-modell", Anstrangning: "high",
+			},
+		},
+	}
+	if err := pm.SkrivKonfig(dir, konfig); err != nil {
+		t.Fatal(err)
+	}
+	srv, db := testServer(t)
+	task := skapaForslagsTask(t, db)
+	skapaKlassningsKorning(t, db, task, "historisk-modell", "xhigh")
+
+	varden, err := srv.hamtaKlassningsvarden(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(varden.Modeller, ",") != "historisk-modell,konfig-modell" {
+		t.Fatalf("oväntade modeller: %v", varden.Modeller)
+	}
+	if strings.Join(varden.Anstrangningar, ",") != "high,xhigh" {
+		t.Fatalf("oväntade ansträngningar: %v", varden.Anstrangningar)
+	}
+	prompt := byggTaskForslagsprompt(forslagKlassning, task, varden)
+	for _, varde := range []string{"historisk-modell", "konfig-modell", "high", "xhigh", "anstrangning"} {
+		if !strings.Contains(prompt, varde) {
+			t.Fatalf("prompten saknar %q: %s", varde, prompt)
+		}
+	}
+}
+
+func TestForeslaTaskAvvisarOkandaKlassningsvarden(t *testing.T) {
+	for namn, testfall := range map[string]struct {
+		svar string
+		fel  string
+	}{
+		"modell":       {`{"typ":"bug","prioritet":2,"modell":"påhittad","anstrangning":""}`, "okänt modellvärde"},
+		"ansträngning": {`{"typ":"bug","prioritet":2,"modell":"gpt-5","anstrangning":"extrem"}`, "okänt ansträngningsvärde"},
+	} {
+		t.Run(namn, func(t *testing.T) {
+			srv, db := testServer(t)
+			task := skapaForslagsTask(t, db)
+			skapaKlassningsKorning(t, db, task, "gpt-5", "")
+			srv.register = pm.NewAgentRegister()
+			srv.register.Registrera(fakeAgent{svar: testfall.svar})
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/tasks/%s/foresla", task.ID),
+				bytes.NewBufferString(`{"sort":"klassning"}`)))
+			if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), testfall.fel) {
+				t.Fatalf("okänt %s gav %d: %s", namn, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestForeslaTaskMedTommaKlassningsvardenKräverTommaFalt(t *testing.T) {
+	srv, db := testServer(t)
+	task := skapaForslagsTask(t, db)
+	var prompt string
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{
+		svar: `{"typ":"task","prioritet":3,"modell":"","anstrangning":""}`, prompt: &prompt,
+	})
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/tasks/%s/foresla", task.ID),
+		bytes.NewBufferString(`{"sort":"klassning"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("tomma värden gav %d: %s", w.Code, w.Body.String())
+	}
+	var utkast taskUtkast
+	if err := json.NewDecoder(w.Body).Decode(&utkast); err != nil {
+		t.Fatal(err)
+	}
+	if utkast.Modell != "" || utkast.Anstrangning != "" {
+		t.Fatalf("väntade tomma fält, fick %+v", utkast)
+	}
+	if !strings.Contains(prompt, "Inga kända modeller finns") || !strings.Contains(prompt, "Lämna modell som en tom sträng") {
+		t.Fatalf("prompten förklarar inte tom modellista: %s", prompt)
+	}
+	if strings.Contains(prompt, "anstrangning") {
+		t.Fatalf("prompten nämner ansträngning utan stöd: %s", prompt)
 	}
 }
 
@@ -1597,27 +1705,5 @@ func TestForeslaTaskGerBegripligtTimeoutfel(t *testing.T) {
 		bytes.NewBufferString(`{"sort":"klassning"}`)))
 	if w.Code != http.StatusGatewayTimeout || !strings.Contains(w.Body.String(), "hann inte skapa ett förslag") {
 		t.Fatalf("timeout gav %d: %s", w.Code, w.Body.String())
-	}
-}
-
-func TestKortaForslagsvardeDelarInteEttTecken(t *testing.T) {
-	fall := []string{
-		strings.Repeat("a", 79) + "värde",
-		strings.Repeat("a", 79) + "值 mer text",
-		strings.Repeat("värde ", 40),
-		"opus",
-		"  sonnet  ",
-	}
-	for _, varde := range fall {
-		kortat := kortaForslagsvarde(varde)
-		if !utf8.ValidString(kortat) {
-			t.Fatalf("kortningen gav ogiltig UTF-8 för %.20q: %q", varde, kortat)
-		}
-		if len([]rune(kortat)) > 80 {
-			t.Fatalf("kortningen gav %d tecken", len([]rune(kortat)))
-		}
-	}
-	if kortaForslagsvarde("  sonnet  ") != "sonnet" {
-		t.Fatal("kortningen trimmar inte")
 	}
 }

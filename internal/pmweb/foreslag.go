@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/mazen160/backlog/internal/models"
+	"github.com/mazen160/backlog/internal/pm"
 	"github.com/mazen160/backlog/internal/service"
 )
 
@@ -35,6 +37,11 @@ type klassningsforslag struct {
 	Prioritet    int             `json:"prioritet"`
 	Modell       string          `json:"modell"`
 	Anstrangning string          `json:"anstrangning"`
+}
+
+type klassningsvarden struct {
+	Modeller       []string
+	Anstrangningar []string
 }
 
 type berikningsforslag struct {
@@ -193,10 +200,18 @@ func (s *Server) foreslaTask(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, err, http.StatusBadRequest)
 		return
 	}
+	var varden klassningsvarden
+	if body.Sort == forslagKlassning {
+		varden, err = s.hamtaKlassningsvarden(r.Context())
+		if err != nil {
+			svaraFel(w, err, http.StatusInternalServerError)
+			return
+		}
+	}
 
 	ctx, avbryt := context.WithTimeout(r.Context(), taskForslagTimeout)
 	defer avbryt()
-	svar, err := agent.Fraga(ctx, byggTaskForslagsprompt(body.Sort, task))
+	svar, err := agent.Fraga(ctx, byggTaskForslagsprompt(body.Sort, task, varden))
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			svaraFel(w, errors.New("agenten hann inte skapa ett förslag"), http.StatusGatewayTimeout)
@@ -210,7 +225,7 @@ func (s *Server) foreslaTask(w http.ResponseWriter, r *http.Request) {
 		Sort: body.Sort, Ref: fmt.Sprintf("TASK-%d", task.Seq), Titel: task.Title,
 		Beskrivning: task.Description, Typ: task.Type, Prioritet: task.Priority,
 	}
-	if err := tolkaTaskForslag(strings.TrimSpace(svar), &utkast); err != nil {
+	if err := tolkaTaskForslag(strings.TrimSpace(svar), &utkast, varden); err != nil {
 		meddelande, kod := begripligtTaskfel(err)
 		if errors.Is(err, service.ErrTaskDescRequired) {
 			meddelande = "agentens förslag saknar en beskrivning"
@@ -223,7 +238,7 @@ func (s *Server) foreslaTask(w http.ResponseWriter, r *http.Request) {
 	svaraJSON(w, http.StatusOK, utkast)
 }
 
-func tolkaTaskForslag(svar string, utkast *taskUtkast) error {
+func tolkaTaskForslag(svar string, utkast *taskUtkast, varden klassningsvarden) error {
 	if utkast.Sort == forslagKlassning {
 		var forslag klassningsforslag
 		if err := json.Unmarshal([]byte(svar), &forslag); err != nil {
@@ -235,12 +250,18 @@ func tolkaTaskForslag(svar string, utkast *taskUtkast) error {
 		if err := service.ValidateTaskPriority(forslag.Prioritet); err != nil {
 			return err
 		}
+		forslag.Modell = strings.TrimSpace(forslag.Modell)
+		forslag.Anstrangning = strings.TrimSpace(forslag.Anstrangning)
+		if err := valideraKlassningsvarde("modellvärde", forslag.Modell, varden.Modeller); err != nil {
+			return err
+		}
+		if err := valideraKlassningsvarde("ansträngningsvärde", forslag.Anstrangning, varden.Anstrangningar); err != nil {
+			return err
+		}
 		utkast.Typ = forslag.Typ
 		utkast.Prioritet = forslag.Prioritet
-		// Fälten går vidare till en kommandorad, så en lång sträng är inget
-		// svar utan brus. Korta den hellre än att skicka den till vyn.
-		utkast.Modell = kortaForslagsvarde(forslag.Modell)
-		utkast.Anstrangning = kortaForslagsvarde(forslag.Anstrangning)
+		utkast.Modell = forslag.Modell
+		utkast.Anstrangning = forslag.Anstrangning
 		return nil
 	}
 
@@ -264,22 +285,32 @@ func tolkaTaskForslag(svar string, utkast *taskUtkast) error {
 	return nil
 }
 
-func byggTaskForslagsprompt(sort string, task *models.Task) string {
+func byggTaskForslagsprompt(sort string, task *models.Task, varden klassningsvarden) string {
 	if sort == forslagKlassning {
 		typer := make([]string, 0, len(models.AllTaskTypes()))
 		for _, taskTyp := range models.AllTaskTypes() {
 			typer = append(typer, string(taskTyp))
 		}
+		falt := "typ, prioritet och modell"
+		modellregel := "Inga kända modeller finns. Lämna modell som en tom sträng."
+		if len(varden.Modeller) > 0 {
+			modellregel = fmt.Sprintf("Modell måste vara ett av följande värden eller en tom sträng: %s.", strings.Join(varden.Modeller, ", "))
+		}
+		anstrangningsregel := ""
+		if len(varden.Anstrangningar) > 0 {
+			falt += " och anstrangning"
+			anstrangningsregel = fmt.Sprintf("\nAnstrangning måste vara ett av följande värden eller en tom sträng: %s.", strings.Join(varden.Anstrangningar, ", "))
+		}
 		return fmt.Sprintf(`Klassificera tasken utifrån titeln och beskrivningen.
 Svara endast med ett JSON-objekt utan kodstaket eller förklaringar.
-Objektet ska ha fälten typ, prioritet, modell och anstrangning.
+Objektet ska ha fälten %s.
 Typ måste vara ett av följande värden: %s.
 Prioritet måste vara ett heltal från 1 till 5.
-Modell och anstrangning är valfria. Skriv en tom sträng när du saknar en tydlig åsikt.
+%s%s
 
 Titel: %s
 Beskrivning:
-%s`, strings.Join(typer, ", "), task.Title, task.Description)
+%s`, falt, strings.Join(typer, ", "), modellregel, anstrangningsregel, task.Title, task.Description)
 	}
 	return fmt.Sprintf(`Berika tasken utifrån den nuvarande titeln och beskrivningen.
 Svara endast med ett JSON-objekt utan kodstaket eller förklaringar.
@@ -289,6 +320,60 @@ Skriv på svenska. Beskrivningen ska ha rubrikerna Kontext, Acceptanskriterier o
 Nuvarande titel: %s
 Nuvarande beskrivning:
 %s`, task.Title, task.Description)
+}
+
+func (s *Server) hamtaKlassningsvarden(ctx context.Context) (klassningsvarden, error) {
+	konfig, err := pm.LasKonfig(konfigWorkDir())
+	if err != nil {
+		return klassningsvarden{}, err
+	}
+	modeller := map[string]struct{}{}
+	anstrangningar := map[string]struct{}{}
+	for _, agent := range konfig.Agenter {
+		laggTillKlassningsvarde(modeller, agent.Modell)
+		laggTillKlassningsvarde(anstrangningar, agent.Anstrangning)
+	}
+	korningar, err := pm.NewKorningStore(s.db).Lista(ctx, "", 0)
+	if err != nil {
+		return klassningsvarden{}, err
+	}
+	for _, korning := range korningar {
+		laggTillKlassningsvarde(modeller, korning.Modell)
+		if len(anstrangningar) > 0 {
+			laggTillKlassningsvarde(anstrangningar, korning.Anstrangning)
+		}
+	}
+	return klassningsvarden{
+		Modeller:       nycklar(modeller),
+		Anstrangningar: nycklar(anstrangningar),
+	}, nil
+}
+
+func laggTillKlassningsvarde(varden map[string]struct{}, varde string) {
+	if varde = strings.TrimSpace(varde); varde != "" {
+		varden[varde] = struct{}{}
+	}
+}
+
+func nycklar(varden map[string]struct{}) []string {
+	resultat := make([]string, 0, len(varden))
+	for varde := range varden {
+		resultat = append(resultat, varde)
+	}
+	sort.Strings(resultat)
+	return resultat
+}
+
+func valideraKlassningsvarde(namn, varde string, tillatna []string) error {
+	if varde == "" {
+		return nil
+	}
+	for _, tillatet := range tillatna {
+		if varde == tillatet {
+			return nil
+		}
+	}
+	return fmt.Errorf("agentens förslag innehåller ett okänt %s %q", namn, varde)
 }
 
 func (s *Server) uppdateraTask(w http.ResponseWriter, r *http.Request) {
@@ -324,14 +409,4 @@ func (s *Server) uppdateraTask(w http.ResponseWriter, r *http.Request) {
 
 func nyTaskService(s *Server) *service.TaskService {
 	return service.NewTaskService(s.db, service.NewPlanService(s.db), service.NewLabelService(s.db))
-}
-
-// kortaForslagsvarde håller korta fält korta. Ett modellnamn är aldrig långt.
-// Snittet går på tecken, inte på byte, annars kan det dela ett tecken mitt itu.
-func kortaForslagsvarde(varde string) string {
-	tecken := []rune(strings.TrimSpace(varde))
-	if len(tecken) > 80 {
-		return string(tecken[:80])
-	}
-	return string(tecken)
 }
