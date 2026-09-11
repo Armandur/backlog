@@ -3,7 +3,7 @@ let konfig = null;
 const agentutkast = new Set();
 const AGENTMALLAR = {
   tom: { namn: "ny-agent", kommando: "", args: ["{brief}"], brief: "arg", svar: "stdout", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: false },
-  claude: { namn: "claude", kommando: "claude", args: ["-p", "{brief}"], brief: "arg", svar: "stdout", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: true },
+  claude: { namn: "claude", kommando: "claude", args: ["-p", "{brief}"], brief: "arg", svar: "stdout", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: true, strom: "claude-json" },
   codex: { namn: "codex", kommando: "codex", args: ["exec", "-C", "{repo}", "-s", "workspace-write", "-c", "sandbox_workspace_write.network_access=true", "-o", "{svarsfil}", "{brief}"], brief: "arg", svar: "fil", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: false },
 };
 
@@ -69,6 +69,7 @@ function renderaKonfig() {
       <details><summary>Fler inställningar</summary>
         <div class="faltgrid">
           <label class="falt">Stdin<input data-agentfalt="stdin" value="${esc(a.stdin || "")}" spellcheck="false"></label>
+          <label class="falt">Strömmande utdata<select data-agentfalt="strom"><option value=""${!a.strom ? " selected" : ""}>ingen</option><option value="claude-json"${a.strom === "claude-json" ? " selected" : ""}>claude-json</option><option value="codex-json"${a.strom === "codex-json" ? " selected" : ""}>codex-json</option></select></label>
           <label class="kryss detaljkryss"><input data-agentfalt="mcp" type="checkbox"${a.mcp ? " checked" : ""}> Lägg till MCP-konfiguration</label>
         </div>
         <label class="falt"><span>Miljö, en <code>NYCKEL=värde</code> per rad</span><textarea data-agentfalt="miljo" rows="3" spellcheck="false">${esc(miljoRader(a.miljo))}</textarea></label>
@@ -123,6 +124,7 @@ function samlaKonfig() {
       timeout_sekunder: Number(hamta("timeout").value),
       miljo: lasMiljo(hamta("miljo").value, `Miljön för ${namn}`),
       mcp: hamta("mcp").checked,
+      strom: hamta("strom").value,
     };
   });
   const reglerNy = Array.from(document.querySelectorAll(".regelkort")).map((kort) => {
