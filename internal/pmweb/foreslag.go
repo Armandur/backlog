@@ -211,10 +211,11 @@ func nyTaskService(s *Server) *service.TaskService {
 }
 
 // kortaForslagsvarde håller korta fält korta. Ett modellnamn är aldrig långt.
+// Snittet går på tecken, inte på byte, annars kan det dela ett tecken mitt itu.
 func kortaForslagsvarde(varde string) string {
-	varde = strings.TrimSpace(varde)
-	if len(varde) > 80 {
-		return varde[:80]
+	tecken := []rune(strings.TrimSpace(varde))
+	if len(tecken) > 80 {
+		return string(tecken[:80])
 	}
-	return varde
+	return string(tecken)
 }

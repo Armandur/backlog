@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mazen160/backlog/internal/ids"
 	"github.com/mazen160/backlog/internal/migrate"
@@ -1434,5 +1435,27 @@ func TestForeslaTaskGerBegripligtTimeoutfel(t *testing.T) {
 		bytes.NewBufferString(`{"sort":"klassning"}`)))
 	if w.Code != http.StatusGatewayTimeout || !strings.Contains(w.Body.String(), "hann inte skapa ett förslag") {
 		t.Fatalf("timeout gav %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestKortaForslagsvardeDelarInteEttTecken(t *testing.T) {
+	fall := []string{
+		strings.Repeat("a", 79) + "värde",
+		strings.Repeat("a", 79) + "值 mer text",
+		strings.Repeat("värde ", 40),
+		"opus",
+		"  sonnet  ",
+	}
+	for _, varde := range fall {
+		kortat := kortaForslagsvarde(varde)
+		if !utf8.ValidString(kortat) {
+			t.Fatalf("kortningen gav ogiltig UTF-8 för %.20q: %q", varde, kortat)
+		}
+		if len([]rune(kortat)) > 80 {
+			t.Fatalf("kortningen gav %d tecken", len([]rune(kortat)))
+		}
+	}
+	if kortaForslagsvarde("  sonnet  ") != "sonnet" {
+		t.Fatal("kortningen trimmar inte")
 	}
 }
