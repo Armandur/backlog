@@ -154,3 +154,16 @@ func TestSvarUrClaudeStromFallerTillbakaPaTexten(t *testing.T) {
 		t.Fatalf("fick %q", svar)
 	}
 }
+
+func TestModellUrClaudeStrom(t *testing.T) {
+	strom := strings.Join([]string{
+		`{"type":"system","subtype":"init","model":"claude-fable-5-1","cwd":"/tmp"}`,
+		`{"type":"assistant","message":{"content":[{"type":"text","text":"hej"}]}}`,
+	}, "\n")
+	if modell := ModellUrClaudeStrom(strom); modell != "claude-fable-5-1" {
+		t.Fatalf("fick %q", modell)
+	}
+	if modell := ModellUrClaudeStrom(`{"type":"assistant","message":{"content":[]}}`); modell != "" {
+		t.Fatalf("en ström utan modell gav %q", modell)
+	}
+}

@@ -146,7 +146,12 @@ func (u *Utdelare) kor(ctx context.Context, store *KorningStore, korare Korare, 
 		res.ExitKod = 1
 	}
 
-	u.skrivKommentar(ctx, fakta, korning, res, korfel, agentAktor)
+	// Modellen som svarade är ärligare än agentens namn i konfigurationen.
+	svarsAktor := agentAktor
+	if res.Modell != "" {
+		svarsAktor = models.Actor{Kind: models.ActorKindAI, Name: res.Modell}
+	}
+	u.skrivKommentar(ctx, fakta, korning, res, korfel, svarsAktor)
 
 	if _, err := tasks.Move(ctx, fakta.ID, nyStatus, agentAktor); err != nil {
 		return korning, fmt.Errorf("kunde inte flytta tasken till %s: %w", nyStatus, err)

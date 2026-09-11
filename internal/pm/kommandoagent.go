@@ -18,6 +18,8 @@ type Resultat struct {
 	Utdata  string
 	ExitKod int
 	Logg    string
+	// Modell är modellen agenten körde med, när strömmen avslöjar den.
+	Modell string
 }
 
 // Korare kör en brief och rapporterar exitkod. Utdelaren pratar bara med det
@@ -192,6 +194,7 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 		if svar := SvarUrClaudeStrom(samladUtdata); svar != "" {
 			res.Utdata = svar
 		}
+		res.Modell = ModellUrClaudeStrom(samladUtdata)
 	}
 	if a.konfig.Svar == "fil" {
 		if data, err := os.ReadFile(in.Svarsfil); err == nil && strings.TrimSpace(string(data)) != "" {

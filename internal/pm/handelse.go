@@ -349,3 +349,26 @@ func claudeTextblock(post claudeRad) []string {
 	}
 	return ut
 }
+
+// ModellUrClaudeStrom ger modellen agenten faktiskt körde med. Claude skriver
+// den i sin init-rad. Namnet i konfigurationen säger bara vilken agent som
+// startades, inte vilken modell som svarade.
+func ModellUrClaudeStrom(utdata string) string {
+	for _, rad := range strings.Split(utdata, "\n") {
+		rad = strings.TrimSpace(rad)
+		if rad == "" || !strings.Contains(rad, `"model"`) {
+			continue
+		}
+		var post struct {
+			Type   string `json:"type"`
+			Modell string `json:"model"`
+		}
+		if json.Unmarshal([]byte(rad), &post) != nil {
+			continue
+		}
+		if post.Type == "system" && strings.TrimSpace(post.Modell) != "" {
+			return post.Modell
+		}
+	}
+	return ""
+}
