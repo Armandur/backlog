@@ -113,6 +113,12 @@ textarea { resize: vertical; }
 .tasktitel, .taskbeskrivning { grid-column: 1/-1; }
 .taskfot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .taskfot p { flex: 1; margin: 0; }
+.forlopp { list-style: none; margin: 0; padding: 10px; height: clamp(300px, calc(100vh - 330px), 700px); overflow-y: auto; overscroll-behavior: contain; background: var(--sankt); border: 1px solid var(--kant); border-radius: 8px; }
+.handelse { display: grid; grid-template-columns: 4.5rem 5.5rem minmax(0, 1fr); gap: 8px; padding: 7px 8px; border-bottom: 1px solid var(--kant); overflow-wrap: anywhere; }
+.handelse:last-child { border-bottom: 0; }
+.handelse time { color: var(--svag); font-variant-numeric: tabular-nums; }
+.handelsesort { color: var(--accent); font-size: .78rem; font-weight: 700; text-transform: uppercase; }
+.h-fel .handelsesort { color: var(--fel); }
 .logg { background: #0f1512; color: #cfe1d6; border-radius: 6px; padding: 12px 14px; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-x: auto; }
 .scrim { position: fixed; inset: 0; background: rgba(10,15,12,.45); display: none; z-index: 20; }
 .scrim.on { display: block; }

@@ -1,12 +1,14 @@
 package pmweb
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mazen160/backlog/internal/ids"
 	"github.com/mazen160/backlog/internal/migrate"
@@ -317,7 +320,7 @@ func TestPMVyInnehallerKunskapOchKommentarspanel(t *testing.T) {
 	srv, _ := testServer(t)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/pm/demo", nil))
-	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`} {
+	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`} {
 		if !strings.Contains(w.Body.String(), innehall) {
 			t.Fatalf("PM-vyn saknar %s", innehall)
 		}
@@ -893,5 +896,191 @@ func TestBegripligtProjektfelFoljerSentinelIntePratetOmFelet(t *testing.T) {
 				t.Fatalf("fick %d %q, ville ha %d %q", kod, meddelande, f.kod, f.meddeland)
 			}
 		})
+	}
+}
+
+func skapaStromKorning(t *testing.T, db *sql.DB, status, logg string) *pm.Korning {
+	t.Helper()
+	projekt, err := service.NewProjectService(db).GetByAlias(t.Context(), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := service.NewTaskService(db, service.NewPlanService(db), service.NewLabelService(db)).Create(
+		t.Context(), models.CreateTaskInput{
+			ProjectID: projekt.ID, Title: "Strömtest", Type: models.TaskType("task"), Priority: 3,
+			Actor: models.Actor{Kind: models.ActorKindHuman, Name: "rasmus"},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	korning := &pm.Korning{
+		ProjectID: projekt.ID, TaskID: task.ID, TaskRef: fmt.Sprintf("TASK-%d", task.Seq),
+		Agent: "testagent", Status: pm.StatusKor, Logg: logg,
+	}
+	store := pm.NewKorningStore(db)
+	if err := store.Skapa(t.Context(), korning); err != nil {
+		t.Fatal(err)
+	}
+	if status == pm.StatusKlar || status == pm.StatusFel {
+		exitkod := 0
+		if status == pm.StatusFel {
+			exitkod = 3
+		}
+		if err := store.Avsluta(t.Context(), korning.ID, status, exitkod, logg); err != nil {
+			t.Fatal(err)
+		}
+		korning.Status = status
+		korning.ExitKod = &exitkod
+	}
+	return korning
+}
+
+func skrivTestHandelser(t *testing.T, sokvag string, handelser ...pm.Handelse) {
+	t.Helper()
+	fil, err := os.Create(sokvag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kodare := json.NewEncoder(fil)
+	for _, handelse := range handelser {
+		if err := kodare.Encode(handelse); err != nil {
+			fil.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := fil.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func stromData(t *testing.T, kropp io.Reader) []pm.Handelse {
+	t.Helper()
+	var handelser []pm.Handelse
+	skanner := bufio.NewScanner(kropp)
+	for skanner.Scan() {
+		rad := strings.TrimPrefix(skanner.Text(), "data: ")
+		if rad == skanner.Text() {
+			continue
+		}
+		var handelse pm.Handelse
+		if err := json.Unmarshal([]byte(rad), &handelse); err != nil {
+			t.Fatalf("ogiltig SSE-data %q: %v", rad, err)
+		}
+		handelser = append(handelser, handelse)
+	}
+	if err := skanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return handelser
+}
+
+func TestKorningStromSpelarUppHandelserIOrdning(t *testing.T) {
+	srv, db := testServer(t)
+	logg := filepath.Join(t.TempDir(), "korning.log")
+	korning := skapaStromKorning(t, db, pm.StatusKlar, logg)
+	vantar := []pm.Handelse{
+		{Tid: 1, Sort: "text", Text: "först"},
+		{Tid: 2, Sort: "fil", Text: "sedan"},
+		{Tid: 3, Sort: "kommando", Text: "sist"},
+	}
+	skrivTestHandelser(t, pm.HandelseSokvag(logg), vantar...)
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/korningar/"+korning.ID+"/strom", nil))
+	if w.Code != http.StatusOK || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("strömmen gav %d och %q", w.Code, w.Header().Get("Content-Type"))
+	}
+	fick := stromData(t, w.Body)
+	if len(fick) != 4 {
+		t.Fatalf("väntade tre händelser och slutbesked, fick %+v", fick)
+	}
+	for i := range vantar {
+		if fick[i] != vantar[i] {
+			t.Fatalf("händelse %d blev %+v, väntade %+v", i, fick[i], vantar[i])
+		}
+	}
+	if !strings.Contains(fick[3].Text, "exitkod 0") {
+		t.Fatalf("slutbeskedet saknar exitkod: %+v", fick[3])
+	}
+}
+
+func TestKorningStromFortsatterMedNyRad(t *testing.T) {
+	srv, db := testServer(t)
+	logg := filepath.Join(t.TempDir(), "korning.log")
+	korning := skapaStromKorning(t, db, pm.StatusKor, logg)
+	skrivTestHandelser(t, pm.HandelseSokvag(logg), pm.Handelse{Tid: 1, Sort: "text", Text: "redan skriven"})
+	testserver := httptest.NewServer(srv)
+	t.Cleanup(testserver.Close)
+
+	ctx, avbryt := context.WithCancel(t.Context())
+	defer avbryt()
+	begaran, err := http.NewRequestWithContext(ctx, http.MethodGet, testserver.URL+"/api/korningar/"+korning.ID+"/strom", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svar, err := testserver.Client().Do(begaran)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svar.Body.Close()
+	skanner := bufio.NewScanner(svar.Body)
+	if !skanner.Scan() || !strings.Contains(skanner.Text(), `"redan skriven"`) {
+		t.Fatalf("första händelsen saknas: %q", skanner.Text())
+	}
+
+	fil, err := os.OpenFile(pm.HandelseSokvag(logg), os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.NewEncoder(fil).Encode(pm.Handelse{Tid: 2, Sort: "fil", Text: "ny rad"}); err != nil {
+		fil.Close()
+		t.Fatal(err)
+	}
+	if err := fil.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	hittad := make(chan string, 1)
+	go func() {
+		for skanner.Scan() {
+			if strings.HasPrefix(skanner.Text(), "data: ") {
+				hittad <- skanner.Text()
+				return
+			}
+		}
+		close(hittad)
+	}()
+	select {
+	case rad := <-hittad:
+		if !strings.Contains(rad, `"ny rad"`) {
+			t.Fatalf("väntade den nya raden, fick %q", rad)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("den nya raden kom inte på samma anslutning")
+	}
+}
+
+func TestKorningStromUtanHandelsefilGerBeskedOchStanger(t *testing.T) {
+	srv, db := testServer(t)
+	logg := filepath.Join(t.TempDir(), "korning.log")
+	korning := skapaStromKorning(t, db, pm.StatusKlar, logg)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/korningar/"+korning.ID+"/strom", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("strömmen gav %d: %s", w.Code, w.Body.String())
+	}
+	fick := stromData(t, w.Body)
+	if len(fick) != 1 || fick[0].Text != "körningen strömmar inte" {
+		t.Fatalf("oväntat besked: %+v", fick)
+	}
+}
+
+func TestKorningStromGerSvensk404ForOkandKorning(t *testing.T) {
+	srv, _ := testServer(t)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/korningar/finns-inte/strom", nil))
+	if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "körningen") || !strings.Contains(w.Body.String(), "finns inte") {
+		t.Fatalf("väntade svensk 404, fick %d: %s", w.Code, w.Body.String())
 	}
 }

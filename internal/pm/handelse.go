@@ -55,6 +55,9 @@ func handelseSokvag(logg string) string {
 	return strings.TrimSuffix(logg, andelse) + ".handelser.jsonl"
 }
 
+// HandelseSokvag ger sökvägen till händelsefilen bredvid en körningslogg.
+func HandelseSokvag(logg string) string { return handelseSokvag(logg) }
+
 func (s *handelseSkrivare) Skriv(handelse Handelse) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

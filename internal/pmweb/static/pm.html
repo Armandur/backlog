@@ -170,6 +170,10 @@
       <h1>Körningar</h1>
       <p class="lead">En körning börjar när PM ber en agent arbeta med en task. En utdelning betyder att PM väljer task och agent. Exitkoden visar om agentens kommando lyckades. Koden 0 betyder att kommandot lyckades.</p>
       <div class="list" id="korningar"></div>
+      <div id="forloppruta" hidden>
+        <h2 id="forloppstitel">Körningens förlopp</h2>
+        <ol class="forlopp" id="forlopp" aria-live="polite"></ol>
+      </div>
       <div id="loggruta" hidden>
         <h2 id="loggtitel"></h2>
         <pre class="logg" id="logg"></pre>
@@ -296,6 +300,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="/pm-static/pm.js"></script>
+<script src="/pm-static/pm-strom.js"></script>
 <script src="/pm-static/pm-konfig.js"></script>
 </body>
 </html>

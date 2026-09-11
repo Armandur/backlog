@@ -74,6 +74,7 @@ func (s *Server) rutter(upstream http.Handler) {
 	s.mux.HandleFunc("POST /api/projects/{alias}/tasks", s.skapaTask)
 	s.mux.HandleFunc("POST /api/projects/{alias}/dela-ut", s.delaUt)
 	s.mux.HandleFunc("GET /api/projects/{alias}/korningar", s.hamtaKorningar)
+	s.mux.HandleFunc("GET /api/korningar/{id}/strom", s.strommaKorning)
 	s.mux.HandleFunc("GET /api/korningar/{id}", s.hamtaKorning)
 	s.mux.HandleFunc("GET /api/agenter", s.hamtaAgenter)
 	s.mux.HandleFunc("GET /api/konfig", s.hamtaKonfig)

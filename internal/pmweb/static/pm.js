@@ -2,7 +2,7 @@ const alias = decodeURIComponent(location.pathname.replace(/^\/pm\/?/, "").split
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 let vy = location.hash.replace("#", "") || (alias ? "projekt" : "projekt-nytt");
-let valdKorning = null;
+let korningStrom = null;
 let agenter = [];
 function tid(ns) {
   return new Date(Number(ns) / 1e6).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
@@ -27,9 +27,8 @@ function koText(k, alla) {
 }
 // Statusvärdena i databasen är ASCII, etiketten i vyn är svensk.
 const STATUS_ETIKETT = { koad: "Köad", kor: "Kör", klar: "Klar", fel: "Fel" };
-function pill(status) {
-  return `<span class="pill p-${esc(status)}">${esc(STATUS_ETIKETT[status] || status)}</span>`;
-}
+function pill(status) { return `<span class="pill p-${esc(status)}">${esc(STATUS_ETIKETT[status] || status)}</span>`; }
+function korningKnappar(id) { return `<button class="btn sm pri" data-forlopp="${id}">Förlopp</button><button class="btn sm" data-logg="${id}">Logg</button>`; }
 function rad(html) {
   const el = document.createElement("div");
   el.className = "rad-post";
@@ -54,7 +53,6 @@ async function hamta(url, init) {
   if (!svar.ok) throw new Error(data.error || `fel från servern (${svar.status})`);
   return data;
 }
-// ---------- projektvy ----------
 async function laddaOversikt() {
   const o = await hamta(`/api/projects/${encodeURIComponent(alias)}/oversikt`);
   $("#ptitel").textContent = o.projekt.name;
@@ -65,7 +63,7 @@ async function laddaOversikt() {
     const el = rad(`<span class="mono ref">${k.task_ref}</span>
       <div class="t"><span class="mono">${esc(k.agent)}</span> ${esc(k.motivering)}
         <span class="meta">${koText(k, o.korningar)}</span></div>
-      <div class="act">${pill(k.status)}<button class="btn sm" data-logg="${k.id}">Logg</button></div>`);
+      <div class="act">${pill(k.status)}${korningKnappar(k.id)}</div>`);
     el.classList.add("stripe", "kor");
     return el;
   }, "Inga körningar just nu.");
@@ -87,7 +85,7 @@ async function laddaOversikt() {
   fyll("#vantar", o.vantar, (v) => {
     const el = rad(`<span class="pill p-${v.sort}">${VANTAR_ETIKETT[v.sort] || esc(v.sort)}</span>
       <div class="t">${v.ref ? `<span class="mono">${v.ref}</span>` : ""}<span class="meta">${esc(v.text)}</span></div>
-      <div class="act">${v.sort === "fraga" ? `<button class="btn sm" data-vy="samtal">Öppna</button>` : v.korning_id ? `<button class="btn sm" data-logg="${v.korning_id}">Logg</button>` : `<button class="btn sm pri" data-dela="${v.ref}">Dela ut</button>`}</div>`);
+      <div class="act">${v.sort === "fraga" ? `<button class="btn sm" data-vy="samtal">Öppna</button>` : v.korning_id ? korningKnappar(v.korning_id) : `<button class="btn sm pri" data-dela="${v.ref}">Dela ut</button>`}</div>`);
     el.classList.add("stripe", v.sort);
     return el;
   }, "Inget väntar på dig.");
@@ -123,33 +121,26 @@ $("#taskform").addEventListener("submit", async (e) => {
     knapp.disabled = false;
   }
 });
-// ---------- körningar ----------
 async function laddaKorningar() {
   const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/korningar`);
   fyll("#korningar", data.korningar, (k) => rad(`<span class="mono ref">${k.task_ref}</span>
     <div class="t"><span class="mono">${esc(k.agent)}</span> ${esc(k.motivering)}
       <span class="meta">${tid(k.skapad_at)}${k.exit_kod !== undefined ? " · exit " + k.exit_kod : ""}</span></div>
-    <div class="act">${pill(k.status)}<button class="btn sm" data-logg="${k.id}">Logg</button></div>`), "Inga körningar än.");
+    <div class="act">${pill(k.status)}${korningKnappar(k.id)}</div>`), "Inga körningar än.");
 }
 async function visaLogg(id) {
-  valdKorning = id;
+  stangKorningStrom();
   const data = await hamta(`/api/korningar/${encodeURIComponent(id)}?logg=1`);
-  $("#loggruta").hidden = false;
+  $("#forloppruta").hidden = true; $("#loggruta").hidden = false;
   $("#loggtitel").textContent = `${data.korning.task_ref} · ${data.korning.agent} · ${data.korning.status}`;
   $("#logg").textContent = data.logg || "(ingen logg skriven än)";
-  byt("korningar", true);
-  $("#loggruta").scrollIntoView({ block: "nearest" });
+  byt("korningar", true); $("#loggruta").scrollIntoView({ block: "nearest" });
 }
-// ---------- samtal ----------
 // Tråden ritas om vid varje pollning. Har du skrollat upp ska positionen
 // ligga kvar, annars rycks läsningen undan var fjärde sekund.
 let samtalLaddat = false;
-function vidBotten(ruta) {
-  return ruta.scrollHeight - ruta.scrollTop - ruta.clientHeight < 40;
-}
-function skrollaNed(ruta) {
-  ruta.scrollTop = ruta.scrollHeight;
-}
+function vidBotten(ruta) { return ruta.scrollHeight - ruta.scrollTop - ruta.clientHeight < 40; }
+function skrollaNed(ruta) { ruta.scrollTop = ruta.scrollHeight; }
 async function laddaSamtal() {
   const ruta = $("#trad");
   const foljMed = !samtalLaddat || vidBotten(ruta);
@@ -202,7 +193,6 @@ $("#skrivform").addEventListener("submit", async (e) => {
     knapp.disabled = false;
   }
 });
-// ---------- kommentarer och kunskap ----------
 function kunskapskort(meta, text) {
   const post = document.createElement("article");
   post.className = "kunskapspost";
@@ -248,7 +238,6 @@ async function laddaKunskap() {
   fyll("#minne", minne.minne || [], (m) =>
     kunskapskort(`${m.actor.kind}:${m.actor.name} · ${tid(m.created_at)}${m.tags ? " · " + m.tags : ""}`, m.body), "Projektminnet är tomt.");
 }
-// ---------- utdelning ----------
 let delaRef = null;
 function oppnaDela(ref) {
   // Panelerna ligger på samma plats, så bara en i taget får vara öppen.
@@ -285,7 +274,6 @@ $("#dStarta").onclick = async () => {
     knapp.disabled = false;
   }
 };
-// ---------- lägg till projekt ----------
 function uppdateraProjektlage() {
   const lage = document.querySelector('input[name="lage"]:checked').value;
   $("#projektSokvagTips").textContent = lage === "nytt"
@@ -320,7 +308,6 @@ $("#projektform").addEventListener("submit", async (e) => {
     knapp.disabled = false;
   }
 });
-// ---------- skal ----------
 function byt(ny, behallScroll) {
   if (!alias && ny !== "projekt-nytt" && ny !== "konfig") ny = "projekt-nytt";
   const bytteVy = vy !== ny;
@@ -332,6 +319,7 @@ function byt(ny, behallScroll) {
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("on", v.id === "v-" + vy));
   // En ny vy börjar på sin egen topp, inte där förra vyn var skrollad.
   if (bytteVy && !behallScroll) window.scrollTo(0, 0);
+  if (ny !== "korningar") stangKorningStrom();
   if (ny === "konfig") laddaKonfig();
   if (ny === "kunskap") laddaKunskap().catch((err) => toast(err.message));
 }
@@ -342,6 +330,8 @@ $("#nav").addEventListener("click", (e) => {
 document.body.addEventListener("click", (e) => {
   const d = e.target.closest("[data-dela]");
   if (d) return oppnaDela(d.dataset.dela);
+  const f = e.target.closest("[data-forlopp]");
+  if (f) return visaForlopp(f.dataset.forlopp);
   const l = e.target.closest("[data-logg]");
   if (l) return visaLogg(l.dataset.logg);
   const k = e.target.closest("[data-kommentarer]");
@@ -362,8 +352,7 @@ async function laddaAgenter() {
     agenter = [];
   }
 }
-// Väljaren i huvudet listar alla projekt i workspacet. Utan den måste man
-// känna till adressen /pm/<alias> och skriva den för hand.
+// Väljaren listar projekten. Annars måste användaren känna till adressen och skriva den själv.
 async function laddaProjektval() {
   const valjare = $("#projektval");
   try {
@@ -389,8 +378,7 @@ async function ladda() {
     toast(err.message);
   }
 }
-// Starta först när båda skriptfilerna har körts. Annars saknas konfigvyns
-// kod när byt() vill ladda den.
+// Starta efter båda skriptfilerna. Annars saknas konfigkoden när byt() laddar vyn.
 document.addEventListener("DOMContentLoaded", () => {
   byt(vy);
   laddaProjektval();
