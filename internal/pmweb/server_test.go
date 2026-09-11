@@ -648,3 +648,41 @@ func TestNyttProjektAvvisarKatalogMedInnehall(t *testing.T) {
 		t.Fatalf("PM startade Git i den upptagna katalogen: %v", err)
 	}
 }
+
+func TestForeslaAgentAnvanderAgentTillagdEfterStart(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	skript := filepath.Join(dir, "efterstart.sh")
+	blocket := `{"namn":"efterstart","kommando":"efterstart","args":["{brief}"],` +
+		`"brief":"arg","svar":"stdout","stdin":"devnull","timeout_sekunder":60,"miljo":{},"mcp":false}`
+	if err := os.WriteFile(skript, []byte("#!/bin/sh\ncat <<'JSON'\n"+blocket+"\nJSON\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	konfig := "default_agent = \"efterstart\"\n\n[agenter.efterstart]\n  kommando = \"" + skript + "\"\n" +
+		"  args = [\"{brief}\"]\n  brief = \"arg\"\n  svar = \"stdout\"\n  stdin = \"\"\n  timeout_sekunder = 60\n  mcp = false\n"
+	if err := os.WriteFile(filepath.Join(dir, pm.KonfigFil), []byte(konfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	srv, _ := testServer(t)
+	// Registret från starten känner inte till agenten. Den ska ändå gå att
+	// använda, för konfigurationen läses vid varje anrop.
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{svar: "fel agent svarade"})
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/konfig/foresla",
+		bytes.NewBufferString(`{"beskrivning":"Ett verktyg","agent":"efterstart"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("agenten som lagts till efter starten gav %d: %s", w.Code, w.Body.String())
+	}
+	var forslag struct {
+		Namn string `json:"namn"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&forslag); err != nil {
+		t.Fatal(err)
+	}
+	if forslag.Namn != "efterstart" {
+		t.Fatalf("fel agent svarade: %+v", forslag)
+	}
+}

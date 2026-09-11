@@ -146,7 +146,7 @@ func (s *Server) skrivSamtal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.Fraga {
-		svar, err := pm.Fraga(r.Context(), s.db, s.register, pm.FragaInput{
+		svar, err := pm.Fraga(r.Context(), s.db, s.aktuelltRegister(), pm.FragaInput{
 			Alias: alias, ProjectID: projectID, Fraga: body.Text, Agent: body.Agent, Fragare: aktor,
 		})
 		if err != nil {
@@ -237,15 +237,18 @@ func (s *Server) hamtaAgenter(w http.ResponseWriter, r *http.Request) {
 }
 
 // aktuelltRegister läser konfigurationen per anrop, så en agent som lagts till
-// i konfigvyn går att använda utan omstart. Faller tillbaka på registret från
-// starten om filen inte går att läsa.
+// i konfigvyn går att använda utan omstart. Saknas filen, eller går den inte
+// att läsa, gäller registret från starten. Annars skulle de inbyggda
+// defaulterna ta över tyst.
 func (s *Server) aktuelltRegister() *pm.AgentRegister {
 	konfig, err := pm.LasKonfig(konfigWorkDir())
-	if err != nil {
+	if err != nil || konfig.Kalla == "" {
 		if s.register != nil {
 			return s.register
 		}
-		return pm.NewAgentRegister()
+		if err != nil {
+			return pm.NewAgentRegister()
+		}
 	}
 	return pm.FranKonfig(konfig)
 }

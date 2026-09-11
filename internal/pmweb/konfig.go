@@ -85,11 +85,7 @@ func (s *Server) foreslaAgent(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, errors.New("beskriv verktyget som agenten ska konfigurera"), http.StatusBadRequest)
 		return
 	}
-	if s.register == nil {
-		svaraFel(w, errors.New("ingen agent finns för att skapa ett förslag"), http.StatusServiceUnavailable)
-		return
-	}
-	agent, err := s.register.Hamta(strings.TrimSpace(body.Agent))
+	agent, err := s.aktuelltRegister().Hamta(strings.TrimSpace(body.Agent))
 	if err != nil {
 		svaraFel(w, err, http.StatusBadRequest)
 		return
