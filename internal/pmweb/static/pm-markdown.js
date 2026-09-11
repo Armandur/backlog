@@ -98,6 +98,8 @@
     let styckerader = [];
     let lista = null;
     let kodrader = null;
+    let tabellrader = null;
+    let citatrader = null;
 
     function tomStycke() {
       if (!styckerader.length) return;
@@ -113,12 +115,29 @@
       lista = null;
     }
 
+    function tomTabell() {
+      if (!tabellrader) return;
+      fragment.append(byggTabell(tabellrader));
+      tabellrader = null;
+    }
+
+    function tomCitat() {
+      if (!citatrader) return;
+      const citat = element("blockquote");
+      rendera(citat, citatrader.join("\n"));
+      fragment.append(citat);
+      citatrader = null;
+    }
+
     function tomBlock() {
       tomStycke();
       tomLista();
+      tomTabell();
+      tomCitat();
     }
 
-    for (const rad of rader) {
+    for (let i = 0; i < rader.length; i++) {
+      const rad = rader[i];
       if (kodrader) {
         if (/^\s*```\s*$/.test(rad)) {
           const pre = element("pre");
@@ -146,6 +165,29 @@
         renderaInline(nod, rubrik[2]);
         fragment.append(nod);
         continue;
+      }
+
+      const citat = rad.match(/^ {0,3}>\s?(.*)$/);
+      if (citat) {
+        tomStycke();
+        tomLista();
+        if (!citatrader) citatrader = [];
+        citatrader.push(citat[1]);
+        continue;
+      }
+      if (citatrader) tomCitat();
+
+      if (arTabellrad(rad) && arSkiljerad(rader[i + 1])) {
+        tomBlock();
+        tabellrader = [rad];
+        continue;
+      }
+      if (tabellrader) {
+        if (arTabellrad(rad)) {
+          tabellrader.push(rad);
+          continue;
+        }
+        tomTabell();
       }
 
       const punkt = rad.match(/^ {0,3}[-+*]\s+(.+)$/);
@@ -180,6 +222,51 @@
     }
     tomBlock();
     mal.replaceChildren(fragment);
+  }
+
+  // En tabellrad har minst ett lodstreck. En skiljerad har bara streck, kolon
+  // och lodstreck, och är det som skiljer en tabell från vanlig text.
+  function arTabellrad(rad) {
+    return /\|/.test(rad) && rad.trim() !== "";
+  }
+
+  function arSkiljerad(rad) {
+    return typeof rad === "string" && /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/.test(rad) && rad.includes("-");
+  }
+
+  function celler(rad) {
+    let text = rad.trim();
+    if (text.startsWith("|")) text = text.slice(1);
+    if (text.endsWith("|")) text = text.slice(0, -1);
+    return text.split("|").map((cell) => cell.trim());
+  }
+
+  function byggTabell(rader) {
+    const tabell = element("table");
+    const huvud = element("thead");
+    const huvudrad = element("tr");
+    for (const cell of celler(rader[0])) {
+      const th = element("th");
+      renderaInline(th, cell);
+      huvudrad.append(th);
+    }
+    huvud.append(huvudrad);
+    tabell.append(huvud);
+
+    const kropp = element("tbody");
+    for (const rad of rader.slice(2)) {
+      const tr = element("tr");
+      for (const cell of celler(rad)) {
+        const td = element("td");
+        renderaInline(td, cell);
+        tr.append(td);
+      }
+      kropp.append(tr);
+    }
+    tabell.append(kropp);
+
+    // pm.css ger redan .markdown table egen skroll, så ingen extra ruta behövs.
+    return tabell;
   }
 
   function skapaKort(meta, text) {

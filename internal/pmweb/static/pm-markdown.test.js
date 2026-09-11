@@ -124,6 +124,29 @@ const lankar = alla(rot).filter((n) => n.taggnamn === "a");
 provaa("en http-länk blir en länk", lankar.length === 1);
 provaa("länkens text följer med", lankar[0] && lankar[0].textContent === "sidan");
 
+// Tabeller renderas som tabell, och en falsk tabell blir text.
+const tabellrot = nyNod("div");
+rendera(tabellrot, "| Task | Vad |\n|---|---|\n| A | **fet** |\n| B | `kod` |");
+const tabelltaggar = alla(tabellrot).map((n) => n.taggnamn);
+for (const tagg of ["table", "thead", "tbody", "tr", "th", "td"]) {
+  provaa(`tabellen ger ${tagg}`, tabelltaggar.includes(tagg));
+}
+provaa("cellen renderar inline", tabelltaggar.includes("strong"));
+
+const falskrot = nyNod("div");
+rendera(falskrot, "| inte | en tabell |\nutan skiljerad");
+provaa("utan skiljerad blir det ingen tabell", !alla(falskrot).some((n) => n.taggnamn === "table"));
+
+const cellrot = nyNod("div");
+rendera(cellrot, "| a | b |\n|---|---|\n| <script>window.pwn = 1;</script> | ok |");
+provaa("HTML i en cell blir text", !alla(cellrot).some((n) => farliga.includes(n.taggnamn)));
+provaa("inget kördes från en cell", !global.window.pwn);
+
+// Citat renderas som blockquote.
+const citatrot = nyNod("div");
+rendera(citatrot, "> ett citat med **fet** text");
+provaa("citat ger blockquote", alla(citatrot).some((n) => n.taggnamn === "blockquote"));
+
 // Vanlig markdown ska fortfarande renderas.
 const rot2 = nyNod("div");
 rendera(rot2, "# Rubrik\n\n- ett\n- två\n\n**fet** och `kod`\n\n```\nkodblock\n```");
