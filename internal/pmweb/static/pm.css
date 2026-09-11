@@ -165,9 +165,21 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 .kunskapslista, .kommentarlista { display: grid; gap: 10px; min-width: 0; }
 .kunskapspost, .dokument { min-width: 0; background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 12px 14px; }
 .kunskapspost .meta, .dokument .meta { color: var(--svag); font-size: 12px; overflow-wrap: anywhere; }
-.kunskapspost pre, .dokument pre { margin: 8px 0 0; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 100%; }
+.markdown { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+.markdown > :first-child { margin-top: 8px; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 { color: var(--text); text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
+.markdown h1 { font-size: 20px; }
+.markdown h2 { font-size: 18px; }
+.markdown h3 { font-size: 16px; }
+.markdown h4, .markdown h5, .markdown h6 { font-size: 15px; }
+.markdown p, .markdown ul, .markdown ol { margin: 8px 0; }
+.markdown ul, .markdown ol { padding-left: 24px; }
+.markdown pre { margin: 8px 0; max-width: 100%; overflow-x: auto; white-space: pre; }
+.markdown pre code { display: block; width: max-content; min-width: 100%; padding: 10px 12px; }
+.markdown a { color: var(--accent); }
+.markdown table { display: block; max-width: 100%; overflow-x: auto; }
 .dokument { position: sticky; top: 20px; max-height: calc(100vh - 92px); overflow: auto; }
-.dokument h2 { color: var(--text); font-size: 18px; text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
 #docs .rad-post { grid-template-columns: minmax(0, 1fr) auto; }
 #kommentarer .tom { border: 1px solid var(--kant); border-radius: 8px; }
 @media (max-width: 760px) {

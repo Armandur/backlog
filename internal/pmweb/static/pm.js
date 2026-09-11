@@ -198,12 +198,6 @@ $("#skrivform").addEventListener("submit", async (e) => {
     knapp.disabled = false;
   }
 });
-function kunskapskort(meta, text) {
-  const post = document.createElement("article");
-  post.className = "kunskapspost";
-  post.innerHTML = `<div class="meta">${esc(meta)}</div><pre>${esc(text)}</pre>`;
-  return post;
-}
 async function visaKommentarer(ref) {
   $("#kommentarTitel").textContent = `${ref} · kommentarer`;
   $("#kommentarer").innerHTML = '<div class="tom">Läser kommentarer...</div>';
@@ -213,7 +207,7 @@ async function visaKommentarer(ref) {
   try {
     const data = await hamta(`/api/tasks/${encodeURIComponent(ref)}/kommentarer`);
     fyll("#kommentarer", data.kommentarer || [], (c) =>
-      kunskapskort(`${c.actor.kind}:${c.actor.name} · ${tid(c.created_at)}`, c.body), "Tasken saknar kommentarer.");
+      PMMarkdown.skapaKort(`${c.actor.kind}:${c.actor.name} · ${tid(c.created_at)}`, c.body), "Tasken saknar kommentarer.");
   } catch (err) {
     $("#kommentarer").textContent = err.message;
   }
@@ -229,7 +223,7 @@ async function visaDoc(id) {
   $("#dokument").hidden = false;
   $("#dokumentTitel").textContent = doc.title;
   $("#dokumentMeta").textContent = `${doc.version.actor.kind}:${doc.version.actor.name} · version ${doc.current_version} · ${tid(doc.updated_at)}`;
-  $("#dokumentText").textContent = doc.version.body;
+  PMMarkdown.rendera($("#dokumentText"), doc.version.body);
   $("#dokument").scrollIntoView({ block: "nearest" });
 }
 async function laddaKunskap() {
@@ -241,7 +235,7 @@ async function laddaKunskap() {
     <span class="meta">version ${d.current_version} · ${tid(d.updated_at)}</span></div>
     <div class="act"><button class="btn sm" data-doc="${esc(d.id)}">Öppna</button></div>`), "Projektet saknar docs.");
   fyll("#minne", minne.minne || [], (m) =>
-    kunskapskort(`${m.actor.kind}:${m.actor.name} · ${tid(m.created_at)}${m.tags ? " · " + m.tags : ""}`, m.body), "Projektminnet är tomt.");
+    PMMarkdown.skapaKort(`${m.actor.kind}:${m.actor.name} · ${tid(m.created_at)}${m.tags ? " · " + m.tags : ""}`, m.body), "Projektminnet är tomt.");
 }
 let delaRef = null;
 function oppnaDela(ref) {
