@@ -190,8 +190,12 @@ func (u *Utdelare) krok(ctx context.Context, mall []string, fakta TaskFakta, kor
 	}
 	platshallare := KorInput{Repo: fakta.RepoPath, TaskRef: fakta.Ref, Logg: korning.Logg, Profil: in.Profil}
 	args := make([]string, 0, len(mall))
+	// {agent} är agentens namn. {aktor} är samma sak som aktörssträng, så
+	// kroken skriver i agentens namn och inte som en människa.
+	aktor := "ai:" + korning.Agent
 	for _, del := range mall {
 		del = ersattPlatshallare(del, platshallare)
+		del = strings.ReplaceAll(del, "{aktor}", aktor)
 		args = append(args, strings.ReplaceAll(del, "{agent}", korning.Agent))
 	}
 	ctx, avbryt := context.WithTimeout(ctx, 30*time.Second)

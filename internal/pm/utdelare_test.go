@@ -303,7 +303,7 @@ func TestKrokenKorMotPMProfilen(t *testing.T) {
 	korare := &fejkKorare{namn: "fejk", utdata: "ok"}
 	u := utdelareMed(t, db, korare)
 	u.konfig.Krok = Krok{
-		Anspraka: []string{skript, "anspraka", "{task}", "{repo}"},
+		Anspraka: []string{skript, "anspraka", "{task}", "{repo}", "{aktor}"},
 		Slapp:    []string{skript, "slapp", "{task}"},
 		Miljo:    map[string]string{"EGEN": "värde"},
 	}
@@ -317,7 +317,7 @@ func TestKrokenKorMotPMProfilen(t *testing.T) {
 		t.Fatalf("kroken kördes inte: %v", err)
 	}
 	text := string(data)
-	for _, vantat := range []string{"args: anspraka TASK-13", "args: slapp TASK-13", "BACKLOG_PROFILE=pm", "EGEN=värde"} {
+	for _, vantat := range []string{"args: anspraka TASK-13", "args: slapp TASK-13", "BACKLOG_PROFILE=pm", "EGEN=värde", "ai:fejk"} {
 		if !strings.Contains(text, vantat) {
 			t.Fatalf("kroken saknar %q:\n%s", vantat, text)
 		}
