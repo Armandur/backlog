@@ -161,7 +161,10 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 	}()
 	go func() {
 		defer lasare.Done()
-		if err := lasRader(stderr, utdata.skrivRad, nil); err != nil {
+		forLangStderr := func(tecken int) {
+			utdata.skrivRad([]byte(fmt.Sprintf("[PM] agenten skrev en felrad på %d tecken, som PM hoppade över\n", tecken)))
+		}
+		if err := lasRader(stderr, utdata.skrivRad, forLangStderr); err != nil {
 			lasfel <- err
 		}
 	}()
@@ -222,6 +225,8 @@ func (u *synkadUtdata) String() string {
 // lasRader läser utdata rad för rad. En rad som är större än taket kastas i
 // bitar i stället för att stoppa läsningen. Slutar vi läsa fylls processens
 // pipe, och agenten hänger sedan tills timeouten slår till.
+//
+// Raden som hantera får återanvänds nästa varv. Den som sparar den måste kopiera.
 func lasRader(r io.Reader, hantera func([]byte), forLang func(int)) error {
 	lasare := bufio.NewReaderSize(r, 64*1024)
 	var rad []byte
