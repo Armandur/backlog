@@ -247,20 +247,22 @@ func kontrolleraBefintligtRepo(sokvag string) error {
 	return nil
 }
 
+// begripligtProjektfel översätter service-lagrets fel till svensk text. Den
+// frågar med errors.Is, så en omformulering i service-lagret ändrar inte vad
+// användaren får se.
 func begripligtProjektfel(err error, alias string) (string, int) {
-	text := err.Error()
 	switch {
-	case strings.Contains(text, "UNIQUE constraint failed: projects.alias"):
+	case errors.Is(err, service.ErrAliasTaken):
 		return fmt.Sprintf("aliaset %q används redan", alias), http.StatusConflict
-	case strings.Contains(text, "alias is required"):
+	case errors.Is(err, service.ErrAliasRequired):
 		return "ange ett alias", http.StatusBadRequest
-	case strings.Contains(text, "alias must be lowercase"):
+	case errors.Is(err, service.ErrAliasInvalid):
 		return "alias får bara innehålla små bokstäver, siffror och bindestreck", http.StatusBadRequest
-	case strings.Contains(text, "alias exceeds max length"):
+	case errors.Is(err, service.ErrAliasTooLong):
 		return "alias får innehålla högst 64 tecken", http.StatusBadRequest
-	case strings.Contains(text, "name is required"):
+	case errors.Is(err, service.ErrNameRequired):
 		return "ange projektets namn", http.StatusBadRequest
-	case strings.Contains(text, "name exceeds max length"):
+	case errors.Is(err, service.ErrNameTooLong):
 		return "projektets namn får innehålla högst 255 tecken", http.StatusBadRequest
 	default:
 		return "PM kunde inte registrera projektet", http.StatusInternalServerError

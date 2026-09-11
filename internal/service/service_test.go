@@ -98,6 +98,26 @@ func TestProjectAliasValidation(t *testing.T) {
 	}
 }
 
+func TestProjectCreateReturnsSentinelErrors(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	svc := service.NewProjectService(db)
+
+	_, err := svc.Create(ctx, models.CreateProjectInput{Alias: "", Name: "N", Actor: testActor})
+	require.ErrorIs(t, err, service.ErrAliasRequired)
+
+	_, err = svc.Create(ctx, models.CreateProjectInput{Alias: "UPPER", Name: "N", Actor: testActor})
+	require.ErrorIs(t, err, service.ErrAliasInvalid)
+
+	_, err = svc.Create(ctx, models.CreateProjectInput{Alias: "namnlos", Name: "", Actor: testActor})
+	require.ErrorIs(t, err, service.ErrNameRequired)
+
+	_, err = svc.Create(ctx, models.CreateProjectInput{Alias: "upptaget", Name: "Först", Actor: testActor})
+	require.NoError(t, err)
+	_, err = svc.Create(ctx, models.CreateProjectInput{Alias: "upptaget", Name: "Sedan", Actor: testActor})
+	require.ErrorIs(t, err, service.ErrAliasTaken)
+}
+
 // ---- Task ----
 
 func TestTaskCRUD(t *testing.T) {

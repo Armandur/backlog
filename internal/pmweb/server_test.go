@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/mazen160/backlog/internal/models"
 	"github.com/mazen160/backlog/internal/pm"
 	"github.com/mazen160/backlog/internal/repo"
+	"github.com/mazen160/backlog/internal/service"
 	"github.com/mazen160/backlog/internal/timeutil"
 )
 
@@ -684,5 +686,27 @@ func TestForeslaAgentAnvanderAgentTillagdEfterStart(t *testing.T) {
 	}
 	if forslag.Namn != "efterstart" {
 		t.Fatalf("fel agent svarade: %+v", forslag)
+	}
+}
+
+func TestBegripligtProjektfelFoljerSentinelIntePratetOmFelet(t *testing.T) {
+	fall := []struct {
+		namn      string
+		err       error
+		kod       int
+		meddeland string
+	}{
+		{"aliaset upptaget", fmt.Errorf("en helt annan formulering: %w", service.ErrAliasTaken), http.StatusConflict, "aliaset \"krock\" används redan"},
+		{"alias saknas", fmt.Errorf("omskrivet: %w", service.ErrAliasRequired), http.StatusBadRequest, "ange ett alias"},
+		{"namnet för långt", fmt.Errorf("omskrivet: %w", service.ErrNameTooLong), http.StatusBadRequest, "projektets namn får innehålla högst 255 tecken"},
+		{"okänt fel", errors.New("disken är full"), http.StatusInternalServerError, "PM kunde inte registrera projektet"},
+	}
+	for _, f := range fall {
+		t.Run(f.namn, func(t *testing.T) {
+			meddelande, kod := begripligtProjektfel(f.err, "krock")
+			if kod != f.kod || meddelande != f.meddeland {
+				t.Fatalf("fick %d %q, ville ha %d %q", kod, meddelande, f.kod, f.meddeland)
+			}
+		})
 	}
 }

@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/mazen160/backlog/internal/ids"
 	"github.com/mazen160/backlog/internal/models"
@@ -13,6 +15,17 @@ import (
 )
 
 var aliasRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+
+// Sentinel errors so callers can react with errors.Is instead of matching the
+// message text. A reworded message must not silently change how a UI answers.
+var (
+	ErrAliasRequired = errors.New("alias is required")
+	ErrAliasInvalid  = errors.New("alias must be lowercase alphanumeric with optional hyphens")
+	ErrAliasTooLong  = errors.New("alias exceeds max length of 64 characters")
+	ErrAliasTaken    = errors.New("project alias is already taken")
+	ErrNameRequired  = errors.New("name is required")
+	ErrNameTooLong   = errors.New("name exceeds max length of 255 characters")
+)
 
 type ProjectService struct {
 	db       *sql.DB
@@ -30,19 +43,19 @@ func NewProjectService(db *sql.DB) *ProjectService {
 
 func (s *ProjectService) Create(ctx context.Context, in models.CreateProjectInput) (*models.Project, error) {
 	if in.Alias == "" {
-		return nil, fmt.Errorf("alias is required")
+		return nil, ErrAliasRequired
 	}
 	if !aliasRe.MatchString(in.Alias) {
-		return nil, fmt.Errorf("alias must be lowercase alphanumeric with optional hyphens")
+		return nil, ErrAliasInvalid
 	}
 	if len(in.Alias) > 64 {
-		return nil, fmt.Errorf("alias exceeds max length of 64 characters")
+		return nil, ErrAliasTooLong
 	}
 	if in.Name == "" {
-		return nil, fmt.Errorf("name is required")
+		return nil, ErrNameRequired
 	}
 	if len(in.Name) > 255 {
-		return nil, fmt.Errorf("name exceeds max length of 255 characters")
+		return nil, ErrNameTooLong
 	}
 	now := timeutil.Now()
 	p := &models.Project{
@@ -55,6 +68,9 @@ func (s *ProjectService) Create(ctx context.Context, in models.CreateProjectInpu
 		UpdatedAt:   now,
 	}
 	if err := s.projects.Insert(ctx, p); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: projects.alias") {
+			return nil, fmt.Errorf("%w: %s", ErrAliasTaken, in.Alias)
+		}
 		return nil, fmt.Errorf("create project: %w", err)
 	}
 	s.log(ctx, p.ID, "project", p.ID, "created",
