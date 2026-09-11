@@ -1357,7 +1357,7 @@ func TestForeslaNyTaskAvvisarKortTextUtanAgentanrop(t *testing.T) {
 	}
 }
 
-func TestForeslaNyTaskKortArLangSvenskTitelPaByte(t *testing.T) {
+func TestForeslaNyTaskKortArLangSvenskTitelPaTecken(t *testing.T) {
 	srv, db := testServer(t)
 	svar, err := json.Marshal(nyttTaskForslag{
 		Titel: strings.Repeat("å", 300), Beskrivning: "## Kontext\nText", Typ: models.TaskTypeTask, Prioritet: 3,
@@ -1377,8 +1377,9 @@ func TestForeslaNyTaskKortArLangSvenskTitelPaByte(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&forslag); err != nil {
 		t.Fatal(err)
 	}
-	if len(forslag.Titel) > 255 || !utf8.ValidString(forslag.Titel) {
-		t.Fatalf("titeln blev %d byte och giltig UTF-8=%t", len(forslag.Titel), utf8.ValidString(forslag.Titel))
+	// Tasktjänsten mäter i tecken, så kortningen ska göra det också.
+	if len([]rune(forslag.Titel)) > 255 || !utf8.ValidString(forslag.Titel) {
+		t.Fatalf("titeln blev %d tecken och giltig UTF-8=%t", len([]rune(forslag.Titel)), utf8.ValidString(forslag.Titel))
 	}
 	verifieraIngaTasks(t, db)
 }

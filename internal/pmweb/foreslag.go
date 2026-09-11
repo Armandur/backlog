@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/mazen160/backlog/internal/models"
 	"github.com/mazen160/backlog/internal/pm"
@@ -133,7 +132,7 @@ func tolkaNyttTaskForslag(svar string, forslag *nyttTaskForslag) error {
 	if err := json.Unmarshal([]byte(svar), forslag); err != nil {
 		return errors.New("agenten svarade inte med giltig JSON")
 	}
-	forslag.Titel = kortaTitelTillByte(strings.TrimSpace(forslag.Titel), 255)
+	forslag.Titel = kortaTitel(strings.TrimSpace(forslag.Titel), 255)
 	forslag.Beskrivning = strings.TrimSpace(forslag.Beskrivning)
 	if err := service.ValidateTaskTitle(forslag.Titel); err != nil {
 		return err
@@ -166,15 +165,14 @@ Text:
 %s`, strings.Join(typer, ", "), text)
 }
 
-func kortaTitelTillByte(titel string, maxByte int) string {
-	if len(titel) <= maxByte {
+// kortaTitel klipper på tecken, samma enhet som tasktjänsten mäter i. Klipper
+// vi på byte kapas en svensk titel vid halva den tillåtna längden.
+func kortaTitel(titel string, maxTecken int) string {
+	tecken := []rune(titel)
+	if len(tecken) <= maxTecken {
 		return titel
 	}
-	kortad := titel[:maxByte]
-	for !utf8.ValidString(kortad) {
-		kortad = kortad[:len(kortad)-1]
-	}
-	return kortad
+	return string(tecken[:maxTecken])
 }
 
 func (s *Server) foreslaTask(w http.ResponseWriter, r *http.Request) {
@@ -333,7 +331,9 @@ func (s *Server) hamtaKlassningsvarden(ctx context.Context) (klassningsvarden, e
 		laggTillKlassningsvarde(modeller, agent.Modell)
 		laggTillKlassningsvarde(anstrangningar, agent.Anstrangning)
 	}
-	korningar, err := pm.NewKorningStore(s.db).Lista(ctx, "", 0)
+	// Bara de senaste körningarna behövs. Utan gräns läses hela tabellen vid
+	// varje klassning, och den växer.
+	korningar, err := pm.NewKorningStore(s.db).Lista(ctx, "", 200)
 	if err != nil {
 		return klassningsvarden{}, err
 	}
