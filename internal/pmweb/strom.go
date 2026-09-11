@@ -76,13 +76,14 @@ func (s *Server) strommaKorning(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		foreStatus := korning.Status
-		korning, err = store.StadaOmOvergiven(r.Context(), korning.ID)
+		var stadad bool
+		korning, stadad, err = store.StadaOmOvergiven(r.Context(), korning.ID)
 		if err != nil {
 			return
 		}
-		// Bytte status under vår egen poll saknar processen, alltså avbröts den.
-		avbruten = avbruten || (!avslutad(foreStatus) && korning.Status == pm.StatusFel)
+		// Bara städningen vet att processen var borta. Ett vanligt fel från
+		// agenten ska behålla sitt eget besked.
+		avbruten = avbruten || stadad
 		if avslutad(korning.Status) && len(ofullstandig) == 0 {
 			if fil == nil {
 				// Körningen hann bli klar utan att skicka en enda händelse.

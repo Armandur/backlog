@@ -1120,3 +1120,44 @@ func TestStromAvslutarOvergivenKorning(t *testing.T) {
 		t.Fatalf("strömmen sa inte att körningen avbröts: %s", kropp)
 	}
 }
+
+func TestStromKallarEttVanligtFelForFelInteAvbrott(t *testing.T) {
+	srv, db := testServer(t)
+	dir := t.TempDir()
+	logg := filepath.Join(dir, "k.log")
+	if err := os.WriteFile(pm.HandelseSokvag(logg), []byte(`{"tid":1,"sort":"text","text":"började"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var projektID string
+	if err := db.QueryRow(`SELECT id FROM projects LIMIT 1`).Scan(&projektID); err != nil {
+		t.Fatal(err)
+	}
+	taskID := ids.New()
+	nu := timeutil.Now()
+	if _, err := db.Exec(`INSERT INTO tasks(id, project_id, task_seq, title, status, type, priority, created_at, updated_at)
+		VALUES(?,?,?,?,?,?,?,?,?)`, taskID, projektID, 2, "Prov", "doing", "task", 3, nu, nu); err != nil {
+		t.Fatal(err)
+	}
+	// Körningen ägs av den levande testprocessen, så städningen rör den inte.
+	id := ids.New()
+	if _, err := db.Exec(`INSERT INTO pm_korningar(id, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, logg_sokvag, skapad_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		id, projektID, taskID, "TASK-2", "claude", "", pm.StatusKor, dir, os.Getpid(), logg, nu); err != nil {
+		t.Fatal(err)
+	}
+	// Agenten misslyckas på egen hand medan strömmen läser.
+	go func() {
+		time.Sleep(400 * time.Millisecond)
+		_ = pm.NewKorningStore(db).Avsluta(context.Background(), id, pm.StatusFel, 137, logg)
+	}()
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/korningar/"+id+"/strom", nil))
+	kropp := w.Body.String()
+	if !strings.Contains(kropp, "avslutades med fel (exitkod 137)") {
+		t.Fatalf("ett vanligt fel beskrevs inte som fel: %s", kropp)
+	}
+	if strings.Contains(kropp, "avbröts") {
+		t.Fatalf("ett vanligt fel beskrevs som avbrott: %s", kropp)
+	}
+}
