@@ -25,8 +25,10 @@ function koText(k, alla) {
   const upptaget = alla.some((a) => a.id !== k.id && a.status === "kor" && a.repo_path === k.repo_path);
   return upptaget ? "köad: repot är upptaget av en annan körning" : "köad, startar strax";
 }
+// Statusvärdena i databasen är ASCII, etiketten i vyn är svensk.
+const STATUS_ETIKETT = { koad: "Köad", kor: "Kör", klar: "Klar", fel: "Fel" };
 function pill(status) {
-  return `<span class="pill p-${status}">${status}</span>`;
+  return `<span class="pill p-${esc(status)}">${esc(STATUS_ETIKETT[status] || status)}</span>`;
 }
 function rad(html) {
   const el = document.createElement("div");
