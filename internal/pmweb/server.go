@@ -242,13 +242,14 @@ func (s *Server) hamtaAgenter(w http.ResponseWriter, r *http.Request) {
 // defaulterna ta över tyst.
 func (s *Server) aktuelltRegister() *pm.AgentRegister {
 	konfig, err := pm.LasKonfig(konfigWorkDir())
-	if err != nil || konfig.Kalla == "" {
-		if s.register != nil {
-			return s.register
-		}
-		if err != nil {
-			return pm.NewAgentRegister()
-		}
+	if err == nil && konfig.Kalla != "" {
+		return pm.FranKonfig(konfig)
+	}
+	if s.register != nil {
+		return s.register
+	}
+	if err != nil {
+		return pm.NewAgentRegister()
 	}
 	return pm.FranKonfig(konfig)
 }
