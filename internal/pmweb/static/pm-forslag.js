@@ -60,15 +60,31 @@ document.querySelectorAll('input[name="tasklage"]').forEach((val) => {
 });
 visaTasklage(sparatTasklage() || "auto");
 
+// Servern mäter titeln i byte, inte i tecken. Ett svenskt å tar två byte, så
+// 255 tecken kan vara för långt. Klipp därför på byte, men aldrig mitt i ett
+// tecken.
+const TITEL_MAX_BYTE = 255;
+function byteLangd(text) {
+  return new TextEncoder().encode(text).length;
+}
+function kortaTillByte(text, max) {
+  let tecken = Array.from(text);
+  while (byteLangd(tecken.join("")) > max) {
+    tecken = tecken.slice(0, -1);
+  }
+  return tecken.join("");
+}
+
 // Rutan tar emot allt från en mening till en inklistrad logg. Första raden
 // blir titeln, resten beskrivningen. Berikningen skriver ändå om båda.
 function delaAutotext(text) {
   const rader = text.trim().split("\n");
   let titel = rader[0].trim();
   let resten = rader.slice(1).join("\n").trim();
-  if (titel.length > 255) {
-    resten = (titel.slice(255) + "\n" + resten).trim();
-    titel = titel.slice(0, 255).trim();
+  if (byteLangd(titel) > TITEL_MAX_BYTE) {
+    const kortad = kortaTillByte(titel, TITEL_MAX_BYTE);
+    resten = (titel.slice(kortad.length) + "\n" + resten).trim();
+    titel = kortad.trim();
   }
   return { titel, beskrivning: resten };
 }
