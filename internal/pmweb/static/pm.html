@@ -356,6 +356,57 @@
     <div class="kommentarlista" id="kommentarer"></div>
   </div>
 </aside>
+<aside class="drawer" id="redigeradrawer" aria-label="Redigera task">
+  <header><h3 id="redigeraTitel">Redigera task</h3><button class="x" id="redigeraStang" aria-label="Stäng">×</button></header>
+  <form id="redigeraform" class="taskforslagsform">
+    <div class="bd">
+      <div class="falt"><label for="redTitel">Titel</label><input id="redTitel" maxlength="255" required></div>
+      <div class="falt"><label for="redBeskrivning">Beskrivning</label><textarea id="redBeskrivning" rows="6"></textarea></div>
+      <div class="faltgrid">
+        <div class="falt"><label for="redTyp">Typ</label>
+          <select id="redTyp">
+            <option value="task">task</option><option value="bug">bugg</option>
+            <option value="issue">problem</option><option value="improvement">förbättring</option>
+            <option value="feature">funktion</option><option value="vulnerability">sårbarhet</option>
+            <option value="chore">underhåll</option><option value="spike">utredning</option>
+            <option value="bucket-list">idé</option>
+          </select>
+        </div>
+        <div class="falt"><label for="redPrioritet">Prioritet</label>
+          <select id="redPrioritet"><option value="1">P1</option><option value="2">P2</option><option value="3">P3</option><option value="4">P4</option><option value="5">P5</option></select>
+        </div>
+        <div class="falt"><label for="redStatus">Status</label>
+          <select id="redStatus">
+            <option value="todo">att göra</option><option value="doing">pågår</option>
+            <option value="review">granskas</option><option value="blocked">blockerad</option>
+            <option value="done">klar</option><option value="cancelled">avbruten</option>
+          </select>
+        </div>
+      </div>
+      <div class="falt">
+        <label for="redEtikett">Etiketter</label>
+        <div class="etikettrad" id="redEtiketter"></div>
+        <div class="etikettval">
+          <input id="redEtikett" list="redEtikettforslag" placeholder="ny eller befintlig etikett" spellcheck="false">
+          <datalist id="redEtikettforslag"></datalist>
+          <button type="button" class="btn sm" id="redLaggEtikett">Lägg till</button>
+        </div>
+      </div>
+      <details class="planruta" id="redPlanruta">
+        <summary>Plan</summary>
+        <div class="markdown" id="redPlan"></div>
+        <div class="falt"><label for="redPlanTitel">Planens titel</label><input id="redPlanTitel" placeholder="Plan"></div>
+        <div class="falt"><label for="redPlanText">Planens innehåll</label><textarea id="redPlanText" rows="6" placeholder="Skriv planen med markdown."></textarea></div>
+        <button type="button" class="btn sm" id="redSparaPlan">Spara planen</button>
+      </details>
+      <p class="fel-text" id="redFel" role="alert"></p>
+    </div>
+    <footer>
+      <button type="button" class="btn fara" id="redTaBort">Ta bort tasken</button>
+      <button type="submit" class="btn pri" id="redSpara">Spara</button>
+    </footer>
+  </form>
+</aside>
 <aside class="drawer" id="forslagsdrawer" aria-label="Förslag för task">
   <header><h3 id="forslagTitel">Taskförslag</h3><button class="x" id="forslagStang" aria-label="Stäng">×</button></header>
   <form id="taskforslagsform" class="taskforslagsform">
@@ -421,5 +472,6 @@
 <script src="/pm-static/pm-strom.js"></script>
 <script src="/pm-static/pm-forslag.js"></script>
 <script src="/pm-static/pm-projektstad.js"></script>
+<script src="/pm-static/pm-taskredigering.js"></script>
 </body>
 </html>

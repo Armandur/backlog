@@ -2317,3 +2317,180 @@ func TestArkiveringBevararAndraTestserverblock(t *testing.T) {
 		t.Fatalf("det andra projektets block försvann: %+v", konfig.Testserver)
 	}
 }
+
+// taskForRedigering lägger en task i demo-projektet och ger dess id och ref.
+func taskForRedigering(t *testing.T, db *sql.DB, seq int, titel string) (string, string) {
+	t.Helper()
+	var projectID string
+	if err := db.QueryRow(`SELECT id FROM projects WHERE alias='demo'`).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+	nu := timeutil.Now()
+	taskID := ids.New()
+	if _, err := db.Exec(`INSERT INTO tasks(id, project_id, title, description, type, status, priority, task_seq, created_at, updated_at)
+	                      VALUES(?,?,?,?,'task','todo',3,?,?,?)`, taskID, projectID, titel, "text", seq, nu, nu); err != nil {
+		t.Fatal(err)
+	}
+	return taskID, fmt.Sprintf("TASK-%d", seq)
+}
+
+func TestRedigeraTaskViaRutten(t *testing.T) {
+	srv, db := testServer(t)
+	_, ref := taskForRedigering(t, db, 70, "Gammal titel")
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/tasks/"+ref,
+		bytes.NewBufferString(`{"titel":"Ny titel","beskrivning":"Ny text","typ":"bug","prioritet":1,"status":"doing"}`))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PATCH gav %d: %s", w.Code, w.Body.String())
+	}
+	var svar struct {
+		Titel     string `json:"titel"`
+		Typ       string `json:"typ"`
+		Prioritet int    `json:"prioritet"`
+		Status    string `json:"status"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &svar); err != nil {
+		t.Fatal(err)
+	}
+	if svar.Titel != "Ny titel" || svar.Typ != "bug" || svar.Prioritet != 1 || svar.Status != "doing" {
+		t.Fatalf("fälten sparades inte: %+v", svar)
+	}
+}
+
+func TestRedigeraTaskMedForLangTitelGerBegripligtFel(t *testing.T) {
+	srv, db := testServer(t)
+	_, ref := taskForRedigering(t, db, 71, "Titel")
+
+	lang, _ := json.Marshal(map[string]string{"titel": strings.Repeat("å", 256)})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/tasks/"+ref, bytes.NewReader(lang))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("för lång titel gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "255 tecken") {
+		t.Fatalf("felet hjälper inte användaren: %s", w.Body.String())
+	}
+}
+
+func TestTaBortTaskViaRutten(t *testing.T) {
+	srv, db := testServer(t)
+	_, ref := taskForRedigering(t, db, 72, "Task att ta bort")
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/tasks/"+ref, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("DELETE gav %d: %s", w.Code, w.Body.String())
+	}
+	var antal int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE task_seq=72`).Scan(&antal); err != nil {
+		t.Fatal(err)
+	}
+	if antal != 0 {
+		t.Fatal("tasken finns kvar")
+	}
+}
+
+func TestTaBortTaskMedKoadKorningAvvisas(t *testing.T) {
+	srv, db := testServer(t)
+	taskID, ref := taskForRedigering(t, db, 73, "Task med körning")
+	var projectID string
+	if err := db.QueryRow(`SELECT id FROM projects WHERE alias='demo'`).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+	// En köad körning väntar på sin tur efter TASK-1818 och måste också blockera.
+	if _, err := db.Exec(`INSERT INTO pm_korningar(id, project_id, task_id, task_ref, agent, status, skapad_at)
+	                      VALUES(?,?,?,?,'claude',?,?)`,
+		ids.New(), projectID, taskID, ref, pm.StatusKoad, timeutil.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/tasks/"+ref, nil))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("borttagning under körning gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "väntar på tur") {
+		t.Fatalf("felet säger inte vad som pågår: %s", w.Body.String())
+	}
+	var antal int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE task_seq=73`).Scan(&antal); err != nil {
+		t.Fatal(err)
+	}
+	if antal != 1 {
+		t.Fatal("tasken togs bort trots körningen")
+	}
+}
+
+func TestEtiketterViaRutterna(t *testing.T) {
+	srv, db := testServer(t)
+	_, ref := taskForRedigering(t, db, 74, "Task med etiketter")
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/tasks/"+ref+"/etiketter", bytes.NewBufferString(`{"namn":"brådskande"}`))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("etiketten gick inte att lägga till: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "brådskande") {
+		t.Fatalf("svaret saknar etiketten: %s", w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/tasks/"+ref+"/etiketter/br%C3%A5dskande", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("etiketten gick inte att ta bort: %d %s", w.Code, w.Body.String())
+	}
+	var kvar struct {
+		Etiketter []struct {
+			Name string `json:"name"`
+		} `json:"etiketter"`
+		Valbara []struct {
+			Name string `json:"name"`
+		} `json:"valbara_etiketter"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &kvar); err != nil {
+		t.Fatal(err)
+	}
+	if len(kvar.Etiketter) != 0 {
+		t.Fatalf("etiketten sitter kvar på tasken: %+v", kvar.Etiketter)
+	}
+	// Etiketten själv ska finnas kvar i projektet, andra tasks kan använda den.
+	if len(kvar.Valbara) != 1 || kvar.Valbara[0].Name != "brådskande" {
+		t.Fatalf("projektets etikett försvann: %+v", kvar.Valbara)
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/tasks/"+ref+"/etiketter/finns-inte", nil))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("okänd etikett gav %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestPlanOchDetaljerViaRutterna(t *testing.T) {
+	srv, db := testServer(t)
+	_, ref := taskForRedigering(t, db, 75, "Task med plan")
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/tasks/"+ref+"/plan",
+		bytes.NewBufferString(`{"titel":"Genomförande","innehall":"## Steg\n\n1. Först\n2. Sedan"}`))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("planen sparades inte: %d %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/tasks/"+ref+"/detaljer", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("detaljerna gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Genomförande") {
+		t.Fatalf("planen syns inte i detaljerna: %s", w.Body.String())
+	}
+}

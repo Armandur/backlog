@@ -67,10 +67,11 @@ type nyttTaskForslag struct {
 }
 
 type uppdateraTaskBody struct {
-	Titel       *string          `json:"titel"`
-	Beskrivning *string          `json:"beskrivning"`
-	Typ         *models.TaskType `json:"typ"`
-	Prioritet   *int             `json:"prioritet"`
+	Titel       *string            `json:"titel"`
+	Beskrivning *string            `json:"beskrivning"`
+	Typ         *models.TaskType   `json:"typ"`
+	Prioritet   *int               `json:"prioritet"`
+	Status      *models.TaskStatus `json:"status"`
 }
 
 func (s *Server) foreslaNyTask(w http.ResponseWriter, r *http.Request) {
@@ -393,17 +394,29 @@ func (s *Server) uppdateraTask(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, errors.New("tasken finns inte"), http.StatusNotFound)
 		return
 	}
+	// Statusen byter väg genom Move, så den flyttas först. Faller fältbytet
+	// efteråt säger svaret vilken halva som landade.
+	if body.Status != nil {
+		if _, err := tasks.Move(r.Context(), r.PathValue("id"), *body.Status, s.aktor); err != nil {
+			svaraFel(w, errors.New(begripligtRedigeringsfel(err)), http.StatusBadRequest)
+			return
+		}
+	}
 	task, err := tasks.Update(r.Context(), r.PathValue("id"), models.UpdateTaskInput{
 		Title: body.Titel, Description: body.Beskrivning, Type: body.Typ, Priority: body.Prioritet,
 	}, s.aktor)
 	if err != nil {
-		meddelande, kod := begripligtTaskfel(err)
-		svaraFel(w, errors.New(meddelande), kod)
+		meddelande := begripligtRedigeringsfel(err)
+		if body.Status != nil {
+			meddelande = "statusen är ändrad, men resten sparades inte: " + meddelande
+		}
+		svaraFel(w, errors.New(meddelande), http.StatusBadRequest)
 		return
 	}
 	svaraJSON(w, http.StatusOK, map[string]any{
 		"ref": fmt.Sprintf("TASK-%d", task.Seq), "titel": task.Title,
-		"beskrivning": task.Description, "typ": task.Type, "prioritet": task.Priority,
+		"beskrivning": task.Description, "typ": task.Type,
+		"prioritet": task.Priority, "status": task.Status,
 	})
 }
 

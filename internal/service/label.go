@@ -3,11 +3,19 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/mazen160/backlog/internal/ids"
 	"github.com/mazen160/backlog/internal/models"
 	"github.com/mazen160/backlog/internal/repo"
+)
+
+// Typade fel, så den som anropar kan svara utan att läsa feltexten.
+var (
+	ErrLabelProjectRequired = errors.New("project_id is required")
+	ErrLabelNameRequired    = errors.New("name is required")
+	ErrLabelNotFound        = errors.New("label not found")
 )
 
 type LabelService struct {
@@ -26,10 +34,10 @@ func NewLabelService(db *sql.DB) *LabelService {
 
 func (s *LabelService) Create(ctx context.Context, in models.CreateLabelInput) (*models.Label, error) {
 	if in.ProjectID == "" {
-		return nil, fmt.Errorf("project_id is required")
+		return nil, ErrLabelProjectRequired
 	}
 	if in.Name == "" {
-		return nil, fmt.Errorf("name is required")
+		return nil, ErrLabelNameRequired
 	}
 	// Upsert behaviour: return existing if name already exists
 	existing, err := s.labels.GetByName(ctx, in.ProjectID, in.Name)
@@ -93,7 +101,7 @@ func (s *LabelService) Detach(ctx context.Context, taskID string, projectID stri
 		return err
 	}
 	if l == nil {
-		return fmt.Errorf("label %q not found", labelName)
+		return fmt.Errorf("%w: %q", ErrLabelNotFound, labelName)
 	}
 	if err := s.labels.Detach(ctx, taskID, l.ID); err != nil {
 		return err
@@ -110,7 +118,7 @@ func (s *LabelService) Delete(ctx context.Context, projectID, name string, actor
 		return err
 	}
 	if l == nil {
-		return fmt.Errorf("label %q not found", name)
+		return fmt.Errorf("%w: %q", ErrLabelNotFound, name)
 	}
 	s.logActivity(ctx, projectID, "label", l.ID, "deleted",
 		fmt.Sprintf("Deleted label %q", name), act)
