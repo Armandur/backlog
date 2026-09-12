@@ -33,8 +33,10 @@ func (s *Server) hamtaKonfig(w http.ResponseWriter, _ *http.Request) {
 		svaraFel(w, err, http.StatusInternalServerError)
 		return
 	}
+	// Hemligheterna lämnar aldrig servern. Konfigvyn ser bara vilka
+	// miljövariabler som är satta.
 	svaraJSON(w, http.StatusOK, konfigSvar{
-		Konfig: konfig,
+		Konfig: konfig.Maskera(),
 		Sokvag: filepath.Join(workspace, pm.KonfigFil),
 		Saknas: konfig.Kalla == "",
 	})
@@ -47,17 +49,25 @@ func (s *Server) skrivKonfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	konfig.Kalla = ""
+	workspace := konfigWorkDir()
+	sparad, err := pm.LasKonfig(workspace)
+	if err != nil {
+		svaraFel(w, err, http.StatusInternalServerError)
+		return
+	}
+	// Ett maskerat värde betyder att användaren lämnade hemligheten orörd.
+	konfig = konfig.AterstallMaskerat(sparad)
 	if err := konfig.Validera(); err != nil {
 		svaraFel(w, err, http.StatusBadRequest)
 		return
 	}
-	workspace := konfigWorkDir()
 	if err := pm.SkrivKonfig(workspace, konfig); err != nil {
 		svaraFel(w, err, http.StatusInternalServerError)
 		return
 	}
-	konfig.Kalla = filepath.Join(workspace, pm.KonfigFil)
-	svaraJSON(w, http.StatusOK, konfigSvar{Konfig: konfig, Sokvag: konfig.Kalla})
+	sokvag := filepath.Join(workspace, pm.KonfigFil)
+	konfig.Kalla = sokvag
+	svaraJSON(w, http.StatusOK, konfigSvar{Konfig: konfig.Maskera(), Sokvag: sokvag})
 }
 
 type provaKonfigBody struct {

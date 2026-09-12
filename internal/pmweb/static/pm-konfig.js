@@ -65,7 +65,7 @@ function renderaTestservrar() {
           <label class="falt">Hälsosökväg, valfri<input data-testserverfalt="halsa" value="${esc(t.halsa || "")}" placeholder="/" spellcheck="false"></label>
         </div>
         <label class="falt">Args, ett argument per rad<textarea data-testserverfalt="args" rows="4" spellcheck="false">${esc(rader(t.args))}</textarea></label>
-        <label class="falt"><span>Miljö, en <code>NYCKEL=värde</code> per rad</span><textarea data-testserverfalt="miljo" rows="3" spellcheck="false">${esc(miljoRader(t.miljo))}</textarea></label>
+        <label class="falt"><span>Miljö, en <code>NYCKEL=värde</code> per rad. Ett sparat värde visas som <code>***sparad***</code> och byts först när du skriver ett nytt</span><textarea data-testserverfalt="miljo" rows="3" spellcheck="false">${esc(miljoRader(t.miljo))}</textarea></label>
       </fieldset>
     </article>`;
   }).join("") || '<div class="tom">Inga projekt finns att konfigurera.</div>';
@@ -101,7 +101,7 @@ function renderaKonfig() {
           <label class="falt">Strömmande utdata<select data-agentfalt="strom"><option value=""${!a.strom ? " selected" : ""}>ingen</option><option value="claude-json"${a.strom === "claude-json" ? " selected" : ""}>claude-json</option><option value="codex-json"${a.strom === "codex-json" ? " selected" : ""}>codex-json</option></select></label>
           <label class="kryss detaljkryss"><input data-agentfalt="mcp" type="checkbox"${a.mcp ? " checked" : ""}> Lägg till MCP-konfiguration</label>
         </div>
-        <label class="falt"><span>Miljö, en <code>NYCKEL=värde</code> per rad</span><textarea data-agentfalt="miljo" rows="3" spellcheck="false">${esc(miljoRader(a.miljo))}</textarea></label>
+        <label class="falt"><span>Miljö, en <code>NYCKEL=värde</code> per rad. Ett sparat värde visas som <code>***sparad***</code> och byts först när du skriver ett nytt</span><textarea data-agentfalt="miljo" rows="3" spellcheck="false">${esc(miljoRader(a.miljo))}</textarea></label>
       </details>
       <pre class="provsvar" hidden></pre>
     </article>`;

@@ -2015,3 +2015,104 @@ func TestSkapaProjektUtanStartkommandoLamnarKonfigenTom(t *testing.T) {
 		t.Fatalf("PM skrev en konfigurationsfil i onödan: %v", err)
 	}
 }
+
+// hemligKonfig skriver en pm.toml med hemligheter i alla tre miljöfälten.
+func hemligKonfig(t *testing.T, dir string) {
+	t.Helper()
+	konfig := pm.StandardKonfig()
+	agent := konfig.Agenter["claude"]
+	agent.Miljo = map[string]string{"API_NYCKEL": "hemlig-nyckel"}
+	konfig.Agenter["claude"] = agent
+	konfig.Krok.Miljo = map[string]string{"KROK_TOKEN": "hemlig-krok"}
+	if err := pm.SkrivKonfig(dir, konfig); err != nil {
+		t.Fatalf("kunde inte skriva konfigurationen: %v", err)
+	}
+}
+
+func TestKonfigruttenSkickarIngaHemligheter(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	hemligKonfig(t, dir)
+	srv, _ := testServer(t)
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/konfig", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET gav %d: %s", w.Code, w.Body.String())
+	}
+	kropp := w.Body.String()
+	if strings.Contains(kropp, "hemlig-nyckel") || strings.Contains(kropp, "hemlig-krok") {
+		t.Fatalf("svaret innehåller hemligheter: %s", kropp)
+	}
+	if !strings.Contains(kropp, "API_NYCKEL") || !strings.Contains(kropp, pm.MaskeratVarde) {
+		t.Fatalf("svaret visar inte vilka variabler som är satta: %s", kropp)
+	}
+}
+
+func TestSparaKonfigBevararMaskeradHemlighet(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	hemligKonfig(t, dir)
+	srv, _ := testServer(t)
+
+	hamta := httptest.NewRecorder()
+	srv.ServeHTTP(hamta, httptest.NewRequest(http.MethodGet, "/api/konfig", nil))
+	kropp := hamta.Body.Bytes()
+
+	spara := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/konfig", bytes.NewReader(kropp))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(spara, req)
+	if spara.Code != http.StatusOK {
+		t.Fatalf("PUT gav %d: %s", spara.Code, spara.Body.String())
+	}
+	if strings.Contains(spara.Body.String(), "hemlig-nyckel") {
+		t.Fatalf("svaret på sparningen innehåller hemligheten: %s", spara.Body.String())
+	}
+
+	efter, err := pm.LasKonfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if efter.Agenter["claude"].Miljo["API_NYCKEL"] != "hemlig-nyckel" {
+		t.Fatalf("hemligheten försvann ur pm.toml: %+v", efter.Agenter["claude"].Miljo)
+	}
+	if efter.Krok.Miljo["KROK_TOKEN"] != "hemlig-krok" {
+		t.Fatalf("krokens hemlighet försvann: %+v", efter.Krok.Miljo)
+	}
+}
+
+func TestSparaKonfigSkriverNyttMiljovarde(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	hemligKonfig(t, dir)
+	srv, _ := testServer(t)
+
+	konfig, err := pm.LasKonfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := konfig.Agenter["claude"]
+	agent.Miljo = map[string]string{"API_NYCKEL": "ny-nyckel"}
+	konfig.Agenter["claude"] = agent
+	data, err := json.Marshal(konfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/konfig", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT gav %d: %s", w.Code, w.Body.String())
+	}
+
+	efter, err := pm.LasKonfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if efter.Agenter["claude"].Miljo["API_NYCKEL"] != "ny-nyckel" {
+		t.Fatalf("det nya värdet sparades inte: %+v", efter.Agenter["claude"].Miljo)
+	}
+}

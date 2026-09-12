@@ -248,3 +248,44 @@ func TestTestserverRundtripp(t *testing.T) {
 		t.Fatalf("pm.toml saknar testserversektionen: %s", data)
 	}
 }
+
+func TestAterstallMaskeratTarBortOkandMaskering(t *testing.T) {
+	// En nyckel som bara finns som maskering har inget sparat värde. Den får
+	// inte bli kvar, för då sparar PM maskeringen som om den vore hemligheten.
+	inkommande := Konfig{Agenter: map[string]AgentKonfig{
+		"claude": {Miljo: map[string]string{"NY": MaskeratVarde, "GAMMAL": MaskeratVarde, "EGEN": "eget"}},
+	}}
+	sparad := Konfig{Agenter: map[string]AgentKonfig{
+		"claude": {Miljo: map[string]string{"GAMMAL": "hemlig"}},
+	}}
+
+	ut := inkommande.AterstallMaskerat(sparad)
+	miljo := ut.Agenter["claude"].Miljo
+	if miljo["GAMMAL"] != "hemlig" {
+		t.Fatalf("den sparade hemligheten kom inte tillbaka: %+v", miljo)
+	}
+	if miljo["EGEN"] != "eget" {
+		t.Fatalf("ett eget värde försvann: %+v", miljo)
+	}
+	if _, finns := miljo["NY"]; finns {
+		t.Fatalf("en maskering utan sparat värde blev kvar: %+v", miljo)
+	}
+}
+
+func TestMaskeraRorInteOriginalet(t *testing.T) {
+	konfig := Konfig{
+		Agenter: map[string]AgentKonfig{"claude": {Miljo: map[string]string{"NYCKEL": "hemlig"}}},
+		Krok:    Krok{Miljo: map[string]string{"KROK": "hemlig"}},
+	}
+
+	maskerad := konfig.Maskera()
+	if maskerad.Agenter["claude"].Miljo["NYCKEL"] != MaskeratVarde {
+		t.Fatalf("värdet maskerades inte: %+v", maskerad.Agenter["claude"].Miljo)
+	}
+	if konfig.Agenter["claude"].Miljo["NYCKEL"] != "hemlig" {
+		t.Fatalf("maskeringen ändrade originalet: %+v", konfig.Agenter["claude"].Miljo)
+	}
+	if konfig.Krok.Miljo["KROK"] != "hemlig" {
+		t.Fatalf("maskeringen ändrade krokens original: %+v", konfig.Krok.Miljo)
+	}
+}
