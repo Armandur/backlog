@@ -305,6 +305,9 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
   #forslagsdrawer footer .btn { flex: 1 1 auto; }
 }
 
+.projektstad { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+.projektstad .meta { margin: 0; }
+
 /* Testserver */
 .testserverpanel { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 18px 0; }
 .testserverpanel h2, .testserverpanel p { margin: 0; }

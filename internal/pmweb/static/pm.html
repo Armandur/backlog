@@ -70,6 +70,12 @@
       <h1 id="ptitel">Projekt</h1>
       <p class="lead" id="pdesc"></p>
       <p class="begrepp">När du delar ut en task väljer PM en agent och startar en körning.</p>
+      <p class="projektstad">
+        <button type="button" class="btn sm" id="arkiveraProjekt">Arkivera projektet</button>
+        <button type="button" class="btn sm" id="aterstallProjekt" hidden>Återställ projektet</button>
+        <button type="button" class="btn sm fara" id="taBortProjekt" hidden>Ta bort permanent</button>
+        <span class="meta" id="projektstadText"></span>
+      </p>
       <section class="testserverpanel" id="testserverpanel">
         <div>
           <div class="testserverrubrik">
@@ -414,5 +420,6 @@
 <script src="/pm-static/pm-konfig.js"></script>
 <script src="/pm-static/pm-strom.js"></script>
 <script src="/pm-static/pm-forslag.js"></script>
+<script src="/pm-static/pm-projektstad.js"></script>
 </body>
 </html>

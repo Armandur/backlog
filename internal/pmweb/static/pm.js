@@ -62,6 +62,7 @@ async function laddaOversikt() {
   const o = await hamta(`/api/projects/${encodeURIComponent(alias)}/oversikt`);
   $("#ptitel").textContent = o.projekt.name;
   $("#pdesc").textContent = [o.projekt.description, o.projekt.repo_path && "Repo: " + o.projekt.repo_path].filter(Boolean).join(" ");
+  visaProjektstad(o.projekt);
   $("#nPagaende").textContent = o.korningar.length;
   $("#nRun").textContent = o.korningar.length || "";
   fyll("#pagaende", o.korningar, (k) => {
@@ -361,10 +362,11 @@ async function laddaAgenter() {
 async function laddaProjektval() {
   const valjare = $("#projektval");
   try {
-    const data = await hamta("/api/projects");
+    // Arkiverade projekt följer med, annars går de inte att hitta tillbaka till.
+    const data = await hamta("/api/projects?include_archived=true");
     const projekt = (data.projects || []).slice().sort((a, b) => a.name.localeCompare(b.name, "sv"));
     valjare.innerHTML = `<option value="">Välj projekt</option>` +
-      projekt.map((p) => `<option value="${esc(p.alias)}"${p.alias === alias ? " selected" : ""}>${esc(p.name)} (${esc(p.alias)})</option>`).join("");
+      projekt.map((p) => `<option value="${esc(p.alias)}"${p.alias === alias ? " selected" : ""}>${esc(p.name)} (${esc(p.alias)})${p.archived_at ? " - arkiverat" : ""}</option>`).join("");
   } catch {
     valjare.innerHTML = `<option value="">Kunde inte läsa projekten</option>`;
   }

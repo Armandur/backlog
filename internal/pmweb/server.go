@@ -59,6 +59,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 
 func (s *Server) rutter(upstream http.Handler) {
 	s.mux.HandleFunc("POST /api/projekt", s.skapaProjekt)
+	s.mux.HandleFunc("POST /api/projekt/{alias}/arkivera", s.arkiveraProjekt)
+	s.mux.HandleFunc("POST /api/projekt/{alias}/aterstall", s.aterstallProjekt)
+	s.mux.HandleFunc("DELETE /api/projekt/{alias}", s.taBortProjekt)
 	s.mux.HandleFunc("GET /api/projects/{alias}/samtal", s.hamtaSamtal)
 	s.mux.HandleFunc("POST /api/projects/{alias}/samtal", s.skrivSamtal)
 	// Utan metodmönster skulle en DELETE falla vidare till upstream och ge 404.

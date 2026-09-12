@@ -2201,3 +2201,119 @@ func TestSparaKonfigSkriverNyttMiljovarde(t *testing.T) {
 		t.Fatalf("det nya värdet sparades inte: %+v", efter.Agenter["claude"].Miljo)
 	}
 }
+
+func TestArkiveraAterstallOchTaBortProjektViaRutterna(t *testing.T) {
+	dir := t.TempDir()
+	srv := testServerIKatalog(t, dir)
+	bas := t.TempDir()
+	medProjektBas(t, bas)
+
+	if w := postProjekt(t, srv, skapaProjektBody{
+		Alias: "bortprojekt", Namn: "Bort", Lage: "nytt", Sokvag: "bortprojekt",
+		Startkommando: "npm run dev -- --port {port}",
+	}); w.Code != http.StatusCreated {
+		t.Fatalf("kunde inte skapa projektet: %s", w.Body.String())
+	}
+
+	// Ett projekt som inte är arkiverat får inte gå att ta bort.
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/projekt/bortprojekt", nil))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("borttagning utan arkivering gav %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projekt/bortprojekt/arkivera", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("arkiveringen gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "archived_at") {
+		t.Fatalf("svaret säger inte att projektet är arkiverat: %s", w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projekt/bortprojekt/aterstall", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("återställningen gav %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projekt/bortprojekt/arkivera", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("andra arkiveringen gav %d: %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/projekt/bortprojekt", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("borttagningen gav %d: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "varning") {
+		t.Fatalf("borttagningen varnade: %s", w.Body.String())
+	}
+
+	lista := httptest.NewRecorder()
+	srv.ServeHTTP(lista, httptest.NewRequest(http.MethodGet, "/api/projects?include_archived=true", nil))
+	if strings.Contains(lista.Body.String(), "bortprojekt") {
+		t.Fatalf("projektet finns kvar i listan: %s", lista.Body.String())
+	}
+
+	konfig, err := pm.LasKonfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, finns := konfig.Testserver["bortprojekt"]; finns {
+		t.Fatalf("testserverblocket finns kvar: %+v", konfig.Testserver)
+	}
+	// Koden på disken ska stå kvar, PM städar bara sitt eget.
+	if _, err := os.Stat(filepath.Join(bas, "bortprojekt", "README.md")); err != nil {
+		t.Fatalf("PM rörde koden på disken: %v", err)
+	}
+}
+
+func TestTaBortOkantProjektGer404(t *testing.T) {
+	dir := t.TempDir()
+	srv := testServerIKatalog(t, dir)
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/projekt/finns-inte", nil))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("okänt projekt gav %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestArkiveringBevararAndraTestserverblock(t *testing.T) {
+	dir := t.TempDir()
+	srv := testServerIKatalog(t, dir)
+	bas := t.TempDir()
+	medProjektBas(t, bas)
+
+	for _, alias := range []string{"kvar", "bort"} {
+		if w := postProjekt(t, srv, skapaProjektBody{
+			Alias: alias, Namn: alias, Lage: "nytt", Sokvag: alias,
+			Startkommando: "npm run dev -- --port {port}",
+		}); w.Code != http.StatusCreated {
+			t.Fatalf("kunde inte skapa %s: %s", alias, w.Body.String())
+		}
+	}
+
+	for _, vag := range []string{"/api/projekt/bort/arkivera"} {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, vag, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s gav %d", vag, w.Code)
+		}
+	}
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/projekt/bort", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("borttagningen gav %d: %s", w.Code, w.Body.String())
+	}
+
+	konfig, err := pm.LasKonfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, finns := konfig.Testserver["kvar"]; !finns {
+		t.Fatalf("det andra projektets block försvann: %+v", konfig.Testserver)
+	}
+}
