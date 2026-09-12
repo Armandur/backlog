@@ -136,7 +136,53 @@ func TestKorBevararUtdataUtanRadbrytning(t *testing.T) {
 	}
 }
 
-// En rad större än taket får inte hänga körningen.
+func TestKorIsolerarGitHubOchSSHMenBevararAgenten(t *testing.T) {
+	t.Setenv("GH_CONFIG_DIR", "/hem/rasmus/.config/gh")
+	t.Setenv("GH_TOKEN", "anvandarens-token")
+	t.Setenv("GITHUB_TOKEN", "anvandarens-andra-token")
+	t.Setenv("SSH_AUTH_SOCK", "/tmp/anvandarens-agent")
+	t.Setenv("ANTHROPIC_API_KEY", "agentens-nyckel")
+	agent := NewKommandoAgent("test", AgentKonfig{
+		Kommando: "/bin/sh",
+		Args:     []string{"-c", "/usr/bin/env"},
+		Brief:    "stdin",
+		Svar:     "stdout",
+		Miljo:    map[string]string{"GH_TOKEN": "agentens-token"},
+	})
+
+	res, err := agent.Kor(t.Context(), KorInput{})
+	if err != nil || res.ExitKod != 0 {
+		t.Fatalf("agenten kunde inte köra: %v, exitkod %d", err, res.ExitKod)
+	}
+	varden := make(map[string]string)
+	for _, post := range strings.Split(strings.TrimSpace(res.Utdata), "\n") {
+		nyckel, varde, _ := strings.Cut(post, "=")
+		varden[nyckel] = varde
+	}
+	// Användarens gh-konfiguration och ssh-agent följer inte med.
+	if varden["GH_CONFIG_DIR"] == "/hem/rasmus/.config/gh" {
+		t.Fatalf("agenten fick användarens gh-konfiguration: %q", varden["GH_CONFIG_DIR"])
+	}
+	if varden["GH_CONFIG_DIR"] == "" {
+		t.Fatal("agenten saknar en egen gh-katalog")
+	}
+	if _, finns := varden["SSH_AUTH_SOCK"]; finns {
+		t.Fatal("agenten fick användarens ssh-agent")
+	}
+	if varden["GITHUB_TOKEN"] != "" {
+		t.Fatalf("agenten fick en GitHub-token ur miljön: %q", varden["GITHUB_TOKEN"])
+	}
+	// Agentens egen konfiguration gäller fortfarande, både nycklar och HOME.
+	if varden["GH_TOKEN"] != "agentens-token" {
+		t.Fatalf("agentens egen token gällde inte: %q", varden["GH_TOKEN"])
+	}
+	if varden["ANTHROPIC_API_KEY"] != "agentens-nyckel" {
+		t.Fatal("agenten tappade sin egen nyckel")
+	}
+	if varden["HOME"] == "" {
+		t.Fatal("agenten saknar HOME, då hittar varken claude eller PM sin konfiguration")
+	}
+}
 func TestKorHangerInteNarRadenArForLang(t *testing.T) {
 	dir := t.TempDir()
 	logg := filepath.Join(dir, "k.log")

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -137,13 +138,22 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 		// Codex läser pipad stdin till EOF och hänger annars.
 		cmd.Stdin = nil
 	}
-	if len(a.konfig.Miljo) > 0 {
-		cmd.Env = os.Environ()
-		for k, v := range a.konfig.Miljo {
-			cmd.Env = append(cmd.Env, k+"="+v)
-		}
+	// Agenten ska inte ärva användarens GitHub-inloggning eller ssh-agent.
+	// HOME lämnas orört: agenterna läser sin egen inloggning därifrån, och
+	// PM:s MCP-server hittar inte profilregistret utan det.
+	ghkatalog, err := os.MkdirTemp("", "backlog-pm-gh-*")
+	if err != nil {
+		return Resultat{}, fmt.Errorf("kunde inte skapa agentens tomma gh-katalog: %w", err)
 	}
-
+	defer os.RemoveAll(ghkatalog)
+	cmd.Env = slices.DeleteFunc(os.Environ(), func(post string) bool {
+		return strings.HasPrefix(post, "GH_") || strings.HasPrefix(post, "GITHUB_") ||
+			strings.HasPrefix(post, "SSH_AUTH_SOCK=") || strings.HasPrefix(post, "SSH_AGENT_PID=")
+	})
+	for k, v := range a.konfig.Miljo {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	cmd.Env = append(cmd.Env, "GH_CONFIG_DIR="+ghkatalog)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return Resultat{}, fmt.Errorf("kunde inte läsa standardutdata från agenten %s: %w", a.namn, err)
