@@ -2524,3 +2524,94 @@ func TestPlanOchDetaljerViaRutterna(t *testing.T) {
 		t.Fatalf("planen syns inte i detaljerna: %s", w.Body.String())
 	}
 }
+
+// fakeAgentMedSvar svarar med en fast text, så förslagsprovet inte kör en agent.
+type fakeAgentMedSvar struct{ svar string }
+
+func (f fakeAgentMedSvar) Namn() string { return "fake" }
+func (f fakeAgentMedSvar) Fraga(context.Context, string) (string, error) {
+	return f.svar, nil
+}
+
+func serverMedAgentsvar(t *testing.T, svar string) (*Server, *sql.DB) {
+	t.Helper()
+	_, db := testServer(t)
+	reg := pm.NewAgentRegister()
+	reg.Registrera(fakeAgentMedSvar{svar: svar})
+	return New(db, models.Actor{Kind: models.ActorKindHuman, Name: "rasmus"}, reg), db
+}
+
+func repoForProjekt(t *testing.T, db *sql.DB, filer map[string]string) string {
+	t.Helper()
+	repo := t.TempDir()
+	for namn, innehall := range filer {
+		if err := os.WriteFile(filepath.Join(repo, namn), []byte(innehall), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`UPDATE projects SET repo_path=? WHERE alias='demo'`, repo); err != nil {
+		t.Fatal(err)
+	}
+	return repo
+}
+
+func TestForeslaTestserverFyllerEttUtkast(t *testing.T) {
+	srv, db := serverMedAgentsvar(t, `{"kommando":"python3","args":["-m","http.server","{port}"],"cwd":"","halsa":"/","port":0,"forklaring":"Bara statiska filer."}`)
+	repo := repoForProjekt(t, db, map[string]string{"index.html": "<h1>Hej</h1>"})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/projekt/demo/foresla-testserver", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("förslaget gav %d: %s", w.Code, w.Body.String())
+	}
+	var f testserverForslag
+	if err := json.Unmarshal(w.Body.Bytes(), &f); err != nil {
+		t.Fatal(err)
+	}
+	if f.Kommando != "python3" || strings.Join(f.Args, " ") != "-m http.server {port}" {
+		t.Fatalf("fel förslag: %+v", f)
+	}
+	// Tom arbetskatalog fylls med projektets repo, annars går blocket inte att spara.
+	if f.CWD != repo {
+		t.Fatalf("arbetskatalogen fylldes inte i: %+v", f)
+	}
+
+	// Förslaget får inte skrivas till pm.toml.
+	if _, err := os.Stat(filepath.Join(konfigWorkDir(), pm.KonfigFil)); err == nil {
+		t.Fatal("PM sparade förslaget utan att användaren godkände det")
+	}
+}
+
+func TestForeslaTestserverAvvisarOanvandbartSvar(t *testing.T) {
+	srv, db := serverMedAgentsvar(t, `{"kommando":"npm","args":["run","dev"],"halsa":"/","port":0}`)
+	repoForProjekt(t, db, map[string]string{"package.json": `{"scripts":{"dev":"vite"}}`})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/projekt/demo/foresla-testserver", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(w, req)
+	// Varken fast port eller {port} i args, alltså går blocket inte att starta.
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("ett oanvändbart förslag gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "port") {
+		t.Fatalf("felet säger inte vad som saknas: %s", w.Body.String())
+	}
+}
+
+func TestForeslaTestserverUtanRepoSagerTill(t *testing.T) {
+	srv, db := serverMedAgentsvar(t, "{}")
+	if _, err := db.Exec(`UPDATE projects SET repo_path='' WHERE alias='demo'`); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/projekt/demo/foresla-testserver", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("projekt utan repo gav %d: %s", w.Code, w.Body.String())
+	}
+}

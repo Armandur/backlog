@@ -63,7 +63,10 @@ function renderaTestservrar() {
       ? `<div class="testservernamn"><strong class="mono">${esc(projekt.alias)}</strong><span class="overgivenmarke">Övergivet</span><small>Projektet finns inte längre.</small></div>
         <button type="button" class="btn sm fara" data-ta-bort-testserver>Ta bort block</button>`
       : `<strong>${esc(projekt.name)} <span class="mono">(${esc(projekt.alias)})</span></strong>
-        <label class="kryss testserveraktiv"><input type="checkbox" data-testserverfalt="aktiv"${aktiv ? " checked" : ""}> Konfigurera testserver</label>`;
+        <span class="testserverhuvudval">
+          <button type="button" class="btn sm" data-foresla-testserver="${esc(projekt.alias)}">Fråga agenten</button>
+          <label class="kryss testserveraktiv"><input type="checkbox" data-testserverfalt="aktiv"${aktiv ? " checked" : ""}> Konfigurera testserver</label>
+        </span>`;
     return `<article class="konfigkort testserverkort${projekt.overgiven ? " overgiven" : ""}" data-testserver="${esc(projekt.alias)}"${projekt.overgiven ? ' data-overgiven="true"' : ""}>
       <div class="korthuvud testserverhuvud">${huvud}</div>
       <fieldset class="testserverfalt"${aktiv ? "" : " disabled"}>
@@ -264,7 +267,39 @@ $("#testserverkort").addEventListener("change", (e) => {
   if (!aktiv) return;
   aktiv.closest(".testserverkort").querySelector(".testserverfalt").disabled = !aktiv.checked;
 });
+// foreslaTestserver ber en agent läsa projektet och fylla i fälten. Inget
+// sparas, användaren granskar förslaget och trycker på Spara pm.toml.
+async function foreslaTestserver(knapp) {
+  const kort = knapp.closest(".testserverkort");
+  const falt = (namn) => kort.querySelector(`[data-testserverfalt="${namn}"]`);
+  const gammalText = knapp.textContent;
+  knapp.disabled = true;
+  knapp.textContent = "Agenten läser projektet...";
+  try {
+    const f = await hamta(`/api/projekt/${encodeURIComponent(knapp.dataset.foreslaTestserver)}/foresla-testserver`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    falt("aktiv").checked = true;
+    kort.querySelector(".testserverfalt").disabled = false;
+    falt("kommando").value = f.kommando;
+    falt("args").value = (f.args || []).join("\n");
+    falt("cwd").value = f.cwd || "";
+    falt("halsa").value = f.halsa || "";
+    falt("port").value = f.port ? String(f.port) : "";
+    toast(f.forklaring ? `Förslag: ${f.forklaring} Granska och spara.` : "Förslaget är ifyllt. Granska och spara.");
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    knapp.disabled = false;
+    knapp.textContent = gammalText;
+  }
+}
+
 $("#v-konfig").addEventListener("click", async (e) => {
+  const forslagsknapp = e.target.closest("[data-foresla-testserver]");
+  if (forslagsknapp) return foreslaTestserver(forslagsknapp);
   const agentkort = e.target.closest(".agentkort");
   const regelkort = e.target.closest(".regelkort");
   const testserverkort = e.target.closest(".testserverkort");

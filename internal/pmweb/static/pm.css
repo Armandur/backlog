@@ -305,6 +305,8 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
   #forslagsdrawer footer .btn { flex: 1 1 auto; }
 }
 
+.testserverhuvudval { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; }
+
 .etikettrad { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .etikett { align-items: center; background: var(--kort); border: 1px solid var(--ram); border-radius: 999px; display: inline-flex; font-size: .85em; gap: 4px; padding: 2px 4px 2px 10px; }
 .etikett .x { background: none; border: 0; color: var(--svag); cursor: pointer; font-size: 1em; line-height: 1; padding: 0 4px; }
