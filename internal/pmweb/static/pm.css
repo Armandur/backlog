@@ -255,7 +255,14 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 .konfigkort summary, .kroksektion summary { color: var(--svag); cursor: pointer; font-weight: 600; }
 .konfigkort details[open] summary, .kroksektion[open] summary { margin-bottom: 12px; }
 .detaljkryss { align-self: end; min-height: 38px; }
-.provsvar { margin: 0; background: var(--sankt); border-radius: 6px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.provsvar { margin: 0; background: var(--sankt); border-radius: 6px; padding: 10px 12px; overflow-wrap: anywhere; font-size: 12px; }
+.provresultat { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.provresultat li { display: grid; grid-template-columns: minmax(100px, auto) minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.provresultat strong { color: var(--svag); }
+.provresultat .prov-ok strong { color: var(--bra); }
+.provresultat .prov-fel strong { color: var(--fel); }
+.provsvar details { margin-top: 10px; }
+.provsvar pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .kroksektion { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; padding: 14px; }
 .konfigfot { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: flex-end; gap: 12px; background: color-mix(in srgb, var(--ground) 92%, transparent); padding: 12px 0; }
 .konfigfot p { flex: 1; margin: 0; }

@@ -115,7 +115,7 @@ function renderaKonfig() {
         </div>
         <label class="falt"><span>Miljö, en <code>NYCKEL=värde</code> per rad. Ett sparat värde visas som <code>***sparad***</code> och byts först när du skriver ett nytt</span><textarea data-agentfalt="miljo" rows="3" spellcheck="false">${esc(miljoRader(a.miljo))}</textarea></label>
       </details>
-      <pre class="provsvar" hidden></pre>
+      <div class="provsvar" hidden></div>
     </article>`;
   }).join("") || '<div class="tom">Inga agenter. Lägg till en innan du sparar.</div>';
   document.querySelectorAll(".agentkort").forEach((kort) => {
@@ -342,7 +342,10 @@ $("#v-konfig").addEventListener("click", async (e) => {
     ruta.textContent = "Kör testbriefen...";
     try {
       const resultat = await hamta("/api/konfig/prova", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent: namn }) });
-      ruta.textContent = `Exitkod ${resultat.exitkod}\n${resultat.svar || "(tomt svar)"}`;
+      const statusnamn = { ok: "Godkänd", fel: "Fel", overhoppad: "Överhoppad" };
+      ruta.innerHTML = `<ul class="provresultat">${(resultat.delresultat || []).map((del) =>
+        `<li class="prov-${esc(del.status)}"><strong>${esc(del.namn)}: ${esc(statusnamn[del.status] || del.status)}</strong><span>${esc(del.meddelande)}</span></li>`
+      ).join("")}</ul>${resultat.svar ? `<details><summary>Visa agentsvaret</summary><pre>${esc(resultat.svar)}</pre></details>` : ""}`;
     } catch (err) {
       ruta.textContent = err.message + "\nSpara agenten före provet om du nyss ändrade den.";
     } finally {

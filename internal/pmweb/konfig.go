@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -235,38 +234,14 @@ func (s *Server) provaKonfig(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, err, http.StatusInternalServerError)
 		return
 	}
-	korare, err := pm.FranKonfig(konfig).HamtaKorare(body.Agent)
-	if err != nil {
-		svaraFel(w, err, http.StatusBadRequest)
+	agent, finns := konfig.Agenter[body.Agent]
+	if !finns {
+		svaraFel(w, fmt.Errorf("agenten %q finns inte", body.Agent), http.StatusBadRequest)
 		return
 	}
-	// Provet körs i en tom temporärkatalog, inte i serverns arbetskatalog -
-	// en agent med skrivrättigheter ska inte kunna röra ett riktigt repo.
-	repo, err := os.MkdirTemp("", "backlog-pm-prov-*")
+	svar, err := korKonfigprov(r.Context(), body.Agent, agent)
 	if err != nil {
 		svaraFel(w, err, http.StatusInternalServerError)
-		return
-	}
-	defer os.RemoveAll(repo)
-
-	ctx, avbryt := context.WithTimeout(r.Context(), provTimeout)
-	defer avbryt()
-	resultat, korfel := korare.Kor(ctx, pm.KorInput{
-		Brief:    "Svara kort med texten: Konfigurationen fungerar.",
-		Repo:     repo,
-		Profil:   profilNamn(),
-		PMBinar:  pm.PMBinar(),
-		Svarsfil: filepath.Join(repo, "svar.txt"),
-	})
-	svar := map[string]any{
-		"agent":    body.Agent,
-		"exitkod":  resultat.ExitKod,
-		"svar":     strings.TrimSpace(resultat.Utdata),
-		"lyckades": korfel == nil && resultat.ExitKod == 0,
-	}
-	if korfel != nil {
-		svar["error"] = korfel.Error()
-		svaraJSON(w, http.StatusBadGateway, svar)
 		return
 	}
 	svaraJSON(w, http.StatusOK, svar)

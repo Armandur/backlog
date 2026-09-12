@@ -613,7 +613,7 @@ func TestPutKonfigAvvisarOgiltigUtanAttAndraFilen(t *testing.T) {
 	}
 }
 
-func TestProvaKonfigKorAgentUtanKorningEllerTask(t *testing.T) {
+func TestProvaKonfigGerFemDelresultatUtanKorningEllerTask(t *testing.T) {
 	dir := t.TempDir()
 	medKonfigDir(t, dir)
 	srv, db := testServer(t)
@@ -636,15 +636,15 @@ func TestProvaKonfigKorAgentUtanKorningEllerTask(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("prov gav %d: %s", w.Code, w.Body.String())
 	}
-	var svar struct {
-		Exitkod int    `json:"exitkod"`
-		Svar    string `json:"svar"`
-	}
+	var svar konfigProvSvar
 	if err := json.NewDecoder(w.Body).Decode(&svar); err != nil {
 		t.Fatal(err)
 	}
-	if svar.Exitkod != 0 || !strings.Contains(svar.Svar, "prov fungerar") {
+	if len(svar.Delresultat) != 5 || !strings.Contains(svar.Svar, "prov fungerar") {
 		t.Fatalf("oväntat provsvar: %+v", svar)
+	}
+	if svar.Delresultat[0].Status != "ok" || svar.Delresultat[2].Status != "overhoppad" || svar.Delresultat[4].Status != "overhoppad" {
+		t.Fatalf("oväntade delresultat: %+v", svar.Delresultat)
 	}
 	var korningar, tasks int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM pm_korningar`).Scan(&korningar); err != nil {
@@ -655,6 +655,61 @@ func TestProvaKonfigKorAgentUtanKorningEllerTask(t *testing.T) {
 	}
 	if korningar != 0 || tasks != 0 {
 		t.Fatalf("provet rörde PM-data: %d körningar, %d tasks", korningar, tasks)
+	}
+}
+
+func TestProvaKonfigForklararNarKommandotSaknas(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	srv, _ := testServer(t)
+	konfig := pm.Konfig{
+		DefaultAgent: "saknas",
+		Agenter: map[string]pm.AgentKonfig{
+			"saknas": {
+				Kommando: "ett-kommando-som-inte-finns", Args: []string{"{brief}"},
+				Brief: "arg", Svar: "stdout", TimeoutSekunder: 15,
+			},
+		},
+	}
+	if err := pm.SkrivKonfig(dir, konfig); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/konfig/prova",
+		bytes.NewBufferString(`{"agent":"saknas"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("prov gav %d: %s", w.Code, w.Body.String())
+	}
+	var svar konfigProvSvar
+	if err := json.NewDecoder(w.Body).Decode(&svar); err != nil {
+		t.Fatal(err)
+	}
+	kommando := svar.Delresultat[0]
+	if kommando.Status != "fel" || !strings.Contains(kommando.Meddelande, "finns inte eller kunde inte starta") {
+		t.Fatalf("kommandofelet är inte begripligt: %+v", kommando)
+	}
+}
+
+func TestByggKonfigProvSvarKontrollerarMCPActorOchSvarsfil(t *testing.T) {
+	svarsfil := filepath.Join(t.TempDir(), "svar.txt")
+	if err := os.WriteFile(svarsfil, []byte("Konfigurationen fungerar."), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	markor := "MCP-kontroll test"
+	kommentarer := []*models.Comment{{
+		Body: markor, Actor: models.Actor{Kind: models.ActorKindAI, Name: "claude"},
+	}}
+	svar := byggKonfigProvSvar("claude", pm.AgentKonfig{Svar: "fil", MCP: true},
+		pm.Resultat{ExitKod: 0, Utdata: "Konfigurationen fungerar."}, nil, svarsfil, markor, kommentarer)
+
+	if len(svar.Delresultat) != 5 {
+		t.Fatalf("fick %d delresultat: %+v", len(svar.Delresultat), svar.Delresultat)
+	}
+	for _, del := range svar.Delresultat {
+		if del.Status != "ok" {
+			t.Fatalf("delresultatet %s misslyckades: %+v", del.Namn, del)
+		}
 	}
 }
 
