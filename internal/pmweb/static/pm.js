@@ -158,9 +158,11 @@ async function laddaSamtal() {
     const nar = document.createElement("span");
     nar.textContent = tid(p.created_at);
     meta.append(aktor, nar);
-    const text = document.createElement("p");
-    text.className = "text";
-    text.textContent = p.text;
+    // Agenterna svarar med markdown, alltså rubriker, listor och kodblock.
+    // Renderaren bygger med createElement, så inget av texten blir markup.
+    const text = document.createElement("div");
+    text.className = "text markdown";
+    PMMarkdown.rendera(text, p.text);
     li.append(meta, text);
     byggSamtalsforlopp(p, li);
     byggMinnesforslag(p, li);

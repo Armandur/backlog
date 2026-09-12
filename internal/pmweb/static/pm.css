@@ -100,7 +100,11 @@ h2 .n { font-weight: 500; background: var(--sankt); border-radius: 10px; padding
 .inlagg.ai { background: var(--accent-mjuk); border-color: var(--accent); }
 .inlagg .meta { color: var(--svag); font-size: .8rem; display: flex; gap: .5rem; flex-wrap: wrap; }
 .inlagg .aktor { font-weight: 600; color: var(--text); }
-.inlagg .text { margin: .35rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Inlägget renderas som markdown, så egna radbrytningar sköts av renderaren.
+   pre-wrap skulle annars ge dubbla blankrader mellan styckena. */
+.inlagg .text { margin: .35rem 0 0; overflow-wrap: anywhere; }
+.inlagg .text > :first-child { margin-top: 0; }
+.inlagg .text > :last-child { margin-bottom: 0; }
 .minnesforslag { border-top: 1px solid var(--kant); margin-top: 12px; padding-top: 10px; }
 .minnesforslag label { display: block; font-size: .78rem; font-weight: 700; margin-bottom: 6px; }
 .minnesforslag textarea { min-height: 76px; width: 100%; }

@@ -1,4 +1,7 @@
 const samtalskorningar = new Map();
+// Tråden ritas om vid varje pollning. Utan minne av vilka rutor användaren
+// fällt ut skulle de slå ihop sig var fjärde sekund.
+const utfalldaForlopp = new Set();
 
 function samtalshandelseElement(h) {
   const sort = ["text", "verktyg", "fil", "kommando", "fel"].includes(h.sort) ? h.sort : "text";
@@ -14,6 +17,11 @@ function byggSamtalsforlopp(post, inlagg) {
   const detaljer = document.createElement("details");
   detaljer.className = "samtalsforlopp";
   detaljer.dataset.samtalskorning = post.id;
+  detaljer.open = utfalldaForlopp.has(post.id);
+  detaljer.addEventListener("toggle", () => {
+    if (detaljer.open) utfalldaForlopp.add(post.id);
+    else utfalldaForlopp.delete(post.id);
+  });
   const rubrik = document.createElement("summary");
   rubrik.textContent = lage.klar ? "Agentens arbete" : "Agenten arbetar";
   const lista = document.createElement("ol");
