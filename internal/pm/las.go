@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -19,10 +22,11 @@ type RepoLas struct {
 }
 
 type lasInnehall struct {
-	PID     int    `json:"pid"`
-	Korning string `json:"korning"`
-	Repo    string `json:"repo"`
-	Sedan   string `json:"sedan"`
+	PID      int    `json:"pid"`
+	Starttid string `json:"starttid"`
+	Korning  string `json:"korning"`
+	Repo     string `json:"repo"`
+	Sedan    string `json:"sedan"`
 }
 
 // LasKatalog är katalogen med låsfiler i PM-profilen.
@@ -52,6 +56,10 @@ func (l *RepoLas) Ta(repo, korning string) (bool, error) {
 		// Inaktuellt lås efter en död process.
 		os.Remove(l.sokvag)
 	}
+	starttid, err := processStarttid(os.Getpid())
+	if err != nil {
+		return false, fmt.Errorf("kunde inte läsa processens starttid: %w", err)
+	}
 
 	f, err := os.OpenFile(l.sokvag, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 	if os.IsExist(err) {
@@ -61,7 +69,13 @@ func (l *RepoLas) Ta(repo, korning string) (bool, error) {
 		return false, err
 	}
 	defer f.Close()
-	data, _ := json.Marshal(lasInnehall{PID: os.Getpid(), Korning: korning, Repo: repo, Sedan: time.Now().Format(time.RFC3339)})
+	data, _ := json.Marshal(lasInnehall{
+		PID:      os.Getpid(),
+		Starttid: starttid,
+		Korning:  korning,
+		Repo:     repo,
+		Sedan:    time.Now().Format(time.RFC3339),
+	})
 	if _, err := f.Write(data); err != nil {
 		return false, err
 	}
@@ -83,7 +97,7 @@ func (l *RepoLas) Agare() (*lasInnehall, bool, error) {
 		// En trasig låsfil är inaktuell.
 		return &lasInnehall{}, false, nil
 	}
-	return &innehall, processLever(innehall.PID), nil
+	return &innehall, processMatcharStarttid(innehall.PID, innehall.Starttid), nil
 }
 
 // Slapp släpper låset om vi håller det.
@@ -123,6 +137,27 @@ func processLever(pid int) bool {
 		return false
 	}
 	return p.Signal(syscall.Signal(0)) == nil
+}
+
+func processMatcharStarttid(pid int, starttid string) bool {
+	if starttid == "" || !processLever(pid) {
+		return false
+	}
+	faktiskStarttid, err := processStarttid(pid)
+	return err == nil && faktiskStarttid == starttid
+}
+
+// processStarttid använder ps eftersom kommandot finns på både Linux och macOS.
+func processStarttid(pid int) (string, error) {
+	utdata, err := exec.Command("ps", "-o", "lstart=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return "", err
+	}
+	starttid := strings.TrimSpace(string(utdata))
+	if starttid == "" {
+		return "", fmt.Errorf("process %d saknar starttid", pid)
+	}
+	return starttid, nil
 }
 
 // LasBesked beskriver vem som håller låset, för besked till Rasmus.
