@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/mazen160/backlog/internal/models"
 )
@@ -40,5 +41,23 @@ func Fraga(ctx context.Context, db *sql.DB, reg *AgentRegister, in FragaInput) (
 	if err != nil {
 		return nil, err
 	}
-	return store.Add(ctx, in.ProjectID, "", models.Actor{Kind: models.ActorKindAI, Name: agent.Namn()}, svar)
+	text, minnesforslag := delaAgentsvar(svar)
+	return store.AddMedMinnesforslag(ctx, in.ProjectID, "",
+		models.Actor{Kind: models.ActorKindAI, Name: agent.Namn()}, text, minnesforslag)
+}
+
+const minnesstart = "<pm-minne>"
+const minnesslut = "</pm-minne>"
+
+func delaAgentsvar(svar string) (string, string) {
+	trimmat := strings.TrimSpace(svar)
+	if !strings.HasSuffix(trimmat, minnesslut) {
+		return trimmat, ""
+	}
+	start := strings.LastIndex(trimmat, minnesstart)
+	if start < 0 {
+		return trimmat, ""
+	}
+	minne := strings.TrimSpace(trimmat[start+len(minnesstart) : len(trimmat)-len(minnesslut)])
+	return strings.TrimSpace(trimmat[:start]), minne
 }

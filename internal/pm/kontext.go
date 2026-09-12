@@ -69,6 +69,10 @@ func ByggKontext(ctx context.Context, db *sql.DB, alias, projectID string, g Kon
 func ByggPrompt(kontext, fraga string) string {
 	return fmt.Sprintf(`Du svarar i projektsamtalet för ett projekt i backlog-pm.
 Svara kort och på svenska. Underlaget nedan är projektets aktuella läge.
+Avsluta svaret med <pm-minne>förslag</pm-minne> på egna rader.
+Föreslå beslut, vägval eller fakta som gäller framåt.
+Föreslå inte dagsläge eller svar på en engångsfråga.
+Lämna sektionen tom när inget hör hemma i projektminnet.
 
 %s
 ## Fråga

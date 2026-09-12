@@ -44,13 +44,7 @@ type VantarPost struct {
 	TaskID    string `json:"task_id,omitempty"`
 	Text      string `json:"text"`
 	KorningID string `json:"korning_id,omitempty"`
-}
-
-type skapaTaskBody struct {
-	Titel       string          `json:"titel"`
-	Beskrivning string          `json:"beskrivning"`
-	Typ         models.TaskType `json:"typ"`
-	Prioritet   int             `json:"prioritet"`
+	InlaggID  string `json:"inlagg_id,omitempty"`
 }
 
 func (s *Server) skapaTask(w http.ResponseWriter, r *http.Request) {
@@ -160,8 +154,8 @@ func byggOversikt(ctx context.Context, db *sql.DB, alias string) (*Oversikt, err
 	if err != nil {
 		return nil, err
 	}
-	if fraga != "" {
-		o.Vantar = append(o.Vantar, VantarPost{Sort: "fraga", Text: fraga})
+	if fraga != nil {
+		o.Vantar = append(o.Vantar, *fraga)
 	}
 
 	for _, rad := range o.Tasks {
@@ -187,19 +181,22 @@ func blockeringsskal(rad TaskRad) string {
 }
 
 // obesvaradAgentfraga är sant när sista inlägget i tråden kommer från en agent.
-func obesvaradAgentfraga(ctx context.Context, db *sql.DB, projectID string) (string, error) {
+func obesvaradAgentfraga(ctx context.Context, db *sql.DB, projectID string) (*VantarPost, error) {
 	poster, err := pm.NewSamtalStore(db).List(ctx, projectID, 1)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(poster) == 0 {
-		return "", nil
+		return nil, nil
 	}
 	sista := poster[len(poster)-1]
-	if sista.Actor.Kind != models.ActorKindAI {
-		return "", nil
+	if sista.Actor.Kind != models.ActorKindAI || sista.KvitteradAt != nil {
+		return nil, nil
 	}
-	return fmt.Sprintf("%s väntar på svar i samtalet: %s", sista.Actor.Name, kort(sista.Text, 160)), nil
+	return &VantarPost{
+		Sort: "fraga", InlaggID: sista.ID,
+		Text: fmt.Sprintf("%s väntar på svar i samtalet: %s", sista.Actor.Name, kort(sista.Text, 160)),
+	}, nil
 }
 
 func etikettnamn(labels []models.Label) []string {

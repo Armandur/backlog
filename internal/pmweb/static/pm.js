@@ -90,9 +90,10 @@ async function laddaOversikt() {
   }, "Inga tasks i projektet.");
   $("#nVantar").textContent = o.vantar.length;
   fyll("#vantar", o.vantar, (v) => {
+    const frageknappar = `<button class="btn sm" data-vy="samtal">Öppna</button><button class="btn sm pri" data-kvittera="${esc(v.inlagg_id)}">Kvittera</button>`;
     const el = rad(`<span class="pill p-${v.sort}">${VANTAR_ETIKETT[v.sort] || esc(v.sort)}</span>
       <div class="t">${v.ref ? `<span class="mono">${v.ref}</span>` : ""}<span class="meta">${esc(v.text)}</span></div>
-      <div class="act">${v.sort === "fraga" ? `<button class="btn sm" data-vy="samtal">Öppna</button>` : v.korning_id ? korningKnappar(v.korning_id) : `<button class="btn sm pri" data-dela="${v.ref}">Dela ut</button>`}</div>`);
+      <div class="act">${v.sort === "fraga" ? frageknappar : v.korning_id ? korningKnappar(v.korning_id) : `<button class="btn sm pri" data-dela="${v.ref}">Dela ut</button>`}</div>`);
     el.classList.add("stripe", v.sort);
     return el;
   }, "Inget väntar på dig.");
@@ -161,6 +162,7 @@ async function laddaSamtal() {
     text.className = "text";
     text.textContent = p.text;
     li.append(meta, text);
+    byggMinnesforslag(p, li);
     return li;
   }, "Tråden är tom. Skriv det första inlägget.");
   if (foljMed) {

@@ -1,0 +1,61 @@
+function byggMinnesforslag(post, inlagg) {
+  if (!post.minnesforslag) return;
+  const ruta = document.createElement("div");
+  ruta.className = "minnesforslag";
+  const etikett = document.createElement("label");
+  etikett.textContent = "Förslag till projektminnet";
+  const text = document.createElement("textarea");
+  text.rows = 3;
+  text.value = post.minnesforslag;
+  text.dataset.minnestext = post.id;
+  etikett.htmlFor = `minne-${post.id}`;
+  text.id = etikett.htmlFor;
+  const rad = document.createElement("div");
+  rad.className = "rad";
+  const tips = document.createElement("span");
+  tips.className = "meta";
+  tips.textContent = "Redigera texten innan du sparar den.";
+  const knapp = document.createElement("button");
+  knapp.type = "button";
+  knapp.className = "btn sm pri";
+  knapp.dataset.sparaMinne = post.id;
+  knapp.textContent = "Spara i minnet";
+  rad.append(tips, knapp);
+  ruta.append(etikett, text, rad);
+  inlagg.append(ruta);
+}
+
+async function sparaMinnesforslag(knapp) {
+  const id = knapp.dataset.sparaMinne;
+  const text = document.querySelector(`[data-minnestext="${CSS.escape(id)}"]`).value.trim();
+  if (!text) {
+    toast("Minnesförslaget saknar text.");
+    return;
+  }
+  knapp.disabled = true;
+  try {
+    await hamta(`/api/projects/${encodeURIComponent(alias)}/samtal/${encodeURIComponent(id)}/minne`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    toast("PM sparade minnesposten.");
+    await laddaSamtal();
+  } catch (err) {
+    toast(err.message);
+    knapp.disabled = false;
+  }
+}
+
+async function kvitteraAgentsvar(id) {
+  await hamta(`/api/projects/${encodeURIComponent(alias)}/samtal/${encodeURIComponent(id)}/kvittera`, { method: "POST" });
+  toast("PM kvitterade agentsvaret.");
+  await laddaOversikt();
+}
+
+document.body.addEventListener("click", (event) => {
+  const minne = event.target.closest("[data-spara-minne]");
+  if (minne) return sparaMinnesforslag(minne);
+  const kvittens = event.target.closest("[data-kvittera]");
+  if (kvittens) kvitteraAgentsvar(kvittens.dataset.kvittera).catch((err) => toast(err.message));
+});

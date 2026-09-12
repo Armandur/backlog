@@ -66,6 +66,8 @@ func (s *Server) rutter(upstream http.Handler) {
 	s.mux.HandleFunc("POST /api/foresla-testserver", s.foreslaTestserverForSokvag)
 	s.mux.HandleFunc("GET /api/projects/{alias}/samtal", s.hamtaSamtal)
 	s.mux.HandleFunc("POST /api/projects/{alias}/samtal", s.skrivSamtal)
+	s.mux.HandleFunc("POST /api/projects/{alias}/samtal/{id}/kvittera", s.kvitteraSamtal)
+	s.mux.HandleFunc("POST /api/projects/{alias}/samtal/{id}/minne", s.sparaSamtalsminne)
 	// Utan metodmönster skulle en DELETE falla vidare till upstream och ge 404.
 	s.mux.HandleFunc("/api/projects/{alias}/samtal", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", "GET, POST")
@@ -127,84 +129,6 @@ func (s *Server) tradVy(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(data)
-}
-
-func (s *Server) hamtaSamtal(w http.ResponseWriter, r *http.Request) {
-	store := pm.NewSamtalStore(s.db)
-	projectID, err := store.ProjectIDByAlias(r.Context(), r.PathValue("alias"))
-	if err != nil {
-		svaraFel(w, err, http.StatusNotFound)
-		return
-	}
-	limit := 0
-	if v := r.URL.Query().Get("limit"); v != "" {
-		limit, err = strconv.Atoi(v)
-		if err != nil || limit < 0 {
-			svaraFel(w, errors.New("limit måste vara ett positivt heltal"), http.StatusBadRequest)
-			return
-		}
-	}
-	poster, err := store.List(r.Context(), projectID, limit)
-	if err != nil {
-		svaraFel(w, err, http.StatusInternalServerError)
-		return
-	}
-	svaraJSON(w, http.StatusOK, map[string]any{"samtal": poster})
-}
-
-type inlaggBody struct {
-	Text   string `json:"text"`
-	Actor  string `json:"actor"`
-	TaskID string `json:"task_id"`
-	Fraga  bool   `json:"fraga"`
-	Agent  string `json:"agent"`
-}
-
-func (s *Server) skrivSamtal(w http.ResponseWriter, r *http.Request) {
-	store := pm.NewSamtalStore(s.db)
-	alias := r.PathValue("alias")
-	projectID, err := store.ProjectIDByAlias(r.Context(), alias)
-	if err != nil {
-		svaraFel(w, err, http.StatusNotFound)
-		return
-	}
-	var body inlaggBody
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
-		svaraFel(w, errors.New("kunde inte läsa inlägget"), http.StatusBadRequest)
-		return
-	}
-	if strings.TrimSpace(body.Text) == "" {
-		svaraFel(w, errors.New("inlägget saknar text"), http.StatusBadRequest)
-		return
-	}
-
-	aktor := s.aktor
-	if body.Actor != "" {
-		aktor, err = pm.ParseActor(body.Actor)
-		if err != nil {
-			svaraFel(w, err, http.StatusBadRequest)
-			return
-		}
-	}
-
-	if body.Fraga {
-		svar, err := pm.Fraga(r.Context(), s.db, s.aktuelltRegister(), pm.FragaInput{
-			Alias: alias, ProjectID: projectID, Fraga: body.Text, Agent: body.Agent, Fragare: aktor,
-		})
-		if err != nil {
-			svaraFel(w, err, http.StatusBadGateway)
-			return
-		}
-		svaraJSON(w, http.StatusCreated, svar)
-		return
-	}
-
-	post, err := store.Add(r.Context(), projectID, body.TaskID, aktor, body.Text)
-	if err != nil {
-		svaraFel(w, err, http.StatusBadRequest)
-		return
-	}
-	svaraJSON(w, http.StatusCreated, post)
 }
 
 func (s *Server) hamtaOversikt(w http.ResponseWriter, r *http.Request) {

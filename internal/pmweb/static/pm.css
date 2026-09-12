@@ -101,6 +101,15 @@ h2 .n { font-weight: 500; background: var(--sankt); border-radius: 10px; padding
 .inlagg .meta { color: var(--svag); font-size: .8rem; display: flex; gap: .5rem; flex-wrap: wrap; }
 .inlagg .aktor { font-weight: 600; color: var(--text); }
 .inlagg .text { margin: .35rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.minnesforslag { border-top: 1px solid var(--kant); margin-top: 12px; padding-top: 10px; }
+.minnesforslag label { display: block; font-size: .78rem; font-weight: 700; margin-bottom: 6px; }
+.minnesforslag textarea { min-height: 76px; width: 100%; }
+.minnesforslag .rad { align-items: center; justify-content: space-between; margin-top: 7px; }
+.minnesforslag .meta { display: block; }
+@media (max-width: 560px) {
+  .minnesforslag .rad { align-items: stretch; flex-direction: column; }
+  .minnesforslag .btn { width: 100%; }
+}
 .skriv { background: var(--yta); border: 1px solid var(--kant); border-radius: 10px; padding: .75rem; display: flex; flex-direction: column; gap: .5rem; max-width: 72ch; }
 textarea, input:not([type=checkbox]):not([type=radio]), select { width: 100%; font: inherit; color: inherit; background: var(--ground); border: 1px solid var(--kant); border-radius: 8px; padding: .5rem .6rem; }
 textarea { resize: vertical; }
@@ -329,6 +338,9 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 /* Testserver */
 .testserverpanel { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 18px 0; }
 .testserverpanel h2, .testserverpanel p { margin: 0; }
+/* Loggens sökväg är ett långt ord utan brytpunkter. Utan detta tvingar den
+   hela sidan bredare än skärmen på mobil. */
+.testserverpanel .meta { overflow-wrap: anywhere; }
 .testserverrubrik { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .testserverknappar { display: flex; align-items: center; gap: 8px; }
 .testserverloggruta { flex: 0 0 100%; min-width: 0; }
