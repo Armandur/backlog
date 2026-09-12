@@ -61,6 +61,13 @@ go install github.com/mazen160/backlog/cmd/backlog@latest
 
 It's one binary with no dependencies and no runtime to install.
 
+### backlog-pm (this fork)
+
+This fork adds `backlog-pm`, a project-manager layer with a web view, agent
+hand-outs and per-project test servers. Build it with `make build-pm`, then run
+`backlog-pm init` followed by `backlog-pm web`. The walkthrough is in Swedish:
+[docs/pm.md](docs/pm.md).
+
 ---
 
 ## See it
