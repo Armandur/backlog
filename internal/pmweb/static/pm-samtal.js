@@ -11,9 +11,54 @@ function samtalshandelseElement(h) {
   return li;
 }
 
-function byggSamtalsforlopp(post, inlagg) {
+function tokentext(antal) {
+  if (!antal) return "";
+  if (antal < 1000) return `${antal} tokens`;
+  return `${(antal / 1000).toFixed(1)}k tokens`;
+}
+
+function tidtext(start) {
+  const sekunder = Math.max(0, Math.round((Date.now() - start) / 1000));
+  if (sekunder < 60) return `${sekunder} s`;
+  return `${Math.floor(sekunder / 60)} min ${String(sekunder % 60).padStart(2, "0")} s`;
+}
+
+// ritaArbetsrad uppdaterar bara statusraden, aldrig hela tråden. En timer som
+// ritar om tråden varje sekund skulle kasta bort skrollposition och utfällning.
+function ritaArbetsrad(inlaggId) {
+  const lage = samtalskorningar.get(inlaggId);
+  const kort = document.querySelector(`[data-arbetskort="${CSS.escape(inlaggId)}"]`);
+  if (!lage || !kort) return;
+  const status = kort.querySelector(".arbetsstatus");
+  const senaste = lage.senaste && lage.senaste.text ? lage.senaste.text.split("\n")[0] : "";
+  status.textContent = lage.klar ? "Agenten är klar" : senaste || "Agenten tänker";
+  kort.classList.toggle("arbetar", !lage.klar);
+  const delar = [tidtext(lage.start)];
+  const tokens = tokentext(lage.tokens);
+  if (tokens) delar.push(tokens);
+  kort.querySelector(".arbetsmeta").textContent = delar.join(" · ");
+}
+
+// byggArbetsinlagg lägger agentens arbete som ett eget inlägg på agentens
+// sida, så tråden läses som ett samtal och inte som en bilaga till frågan.
+function byggSamtalsforlopp(post, lista) {
   const lage = samtalskorningar.get(post.id);
   if (!lage) return;
+  const li = document.createElement("li");
+  li.className = "inlagg ai arbetskort" + (lage.klar ? "" : " arbetar");
+  li.dataset.arbetskort = post.id;
+
+  const rad = document.createElement("div");
+  rad.className = "arbetsrad";
+  const punkt = document.createElement("span");
+  punkt.className = "arbetspuls";
+  punkt.setAttribute("aria-hidden", "true");
+  const status = document.createElement("span");
+  status.className = "arbetsstatus";
+  const meta = document.createElement("span");
+  meta.className = "arbetsmeta";
+  rad.append(punkt, status, meta);
+
   const detaljer = document.createElement("details");
   detaljer.className = "samtalsforlopp";
   detaljer.dataset.samtalskorning = post.id;
@@ -23,29 +68,55 @@ function byggSamtalsforlopp(post, inlagg) {
     else utfalldaForlopp.delete(post.id);
   });
   const rubrik = document.createElement("summary");
-  rubrik.textContent = lage.klar ? "Agentens arbete" : "Agenten arbetar";
-  const lista = document.createElement("ol");
-  lista.className = "samtalshandelser";
-  lage.handelser.forEach((h) => lista.append(samtalshandelseElement(h)));
-  detaljer.append(rubrik, lista);
-  inlagg.append(detaljer);
+  rubrik.textContent = "Visa stegen";
+  const handelselista = document.createElement("ol");
+  handelselista.className = "samtalshandelser";
+  lage.handelser.forEach((h) => handelselista.append(samtalshandelseElement(h)));
+  detaljer.append(rubrik, handelselista);
+
+  li.append(rad, detaljer);
+  lista.append(li);
+  ritaArbetsrad(post.id);
 }
+
+// Timern tickar i sin egen takt och rör bara statusraderna.
+setInterval(() => {
+  samtalskorningar.forEach((lage, inlaggId) => {
+    if (!lage.klar) ritaArbetsrad(inlaggId);
+  });
+}, 1000);
 
 function laggSamtalshandelse(inlaggId, event) {
   const lage = samtalskorningar.get(inlaggId);
   if (!lage) return;
   try {
     const handelse = JSON.parse(event.data);
+    if (handelse.sort === "tokens" || handelse.sort === "tokens_total") {
+      // Stegen adderas löpande. Slutsumman från agenten ersätter dem, annars
+      // räknas varje steg två gånger.
+      const antal = Number(handelse.text) || 0;
+      lage.tokens = handelse.sort === "tokens_total" ? antal : lage.tokens + antal;
+      ritaArbetsrad(inlaggId);
+      return;
+    }
     lage.handelser.push(handelse);
+    lage.senaste = handelse;
+    ritaArbetsrad(inlaggId);
     const lista = document.querySelector(`[data-samtalskorning="${CSS.escape(inlaggId)}"] .samtalshandelser`);
-    if (lista) lista.append(samtalshandelseElement(handelse));
+    if (!lista) return;
+    // Följ med i agentens arbete, men bara för den som redan står längst ned.
+    // Läsningen måste ske före tillägget, annars har rutan redan vuxit.
+    const trad = $("#trad");
+    const foljMed = vidBotten(trad);
+    lista.append(samtalshandelseElement(handelse));
+    if (foljMed) skrollaNed(trad);
   } catch {
     toast("PM kunde inte läsa agentens händelse.");
   }
 }
 
 function startaSamtalsstrom(inlaggId, korningId) {
-  const lage = { korningId, handelser: [], klar: false };
+  const lage = { korningId, handelser: [], klar: false, start: Date.now(), tokens: 0 };
   samtalskorningar.set(inlaggId, lage);
   const kallan = new EventSource(`/api/korningar/${encodeURIComponent(korningId)}/strom`);
   lage.kallan = kallan;

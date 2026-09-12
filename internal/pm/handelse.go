@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -220,6 +221,7 @@ func codexFilandringar(andringar []codexAndring) []Handelse {
 
 type claudeRad struct {
 	Type    string          `json:"type"`
+	Usage   json.RawMessage `json:"usage"`
 	IsError bool            `json:"is_error"`
 	Result  string          `json:"result"`
 	Message json.RawMessage `json:"message"`
@@ -266,13 +268,32 @@ func tolkaClaudeRad(rad []byte) []Handelse {
 		if len(innehall) == 0 && strings.TrimSpace(post.Text) != "" {
 			return []Handelse{nyHandelse("text", post.Text)}
 		}
-		return tolkaClaudeInnehall(innehall)
+		handelser := tolkaClaudeInnehall(innehall)
+		// Tokensiffran räknar bara nya tokens, alltså in och ut. Läsning ur
+		// cachen kostar inget nytt och skulle blåsa upp talet.
+		if tokens := claudeNyaTokens(post.Usage, post.Message); tokens > 0 {
+			handelser = append(handelser, nyHandelse("tokens", strconv.Itoa(tokens)))
+		}
+		return handelser
 	case "tool_use":
 		return []Handelse{claudeVerktyg(post.Name, post.Input)}
 	case "user":
 		// Ett verktygssvar säger om anropet lyckades. Bara felen är värda en rad.
 		return claudeVerktygssvar(post)
 	case "result":
+		// Resultatraden bär hela körningens summa, inte stegets. Den ersätter
+		// det klienten räknat ihop, annars dubbelräknas varje steg.
+		if tokens := claudeNyaTokens(post.Usage, post.Message); tokens > 0 {
+			handelser := []Handelse{nyHandelse("tokens_total", strconv.Itoa(tokens))}
+			if post.IsError {
+				text := strings.TrimSpace(post.Result)
+				if text == "" {
+					text = "agenten avslutade med fel"
+				}
+				return append(handelser, nyHandelse("fel", text))
+			}
+			return append(handelser, nyHandelse("text", "agenten är klar"))
+		}
 		if post.IsError {
 			text := strings.TrimSpace(post.Result)
 			if text == "" {
@@ -284,6 +305,38 @@ func tolkaClaudeRad(rad []byte) []Handelse {
 	default:
 		return nil
 	}
+}
+
+// claudeNyaTokens summerar in- och utgående tokens för ett steg. Talet finns
+// antingen direkt på raden eller inne i message.
+func claudeNyaTokens(usage, meddelande json.RawMessage) int {
+	las := func(rat json.RawMessage) int {
+		if len(rat) == 0 {
+			return 0
+		}
+		var u struct {
+			In  int `json:"input_tokens"`
+			Ut  int `json:"output_tokens"`
+			Nyc int `json:"cache_creation_input_tokens"`
+		}
+		if json.Unmarshal(rat, &u) != nil {
+			return 0
+		}
+		return u.In + u.Ut + u.Nyc
+	}
+	if tokens := las(usage); tokens > 0 {
+		return tokens
+	}
+	if len(meddelande) == 0 {
+		return 0
+	}
+	var m struct {
+		Usage json.RawMessage `json:"usage"`
+	}
+	if json.Unmarshal(meddelande, &m) != nil {
+		return 0
+	}
+	return las(m.Usage)
 }
 
 func tolkaClaudeInnehall(ratt json.RawMessage) []Handelse {

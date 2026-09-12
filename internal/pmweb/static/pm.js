@@ -140,12 +140,24 @@ async function visaLogg(id) {
 // Tråden ritas om vid varje pollning. Har du skrollat upp ska positionen
 // ligga kvar, annars rycks läsningen undan var fjärde sekund.
 let samtalLaddat = false;
+let senasteSamtalssignatur = "";
 function vidBotten(ruta) { return ruta.scrollHeight - ruta.scrollTop - ruta.clientHeight < 40; }
 function skrollaNed(ruta) { ruta.scrollTop = ruta.scrollHeight; }
+// samtalssignatur beskriver tråden så kort att den går att jämföra. Ritar PM
+// om tråden i onödan tappar den både skrollposition och utfällda rutor.
+function samtalssignatur(poster, korningar) {
+  return poster.map((p) => `${p.id}:${p.kvitterad_at || 0}:${p.minnesforslag ? 1 : 0}`).join("|") + "#" + korningar;
+}
+
 async function laddaSamtal() {
   const ruta = $("#trad");
-  const foljMed = !samtalLaddat || vidBotten(ruta);
   const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/samtal`);
+  const signatur = samtalssignatur(data.samtal || [], samtalskorningar.size);
+  if (samtalLaddat && signatur === senasteSamtalssignatur) return;
+  senasteSamtalssignatur = signatur;
+  // Läget mäts efter hämtningen. Mäter PM före hinner användaren skrolla upp
+  // under väntan på svaret, och vyn rycker ned igen.
+  const foljMed = !samtalLaddat || vidBotten(ruta);
   const forePosition = ruta.scrollTop;
   fyll("#trad", data.samtal || [], (p) => {
     const li = document.createElement("li");
@@ -164,10 +176,12 @@ async function laddaSamtal() {
     text.className = "text markdown";
     PMMarkdown.rendera(text, p.text);
     li.append(meta, text);
-    byggSamtalsforlopp(p, li);
     byggMinnesforslag(p, li);
     return li;
   }, "Tråden är tom. Skriv det första inlägget.");
+  // Agentens arbete läggs som egna inlägg efter frågan, alltså på agentens
+  // sida av tråden. fyll() bygger bara ett element per post.
+  (data.samtal || []).forEach((p) => byggSamtalsforlopp(p, ruta));
   if (foljMed) {
     skrollaNed(ruta);
   } else {
@@ -190,9 +204,11 @@ $("#skrivform").addEventListener("submit", async (e) => {
       body: JSON.stringify({ text, actor: $("#aktor").value.trim(), fraga: fragar }),
     });
     $("#text").value = "";
+    // Vyn går ned till det egna inlägget direkt. Sker det efter svaret hinner
+    // användaren skrolla upp, och rycks då tillbaka mot sin vilja.
+    skrollaNed($("#trad"));
     if (fragar) startaSamtalsstrom(data.inlagg.id, data.korning.id);
     await laddaSamtal();
-    skrollaNed($("#trad"));
   } catch (err) {
     toast(err.message);
   } finally {

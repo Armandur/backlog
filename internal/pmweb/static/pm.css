@@ -103,6 +103,20 @@ h2 .n { font-weight: 500; background: var(--sankt); border-radius: 10px; padding
 /* Inlägget renderas som markdown, så egna radbrytningar sköts av renderaren.
    pre-wrap skulle annars ge dubbla blankrader mellan styckena. */
 .inlagg .text { margin: .35rem 0 0; overflow-wrap: anywhere; }
+.arbetskort { font-size: .92em; }
+.arbetsrad { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.arbetsstatus { font-weight: 600; }
+.arbetsmeta { color: var(--svag); font-variant-numeric: tabular-nums; }
+.arbetspuls { background: var(--svag); border-radius: 50%; flex: none; height: 8px; width: 8px; }
+.arbetskort.arbetar .arbetspuls { animation: puls 1.2s ease-in-out infinite; background: var(--kor, #2f7d5c); }
+.arbetskort .samtalsforlopp { margin-top: 6px; }
+@keyframes puls {
+  0%, 100% { opacity: .25; transform: scale(.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arbetskort.arbetar .arbetspuls { animation: none; opacity: 1; }
+}
 .inlagg .text > :first-child { margin-top: 0; }
 .inlagg .text > :last-child { margin-bottom: 0; }
 .minnesforslag { border-top: 1px solid var(--kant); margin-top: 12px; padding-top: 10px; }
