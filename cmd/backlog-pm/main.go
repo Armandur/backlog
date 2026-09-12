@@ -38,13 +38,16 @@ func main() {
 	cli.SetDefaultProfile(pm.DefaultPMProfil)
 	cli.SetGuard(pm.Guard)
 	cli.SetPostOpen(pm.Migrate)
-	mcpserver.SetExtension(pm.TestserverMCP(func() (*pm.TestserverStore, error) {
+	if err := mcpserver.SetExtension(pm.TestserverMCP(func() (*pm.TestserverStore, error) {
 		konfig, err := pm.LasKonfig(cli.WorkDir())
 		if err != nil {
 			return nil, err
 		}
 		return pm.NewTestserverStore(cli.DB(), konfig, cli.WorkDir()), nil
-	}))
+	})); err != nil {
+		fmt.Fprintln(os.Stderr, "fel:", err)
+		os.Exit(1)
+	}
 
 	extra := []*cobra.Command{
 		pm.NewInitCmd(),

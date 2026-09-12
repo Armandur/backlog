@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/mazen160/backlog/internal/models"
@@ -31,52 +30,6 @@ type message struct {
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
-}
-
-// ToolDefinition describes one tool exposed by the MCP server.
-type ToolDefinition struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	InputSchema map[string]interface{} `json:"inputSchema"`
-}
-
-// ToolHandler handles one extension tool call.
-type ToolHandler func(context.Context, map[string]interface{}) (interface{}, error)
-
-// Extension adds tools without changing the standard backlog server.
-type Extension struct {
-	Tools    []ToolDefinition
-	Handlers map[string]ToolHandler
-}
-
-var configuredExtension struct {
-	sync.RWMutex
-	extension Extension
-}
-
-// SetExtension configures extra tools for this process.
-func SetExtension(extension Extension) {
-	configuredExtension.Lock()
-	configuredExtension.extension = extension
-	configuredExtension.Unlock()
-}
-
-func currentExtension() Extension {
-	configuredExtension.RLock()
-	defer configuredExtension.RUnlock()
-	return configuredExtension.extension
-}
-
-// Serve runs the MCP stdio server until the reader closes.
-func Serve(db *sql.DB, actor models.Actor) {
-	srv := &server{
-		db:    db,
-		actor: actor,
-		r:     bufio.NewReader(os.Stdin),
-		w:     os.Stdout,
-		extra: currentExtension(),
-	}
-	srv.run()
 }
 
 type server struct {
@@ -128,7 +81,7 @@ func (s *server) handle(msg message) {
 		available := append(tools(), s.extra.Tools...)
 		s.send(message{JSONRPC: "2.0", ID: msg.ID, Result: map[string]interface{}{"tools": available}})
 	case "tools/call":
-		result, err := s.callTool(ctx, msg.Params)
+		result, err := s.callToolSafely(ctx, msg.Params)
 		if err != nil {
 			s.send(message{JSONRPC: "2.0", ID: msg.ID, Error: &rpcError{Code: -32603, Message: err.Error()}})
 			return
@@ -148,6 +101,18 @@ func (s *server) send(msg message) {
 type toolCallParams struct {
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
+}
+
+func (s *server) callToolSafely(ctx context.Context, params json.RawMessage) (result interface{}, err error) {
+	defer func() {
+		if orsak := recover(); orsak != nil {
+			// Klienten ska få ett svar, men orsaken får inte försvinna tyst.
+			fmt.Fprintf(os.Stderr, "verktygshanteraren paniserade: %v\n", orsak)
+			result = nil
+			err = fmt.Errorf("verktygshanteraren avbröts oväntat")
+		}
+	}()
+	return s.callTool(ctx, params)
 }
 
 func (s *server) callTool(ctx context.Context, params json.RawMessage) (interface{}, error) {
