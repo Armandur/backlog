@@ -86,3 +86,24 @@ Den blockerar därför inte annat arbete.
 Första körningen den 12 september 2026 gav 132 textbitar med fynd.
 De flesta fynd gäller linterns passivheuristik.
 Granska långa agentprompter i Go-koden först eftersom de har mer sammansatta fynd.
+
+## När databasen blir beständig
+
+PM-databasen slutar vara kastbar när projektet lämnar PM till en utomstående. Gränsen kommer tidigare om någon måste bevara sparat arbete.
+
+Från den tidpunkten får ingen ändra, flytta eller ta bort en släppt migreringsfil. Varje schemaändring får en ny migreringsfil med nästa nummer.
+
+Varje start ska först kontrollera databasens två schemaversioner. PM ska sedan köra saknade upstream- och PM-migreringar i ordning.
+
+PM ska vägra starta om någon schemaversion är nyare än programmets version. Felmeddelandet ska hänvisa till en kompatibel programversion eller backup.
+
+Ta en backup med den gamla programversionen före en uppgradering:
+
+```sh
+backlog-pm doctor backup --to /sökväg/pm-före-uppgradering.db
+```
+
+Behåll backupen tills du har kontrollerat uppgraderingen. PM stöder ingen nedgradering av databasen.
+
+Dagens kod uppfyller inte hela avtalet. Vanliga kommandon migrerar databasen före användning, men `init` kör bara upstreams migreringar.
+PM godtar också en databas med en okänd, nyare schemaversion. Räkna därför databasen som kastbar tills uppföljningstaskerna i utredningen är klara.
