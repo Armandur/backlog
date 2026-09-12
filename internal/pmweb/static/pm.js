@@ -301,11 +301,13 @@ $("#projektform").addEventListener("submit", async (e) => {
         beskrivning: $("#projektBeskrivning").value,
         lage: document.querySelector('input[name="lage"]:checked').value,
         sokvag: $("#projektSokvag").value,
+        startkommando: $("#projektStart").value,
       }),
     });
     $("#projektLank").href = data.lank;
     $("#projektLank").textContent = `Öppna ${data.projekt.name}`;
     $("#projektSvar").hidden = false;
+    if (data.varning) toast(data.varning);
   } catch (err) {
     $("#projektFel").textContent = err.message;
   } finally {

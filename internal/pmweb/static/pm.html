@@ -51,6 +51,10 @@
             <input id="projektSokvag" name="sokvag" required spellcheck="false" placeholder="mitt-projekt">
             <span class="falttips" id="projektSokvagTips">PM skapar katalogen, ett Git-repo och README.md.</span>
           </label>
+          <label class="falt hel" for="projektStart">Startkommando, valfritt
+            <input id="projektStart" name="startkommando" spellcheck="false" placeholder="npm run dev -- --port {port}">
+            <span class="falttips">Kommandot startar projektets testserver. Skriv {port} där porten ska stå. Citattecken fungerar inte.</span>
+          </label>
         </div>
         <div class="projektfot">
           <p class="fel-text" id="projektFel" role="alert"></p>

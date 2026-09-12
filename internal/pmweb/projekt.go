@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/mazen160/backlog/internal/models"
+	"github.com/mazen160/backlog/internal/pm"
 	"github.com/mazen160/backlog/internal/service"
 )
 
@@ -32,6 +33,8 @@ type skapaProjektBody struct {
 	Beskrivning string `json:"beskrivning"`
 	Lage        string `json:"lage"`
 	Sokvag      string `json:"sokvag"`
+	// Startkommando är valfritt och blir projektets testserver.
+	Startkommando string `json:"startkommando"`
 }
 
 func (s *Server) skapaProjekt(w http.ResponseWriter, r *http.Request) {
@@ -80,10 +83,40 @@ func (s *Server) skapaProjekt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	svaraJSON(w, http.StatusCreated, map[string]any{
+	svar := map[string]any{
 		"projekt": projekt,
 		"lank":    "/pm/" + projekt.Alias,
-	})
+	}
+	// Konfigurationen skrivs efter projektet, annars känner den inte igen
+	// aliaset. Ett fel här får inte kasta bort projektet som redan finns.
+	if varning := sparaStartkommando(projekt.Alias, sokvag, body.Startkommando); varning != "" {
+		svar["varning"] = varning
+	}
+	svaraJSON(w, http.StatusCreated, svar)
+}
+
+// sparaStartkommando lägger projektets testserver i pm.toml. Returnerar ett
+// besked till användaren när kommandot inte gick att spara.
+func sparaStartkommando(alias, repo, kommando string) string {
+	delar := strings.Fields(kommando)
+	if len(delar) == 0 {
+		return ""
+	}
+	workspace := konfigWorkDir()
+	konfig, err := pm.LasKonfig(workspace)
+	if err != nil {
+		return "Projektet är klart, men startkommandot kunde inte sparas: konfigurationen går inte att läsa. Lägg in det i pm.toml."
+	}
+	if konfig.Testserver == nil {
+		konfig.Testserver = map[string]pm.TestserverKonfig{}
+	}
+	konfig.Testserver[alias] = pm.TestserverKonfig{
+		Kommando: delar[0], Args: delar[1:], CWD: repo, Halsa: "/",
+	}
+	if err := pm.SkrivKonfig(workspace, konfig); err != nil {
+		return "Projektet är klart, men startkommandot kunde inte sparas. Lägg in det under Konfig."
+	}
+	return ""
 }
 
 func sakerProjektSokvag(in string) (string, error) {

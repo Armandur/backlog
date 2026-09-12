@@ -1942,3 +1942,76 @@ func TestWebbstartStadarDodTestserverrad(t *testing.T) {
 		t.Fatalf("webbstarten lämnade %d död testserverrad", antal)
 	}
 }
+
+// testServerIKatalog lägger databasen i samma katalog som konfigurationen,
+// precis som i skarp drift. Då kontrolleras testserverblocken mot riktiga
+// projektalias när konfigurationen sparas.
+func testServerIKatalog(t *testing.T, dir string) *Server {
+	t.Helper()
+	db, err := repo.Open(filepath.Join(dir, "backlog.db"))
+	if err != nil {
+		t.Fatalf("öppna db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := migrate.Run(db); err != nil {
+		t.Fatalf("migrering: %v", err)
+	}
+	if err := pm.Migrate(db); err != nil {
+		t.Fatalf("pm-migrering: %v", err)
+	}
+	medKonfigDir(t, dir)
+	return New(db, models.Actor{Kind: models.ActorKindHuman, Name: "rasmus"}, pm.NewAgentRegister())
+}
+
+func TestSkapaProjektSpararStartkommandoSomTestserver(t *testing.T) {
+	bas := t.TempDir()
+	medProjektBas(t, bas)
+	dir := t.TempDir()
+	srv := testServerIKatalog(t, dir)
+
+	w := postProjekt(t, srv, skapaProjektBody{
+		Alias: "webbshop", Namn: "Webbshop", Lage: "nytt", Sokvag: "webbshop",
+		Startkommando: "npm run dev -- --port {port}",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST gav %d: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "varning") {
+		t.Fatalf("projektet gav en varning: %s", w.Body.String())
+	}
+
+	konfig, err := pm.LasKonfig(dir)
+	if err != nil {
+		t.Fatalf("konfigurationen går inte att läsa: %v", err)
+	}
+	server, finns := konfig.Testserver["webbshop"]
+	if !finns {
+		t.Fatalf("testserverblocket saknas: %+v", konfig.Testserver)
+	}
+	if server.Kommando != "npm" {
+		t.Fatalf("fel kommando: %+v", server)
+	}
+	if strings.Join(server.Args, " ") != "run dev -- --port {port}" {
+		t.Fatalf("fel argument: %+v", server.Args)
+	}
+	if server.CWD != filepath.Join(bas, "webbshop") {
+		t.Fatalf("fel arbetskatalog: %+v", server.CWD)
+	}
+}
+
+func TestSkapaProjektUtanStartkommandoLamnarKonfigenTom(t *testing.T) {
+	bas := t.TempDir()
+	medProjektBas(t, bas)
+	dir := t.TempDir()
+	srv := testServerIKatalog(t, dir)
+
+	w := postProjekt(t, srv, skapaProjektBody{
+		Alias: "tomt", Namn: "Tomt", Lage: "nytt", Sokvag: "tomt",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST gav %d: %s", w.Code, w.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, pm.KonfigFil)); !os.IsNotExist(err) {
+		t.Fatalf("PM skrev en konfigurationsfil i onödan: %v", err)
+	}
+}
