@@ -249,6 +249,10 @@ func tolkaClaudeRad(rad []byte) []Handelse {
 	}
 
 	switch post.Type {
+	case "rate_limit_event":
+		// Kvotläget plockas ur den samlade utdatan efteråt, som modellen.
+		// Förloppsvyn blir inte begripligare av en rad om kvoten.
+		return nil
 	case "assistant":
 		innehall := post.Content
 		if len(post.Message) > 0 {

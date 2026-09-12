@@ -21,6 +21,8 @@ type Resultat struct {
 	Logg    string
 	// Modell är modellen agenten körde med, när strömmen avslöjar den.
 	Modell string
+	// Anvandning är agentens kvotläge, när strömmen rapporterar det.
+	Anvandning *Anvandning
 }
 
 // Korare kör en brief och rapporterar exitkod. Utdelaren pratar bara med det
@@ -218,6 +220,7 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 			res.Utdata = svar
 		}
 		res.Modell = ModellUrClaudeStrom(samladUtdata)
+		res.Anvandning = AnvandningUrClaudeStrom(samladUtdata)
 	}
 	if a.konfig.Svar == "fil" {
 		if data, err := os.ReadFile(in.Svarsfil); err == nil && strings.TrimSpace(string(data)) != "" {
