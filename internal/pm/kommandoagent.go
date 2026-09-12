@@ -23,6 +23,8 @@ type Resultat struct {
 	Modell string
 	// Anvandning är agentens kvotläge, när strömmen rapporterar det.
 	Anvandning *Anvandning
+	// Tokens är körningens kostnad i nya tokens, när agenten rapporterar den.
+	Tokens int
 }
 
 // Korare kör en brief och rapporterar exitkod. Utdelaren pratar bara med det
@@ -221,6 +223,7 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 		}
 		res.Modell = ModellUrClaudeStrom(samladUtdata)
 		res.Anvandning = AnvandningUrClaudeStrom(samladUtdata)
+		res.Tokens = TokensUrClaudeStrom(samladUtdata)
 	}
 	if a.konfig.Svar == "fil" {
 		if data, err := os.ReadFile(in.Svarsfil); err == nil && strings.TrimSpace(string(data)) != "" {

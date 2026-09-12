@@ -112,6 +112,7 @@ h2 .n { font-weight: 500; background: var(--sankt); border-radius: 10px; padding
 .arbetskort.avslutad { color: var(--svag); opacity: .7; }
 .arbetskort.avslutad:hover, .arbetskort.avslutad:focus-within { opacity: 1; }
 .arbetsrad { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.arbetsstatus:empty { display: none; }
 .arbetsstatus { font-weight: 600; }
 .arbetsmeta { color: var(--svag); font-variant-numeric: tabular-nums; }
 .arbetspuls { background: var(--svag); border-radius: 50%; flex: none; height: 8px; width: 8px; }

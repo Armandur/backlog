@@ -121,6 +121,37 @@ func tolkaClaudeAnvandning(rad []byte) (Anvandning, error) {
 	}, nil
 }
 
+// TokensUrClaudeStrom ger körningens totala tokens. Resultatraden bär hela
+// körningens summa, och den vinner över de enskilda stegen.
+func TokensUrClaudeStrom(utdata string) int {
+	summa, total := 0, 0
+	for _, rad := range strings.Split(utdata, "\n") {
+		rad = strings.TrimSpace(rad)
+		if rad == "" || !strings.Contains(rad, "usage") {
+			continue
+		}
+		var post claudeRad
+		if json.Unmarshal([]byte(rad), &post) != nil {
+			continue
+		}
+		tokens := claudeNyaTokens(post.Usage, post.Message)
+		if tokens == 0 {
+			continue
+		}
+		if post.Type == "result" {
+			total = tokens
+			continue
+		}
+		if post.Type == "assistant" {
+			summa += tokens
+		}
+	}
+	if total > 0 {
+		return total
+	}
+	return summa
+}
+
 // AnvandningUrClaudeStrom plockar det sista kvotläget ur en claude-ström.
 // Den läser samlad utdata, precis som ModellUrClaudeStrom, så ingen del av
 // koden behöver gissa var databasen ligger.

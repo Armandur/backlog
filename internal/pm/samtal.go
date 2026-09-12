@@ -20,10 +20,13 @@ type Inlagg struct {
 	Text          string       `json:"text"`
 	Minnesforslag string       `json:"minnesforslag,omitempty"`
 	// KorningID pekar på körningen som skrev svaret, så agentens arbete går
-	// att fälla ut även efter en omladdning.
-	KorningID   string `json:"korning_id,omitempty"`
-	KvitteradAt *int64 `json:"kvitterad_at,omitempty"`
-	CreatedAt   int64  `json:"created_at"`
+	// att fälla ut även efter en omladdning. KorningSekunder är hur länge den
+	// körningen tog, så kortet kan visa tiden utan att läsa händelsefilen.
+	KorningID       string  `json:"korning_id,omitempty"`
+	KorningSekunder float64 `json:"korning_sekunder,omitempty"`
+	KorningTokens   int     `json:"korning_tokens,omitempty"`
+	KvitteradAt     *int64  `json:"kvitterad_at,omitempty"`
+	CreatedAt       int64   `json:"created_at"`
 }
 
 // SamtalStore läser och skriver projektsamtal i PM-databasen.
@@ -109,16 +112,21 @@ func (s *SamtalStore) AddMedKorning(ctx context.Context, projectID, korningID st
 
 // List ger trådens inlägg i tidsordning. limit <= 0 ger alla.
 func (s *SamtalStore) List(ctx context.Context, projectID string, limit int) ([]Inlagg, error) {
-	query := `SELECT id, project_id, COALESCE(task_id,''), actor_kind, actor_name, text,
-	                 minnesforslag, kvitterad_at, COALESCE(korning_id,''), created_at
-	          FROM pm_samtal WHERE project_id = ? ORDER BY created_at ASC, id ASC`
+	query := `SELECT s.id, s.project_id, COALESCE(s.task_id,''), s.actor_kind, s.actor_name, s.text,
+	                 s.minnesforslag, s.kvitterad_at, COALESCE(s.korning_id,''),
+	                 COALESCE((k.slut_at - k.startad_at) / 1000000000.0, 0), COALESCE(k.tokens, 0), s.created_at
+	          FROM pm_samtal s LEFT JOIN pm_korningar k ON k.id = s.korning_id
+	          WHERE s.project_id = ? ORDER BY s.created_at ASC, s.id ASC`
 	args := []any{projectID}
 	if limit > 0 {
 		// De senaste N, men fortfarande i stigande ordning i svaret.
-		query = `SELECT id, project_id, task_id, actor_kind, actor_name, text, minnesforslag, kvitterad_at, korning_id, created_at FROM (
-		           SELECT id, project_id, COALESCE(task_id,'') AS task_id, actor_kind, actor_name, text,
-		                  minnesforslag, kvitterad_at, COALESCE(korning_id,'') AS korning_id, created_at
-		           FROM pm_samtal WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?
+		query = `SELECT id, project_id, task_id, actor_kind, actor_name, text, minnesforslag, kvitterad_at, korning_id, sekunder, tokens, created_at FROM (
+		           SELECT s.id, s.project_id, COALESCE(s.task_id,'') AS task_id, s.actor_kind, s.actor_name, s.text,
+		                  s.minnesforslag, s.kvitterad_at, COALESCE(s.korning_id,'') AS korning_id,
+		                  COALESCE((k.slut_at - k.startad_at) / 1000000000.0, 0) AS sekunder,
+		                  COALESCE(k.tokens, 0) AS tokens, s.created_at
+		           FROM pm_samtal s LEFT JOIN pm_korningar k ON k.id = s.korning_id
+		           WHERE s.project_id = ? ORDER BY s.created_at DESC, s.id DESC LIMIT ?
 		         ) ORDER BY created_at ASC, id ASC`
 		args = append(args, limit)
 	}
@@ -133,7 +141,7 @@ func (s *SamtalStore) List(ctx context.Context, projectID string, limit int) ([]
 		var p Inlagg
 		var kind string
 		if err := rows.Scan(&p.ID, &p.ProjectID, &p.TaskID, &kind, &p.Actor.Name, &p.Text,
-			&p.Minnesforslag, &p.KvitteradAt, &p.KorningID, &p.CreatedAt); err != nil {
+			&p.Minnesforslag, &p.KvitteradAt, &p.KorningID, &p.KorningSekunder, &p.KorningTokens, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		p.Actor.Kind = models.ActorKind(kind)

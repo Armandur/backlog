@@ -177,11 +177,13 @@ async function laddaSamtal() {
     PMMarkdown.rendera(text, p.text);
     li.append(meta, text);
     byggMinnesforslag(p, li);
-    return li;
+    // Arbetskortet hör till sitt eget svar och ska stå direkt under det.
+    // Fragmentet håller ihop paret, så korten inte samlas sist i tråden.
+    const bit = document.createDocumentFragment();
+    bit.append(li);
+    byggSamtalsforlopp(p, bit);
+    return bit;
   }, "Tråden är tom. Skriv det första inlägget.");
-  // Agentens arbete läggs som egna inlägg efter frågan, alltså på agentens
-  // sida av tråden. fyll() bygger bara ett element per post.
-  (data.samtal || []).forEach((p) => byggSamtalsforlopp(p, ruta));
   if (foljMed) {
     skrollaNed(ruta);
   } else {

@@ -29,13 +29,17 @@ function tidtext(start) {
 
 // ritaArbetsrad uppdaterar bara statusraden, aldrig hela tråden. En timer som
 // ritar om tråden varje sekund skulle kasta bort skrollposition och utfällning.
-function ritaArbetsrad(inlaggId) {
+function ritaArbetsrad(inlaggId, element) {
   const lage = samtalskorningar.get(inlaggId);
-  const kort = document.querySelector(`[data-arbetskort="${CSS.escape(inlaggId)}"]`);
+  // Elementet skickas med när kortet byggs, för då ligger det ännu i ett
+  // fragment och går inte att hitta i dokumentet.
+  const kort = element || document.querySelector(`[data-arbetskort="${CSS.escape(inlaggId)}"]`);
   if (!lage || !kort) return;
   const status = kort.querySelector(".arbetsstatus");
   const senaste = lage.senaste && lage.senaste.text ? lage.senaste.text.split("\n")[0] : "";
-  status.textContent = lage.klar ? "Agentens arbete" : senaste || "Agenten tänker";
+  // Ett avslutat kort säger bara tid och tokens. Att skriva agentens arbete
+  // säger inget som inte redan syns.
+  status.textContent = lage.klar ? "" : senaste || "Agenten tänker";
   kort.classList.toggle("arbetar", !lage.klar);
   const delar = [];
   if (lage.start) delar.push(tidtext(lage.start));
@@ -59,7 +63,8 @@ function byggSamtalsforlopp(post, lista) {
   if (!lage && post.korning_id) {
     // Ett avslutat svar har sin körning i databasen. Stegen hämtas först när
     // användaren fäller ut rutan, annars läser PM filer ingen tittar på.
-    lage = { korningId: post.korning_id, handelser: [], klar: true, historisk: true, tokens: 0 };
+    lage = { korningId: post.korning_id, handelser: [], klar: true, historisk: true,
+             tokens: post.korning_tokens || 0, varaktighet: post.korning_sekunder || 0 };
     samtalskorningar.set(post.id, lage);
   }
   if (!lage) return;
@@ -99,7 +104,7 @@ function byggSamtalsforlopp(post, lista) {
 
   li.append(rad, detaljer);
   lista.append(li);
-  ritaArbetsrad(post.id);
+  ritaArbetsrad(post.id, li);
 }
 
 // hamtaHistoriskaSteg läser stegen för en avslutad körning, en gång.
@@ -119,7 +124,7 @@ async function hamtaHistoriskaSteg(inlaggId, lista) {
     if (data.startad_at && data.slut_at) lage.varaktighet = (data.slut_at - data.startad_at) / 1e9;
     lista.replaceChildren();
     lage.handelser.forEach((h) => lista.append(samtalshandelseElement(h)));
-    ritaArbetsrad(inlaggId);
+    ritaArbetsrad(inlaggId, lista.closest(".arbetskort"));
   } catch (err) {
     lage.hamtad = false;
     toast(err.message);

@@ -82,6 +82,17 @@ func (s *KorningStore) SattLogg(ctx context.Context, id, logg string) error {
 	return err
 }
 
+// SattTokens sparar vad körningen kostade i nya tokens.
+func (s *KorningStore) SattTokens(ctx context.Context, id string, tokens int) error {
+	if tokens <= 0 {
+		return nil
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE pm_korningar SET tokens=? WHERE id=?`, tokens, id); err != nil {
+		return fmt.Errorf("spara körningens tokens: %w", err)
+	}
+	return nil
+}
+
 func (s *KorningStore) Avsluta(ctx context.Context, id, status string, exitKod int, logg string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE pm_korningar SET status=?, exit_kod=?, logg_sokvag=?, slut_at=? WHERE id=?`,
