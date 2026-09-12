@@ -1,6 +1,7 @@
 package pm
 
 import (
+	"bufio"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,6 +63,40 @@ func TestTolkaCodexRadRapporterarFel(t *testing.T) {
 		handelser := tolkaCodexRad([]byte(testfall.rad))
 		if len(handelser) != 1 || handelser[0].Sort != "fel" || handelser[0].Text != testfall.text {
 			t.Fatalf("fick %+v, vill ha ett fel med texten %q", handelser, testfall.text)
+		}
+	}
+}
+
+func TestTolkaCodexMisslyckadKorning(t *testing.T) {
+	fil, err := os.Open(filepath.Join("testdata", "codex-misslyckad.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fil.Close()
+
+	var handelser []Handelse
+	skanner := bufio.NewScanner(fil)
+	for skanner.Scan() {
+		handelser = append(handelser, tolkaCodexRad(skanner.Bytes())...)
+	}
+	if err := skanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	vill := []string{
+		"Model metadata for `ingen-sadan-modell-finns` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.",
+		"The 'ingen-sadan-modell-finns' model is not supported when using Codex with a ChatGPT account.",
+		"The 'ingen-sadan-modell-finns' model is not supported when using Codex with a ChatGPT account.",
+	}
+	if len(handelser) != len(vill) {
+		t.Fatalf("fick %d händelser, vill ha %d: %+v", len(handelser), len(vill), handelser)
+	}
+	for i, text := range vill {
+		if handelser[i].Sort != "fel" || handelser[i].Text != text {
+			t.Fatalf("händelse %d blev %+v, vill ha ett fel med texten %q", i, handelser[i], text)
+		}
+		if strings.HasPrefix(handelser[i].Text, "{") {
+			t.Fatalf("händelse %d visar rå JSON: %q", i, handelser[i].Text)
 		}
 	}
 }

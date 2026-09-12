@@ -104,11 +104,12 @@ type codexRad struct {
 }
 
 type codexPost struct {
-	Type     string         `json:"type"`
-	Text     string         `json:"text"`
-	Command  string         `json:"command"`
-	Changes  []codexAndring `json:"changes"`
-	ExitCode *int           `json:"exit_code"`
+	Type     string          `json:"type"`
+	Text     string          `json:"text"`
+	Message  json.RawMessage `json:"message"`
+	Command  string          `json:"command"`
+	Changes  []codexAndring  `json:"changes"`
+	ExitCode *int            `json:"exit_code"`
 }
 
 type codexAndring struct {
@@ -151,6 +152,12 @@ func tolkaCodexRad(rad []byte) []Handelse {
 				text := fmt.Sprintf("kommandot misslyckades med exitkod %d", *item.ExitCode)
 				return []Handelse{nyHandelse("fel", text)}
 			}
+		case "error":
+			text := codexFeltext(item.Message)
+			if text == "" {
+				text = "Codex rapporterade ett fel"
+			}
+			return []Handelse{nyHandelse("fel", text)}
 		}
 	case "error":
 		text := codexFeltext(post.Message)
@@ -171,13 +178,23 @@ func tolkaCodexRad(rad []byte) []Handelse {
 func codexFeltext(ratt json.RawMessage) string {
 	var text string
 	if json.Unmarshal(ratt, &text) == nil {
-		return strings.TrimSpace(text)
+		text = strings.TrimSpace(text)
+		if json.Valid([]byte(text)) {
+			if inbaddad := codexFeltext(json.RawMessage(text)); inbaddad != "" {
+				return inbaddad
+			}
+		}
+		return text
 	}
 	var fel struct {
-		Message string `json:"message"`
+		Message json.RawMessage `json:"message"`
+		Error   json.RawMessage `json:"error"`
 	}
 	if json.Unmarshal(ratt, &fel) == nil {
-		return strings.TrimSpace(fel.Message)
+		if text := codexFeltext(fel.Message); text != "" {
+			return text
+		}
+		return codexFeltext(fel.Error)
 	}
 	return ""
 }
