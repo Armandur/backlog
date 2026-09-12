@@ -74,7 +74,107 @@ function visaFillista(data) {
   }
 }
 
+
+function skapaGitPanel() {
+  if ($("#gitpanel")) return;
+  const panel = document.createElement("section");
+  panel.id = "gitpanel";
+  panel.style.marginBottom = "22px";
+
+  const huvud = document.createElement("div");
+  huvud.className = "sektionshuvud";
+  huvud.style.marginBottom = "10px";
+  const rubrik = document.createElement("h2");
+  rubrik.textContent = "Ändrat i arbetsträdet";
+  const uppdatera = document.createElement("button");
+  uppdatera.type = "button";
+  uppdatera.className = "btn secondary";
+  uppdatera.textContent = "Uppdatera";
+  uppdatera.style.marginBottom = "0";
+  uppdatera.addEventListener("click", laddaGitAndringar);
+  huvud.append(rubrik, uppdatera);
+
+  const fel = document.createElement("p");
+  fel.id = "gitfel";
+  fel.className = "fel-text";
+  fel.setAttribute("role", "alert");
+  const vy = document.createElement("div");
+  vy.className = "filvy";
+  const lista = document.createElement("div");
+  lista.id = "gitlista";
+  lista.className = "fillista";
+  const diff = document.createElement("section");
+  diff.id = "gitdiff";
+  diff.className = "filinnehall";
+  diff.hidden = true;
+  const diffhuvud = document.createElement("div");
+  diffhuvud.className = "filhuvud";
+  const diffnamn = document.createElement("h2");
+  diffnamn.id = "gitdiffnamn";
+  diffhuvud.append(diffnamn);
+  const difftext = document.createElement("pre");
+  difftext.id = "gitdifftext";
+  diff.append(diffhuvud, difftext);
+  vy.append(lista, diff);
+  panel.append(huvud, fel, vy);
+  $("#filsmulor").before(panel);
+}
+
+function gitAndringsrad(andring) {
+  const knapp = document.createElement("button");
+  knapp.type = "button";
+  knapp.className = "filrad";
+  const typ = document.createElement("span");
+  typ.className = "filikon";
+  typ.textContent = andring.typ;
+  const sokvag = document.createElement("span");
+  sokvag.textContent = andring.sokvag;
+  const status = document.createElement("span");
+  status.className = "filstorlek";
+  status.textContent = andring.status;
+  knapp.append(typ, sokvag, status);
+  knapp.addEventListener("click", () => laddaGitDiff(andring.sokvag));
+  return knapp;
+}
+
+async function laddaGitAndringar() {
+  skapaGitPanel();
+  const lista = $("#gitlista");
+  $("#gitfel").textContent = "";
+  lista.textContent = "";
+  try {
+    const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/git-andringar`);
+    if (!data.andringar.length) {
+      const tom = document.createElement("p");
+      tom.className = "tom";
+      tom.textContent = "Inga ändringar sedan senaste commit.";
+      lista.append(tom);
+      return;
+    }
+    data.andringar.forEach((andring) => lista.append(gitAndringsrad(andring)));
+  } catch (err) {
+    $("#gitdiff").hidden = true;
+    $("#gitfel").textContent = err.message;
+  }
+}
+
+async function laddaGitDiff(sokvag) {
+  $("#gitfel").textContent = "";
+  try {
+    const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/git-diff?path=${encodeURIComponent(sokvag)}`);
+    $("#gitdiffnamn").textContent = data.sokvag;
+    $("#gitdifftext").textContent = data.diff || "Filen har ingen textdiff mot HEAD.";
+    $("#gitdiff").hidden = false;
+  } catch (err) {
+    $("#gitdiff").hidden = true;
+    $("#gitdifftext").textContent = "";
+    $("#gitfel").textContent = err.message;
+    toast(err.message);
+  }
+}
+
 async function laddaFiler(sokvag) {
+  if (!sokvag) laddaGitAndringar();
   $("#filfel").textContent = "";
   try {
     const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/filer?path=${encodeURIComponent(sokvag)}`);

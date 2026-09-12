@@ -369,6 +369,8 @@ func TestLasrutterAvvisarSkrivmetoder(t *testing.T) {
 		"/api/docs/ett-id",
 		"/api/projects/demo/minne",
 		"/api/projects/demo/filer",
+		"/api/projects/demo/git-andringar",
+		"/api/projects/demo/git-diff",
 	} {
 		for _, metod := range []string{http.MethodPost, http.MethodPut} {
 			w := httptest.NewRecorder()
@@ -2832,6 +2834,119 @@ func TestFilroutenAvvisarStorOchBinarFil(t *testing.T) {
 		srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/filer?path="+test.fil, nil))
 		if w.Code != test.kod || !strings.Contains(w.Body.String(), test.text) {
 			t.Fatalf("%s gav %d: %s", test.fil, w.Code, w.Body.String())
+		}
+	}
+}
+
+func skapaGitRepoForProjekt(t *testing.T, db *sql.DB, filer map[string]string) string {
+	t.Helper()
+	repo := repoForProjekt(t, db, filer)
+	kommandon := [][]string{
+		{"init"},
+		{"add", "."},
+		{"-c", "user.name=PM-prov", "-c", "user.email=pm-prov@localhost", "commit", "-m", "Skapa prov"},
+	}
+	for _, argument := range kommandon {
+		if utdata, err := exec.Command("git", append([]string{"-C", repo}, argument...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %s: %v", argument[0], utdata, err)
+		}
+	}
+	return repo
+}
+
+func TestGitAndringarListarOchVisarDiff(t *testing.T) {
+	srv, db := testServer(t)
+	repo := skapaGitRepoForProjekt(t, db, map[string]string{"README.md": "före\n"})
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("efter\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "ny.txt"), []byte("ny\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/git-andringar", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("Git-status gav %d: %s", w.Code, w.Body.String())
+	}
+	var lista gitAndringssvar
+	if err := json.NewDecoder(w.Body).Decode(&lista); err != nil {
+		t.Fatal(err)
+	}
+	if len(lista.Andringar) != 2 {
+		t.Fatalf("Git-status saknar ändringar: %+v", lista.Andringar)
+	}
+	if lista.Andringar[0].Sokvag != "README.md" || lista.Andringar[0].Typ != "Ändrad" {
+		t.Fatalf("den spårade ändringen är fel: %+v", lista.Andringar[0])
+	}
+	if lista.Andringar[1].Sokvag != "ny.txt" || lista.Andringar[1].Typ != "Ny" {
+		t.Fatalf("den nya filen är fel: %+v", lista.Andringar[1])
+	}
+
+	for _, test := range []struct {
+		fil  string
+		text string
+	}{
+		{"README.md", "+efter"},
+		{"ny.txt", "+ny"},
+	} {
+		w = httptest.NewRecorder()
+		adress := "/api/projects/demo/git-diff?path=" + test.fil
+		srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, adress, nil))
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), test.text) {
+			t.Fatalf("diffen för %s gav %d: %s", test.fil, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestGitAndringarUtanRepoGerBesked(t *testing.T) {
+	srv, db := testServer(t)
+	repoForProjekt(t, db, map[string]string{"README.md": "hej\n"})
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/git-andringar", nil))
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("mappen utan Git gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "inte ett Git-repo") {
+		t.Fatalf("svaret saknar ett begripligt besked: %s", w.Body.String())
+	}
+}
+
+func TestGitDiffAvvisarStorDiff(t *testing.T) {
+	srv, db := testServer(t)
+	repo := skapaGitRepoForProjekt(t, db, map[string]string{"stor.txt": "kort\n"})
+	if err := os.WriteFile(filepath.Join(repo, "stor.txt"), []byte(strings.Repeat("x", maxGitUtdata+1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/git-diff?path=stor.txt", nil))
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("den stora diffen gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "gränsen 1 MiB") {
+		t.Fatalf("svaret saknar diffgränsen: %s", w.Body.String())
+	}
+}
+
+func TestGitDiffAvvisarOsakerSokvag(t *testing.T) {
+	srv, db := testServer(t)
+	repo := skapaGitRepoForProjekt(t, db, map[string]string{"README.md": "hej\n"})
+	utanfor := filepath.Join(t.TempDir(), "hemlig.txt")
+	if err := os.WriteFile(utanfor, []byte("hemligt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(utanfor, filepath.Join(repo, "lank.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, sokvag := range []string{"../hemlig.txt", "lank.txt", ".git/config"} {
+		w := httptest.NewRecorder()
+		adress := "/api/projects/demo/git-diff?path=" + sokvag
+		srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, adress, nil))
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%s gav %d: %s", sokvag, w.Code, w.Body.String())
 		}
 	}
 }
