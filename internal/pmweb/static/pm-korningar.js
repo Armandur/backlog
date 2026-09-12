@@ -97,8 +97,6 @@ $("#visaFlerKorningar").addEventListener("click", () => {
   laddaHistorik(false).catch((err) => toast(err.message));
 });
 
-const ursprungligLaggHandelse = laggHandelse;
-laggHandelse = function (event) {
-  ursprungligLaggHandelse(event);
+lyssnaPaHandelse((event) => {
   if (event.type === "slut") laddaPagaende(true).catch((err) => toast(err.message));
-};
+});

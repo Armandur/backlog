@@ -1,4 +1,6 @@
 // Körningens förlopp: händelser via Server-Sent Events. Laddas efter pm.js.
+const handelseLyssnare = [];
+function lyssnaPaHandelse(lyssnare) { handelseLyssnare.push(lyssnare); }
 function stangKorningStrom() { if (korningStrom) korningStrom.close(); korningStrom = null; }
 function laggHandelse(event) {
   const ruta = $("#forlopp"), foljMed = vidBotten(ruta);
@@ -9,6 +11,7 @@ function laggHandelse(event) {
     li.className = `handelse h-${sort}`; li.innerHTML = `<time>${esc(klocka(h.tid))}</time><span class="handelsesort">${esc(sort)}</span><span>${esc(h.text)}</span>`;
     ruta.append(li); if (foljMed) skrollaNed(ruta);
   } catch { toast("PM kunde inte läsa en händelse."); }
+  handelseLyssnare.forEach((lyssnare) => lyssnare(event));
 }
 async function visaForlopp(id) {
   stangKorningStrom();
