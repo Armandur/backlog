@@ -93,16 +93,48 @@ func (s *KorningStore) Hamta(ctx context.Context, id string) (*Korning, error) {
 }
 
 func (s *KorningStore) Lista(ctx context.Context, projectID string, limit int) ([]Korning, error) {
+	return s.ListaFiltrerad(ctx, KorningFilter{ProjectID: projectID, Limit: limit})
+}
+
+// KorningFilter avgränsar körningar för webbens statusfilter och cursor.
+type KorningFilter struct {
+	ProjectID string
+	Status    string
+	Innan     int64
+	Limit     int
+}
+
+// ListaFiltrerad ger körningar i fallande tidsordning.
+func (s *KorningStore) ListaFiltrerad(ctx context.Context, filter KorningFilter) ([]Korning, error) {
 	q := `SELECT ` + kolumner + ` FROM pm_korningar`
+	villkor := []string{}
 	args := []any{}
-	if projectID != "" {
-		q += ` WHERE project_id = ?`
-		args = append(args, projectID)
+	if filter.ProjectID != "" {
+		villkor = append(villkor, `project_id = ?`)
+		args = append(args, filter.ProjectID)
+	}
+	switch filter.Status {
+	case "pagaende":
+		villkor = append(villkor, `status IN (?,?)`)
+		args = append(args, StatusKoad, StatusKor)
+	case "avslutade":
+		villkor = append(villkor, `status IN (?,?)`)
+		args = append(args, StatusKlar, StatusFel)
+	case StatusKlar, StatusFel:
+		villkor = append(villkor, `status = ?`)
+		args = append(args, filter.Status)
+	}
+	if filter.Innan > 0 {
+		villkor = append(villkor, `skapad_at < ?`)
+		args = append(args, filter.Innan)
+	}
+	if len(villkor) > 0 {
+		q += ` WHERE ` + strings.Join(villkor, ` AND `)
 	}
 	q += ` ORDER BY skapad_at DESC`
-	if limit > 0 {
+	if filter.Limit > 0 {
 		q += ` LIMIT ?`
-		args = append(args, limit)
+		args = append(args, filter.Limit)
 	}
 	return s.fraga(ctx, q, args...)
 }

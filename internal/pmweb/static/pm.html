@@ -223,8 +223,21 @@
 
     <section class="view" id="v-korningar">
       <h1>Körningar</h1>
-      <p class="lead">En körning börjar när PM ber en agent arbeta med en task. En utdelning betyder att PM väljer task och agent. Exitkoden visar om agentens kommando lyckades. Koden 0 betyder att kommandot lyckades.</p>
-      <div class="list" id="korningar"></div>
+      <p class="lead">Följ arbetet som pågår och öppna äldre körningar vid behov.</p>
+      <section class="korningsdel">
+        <h2>Pågående <span class="n" id="nKorningarPagaende"></span></h2>
+        <div class="list pagaendelista" id="korningarPagaende"></div>
+      </section>
+      <section class="korningsdel">
+        <h2>Senaste körningar</h2>
+        <div class="statusfilter" aria-label="Filtrera körningar">
+          <button class="filterchip on" data-korning-status="alla" aria-pressed="true">Alla</button>
+          <button class="filterchip" data-korning-status="fel" aria-pressed="false">Fel</button>
+          <button class="filterchip" data-korning-status="klar" aria-pressed="false">Klar</button>
+        </div>
+        <div class="list" id="korningarHistorik"></div>
+        <button class="btn visa-fler" id="visaFlerKorningar" hidden>Visa fler</button>
+      </section>
       <div id="forloppruta" hidden>
         <h2 id="forloppstitel">Körningens förlopp</h2>
         <ol class="forlopp" id="forlopp" aria-live="polite"></ol>
@@ -504,6 +517,7 @@
 <script src="/pm-static/pm-testserver.js"></script>
 <script src="/pm-static/pm-konfig.js"></script>
 <script src="/pm-static/pm-strom.js"></script>
+<script src="/pm-static/pm-korningar.js"></script>
 <script src="/pm-static/pm-forslag.js"></script>
 <script src="/pm-static/pm-projektstad.js"></script>
 <script src="/pm-static/pm-taskredigering.js"></script>

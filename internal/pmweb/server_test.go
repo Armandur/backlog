@@ -2835,3 +2835,83 @@ func TestForeslaTestserverForSokvagAvvisarUtanforWorkspace(t *testing.T) {
 		}
 	}
 }
+
+func TestKorningarBegransasOchPaginerasMedPagaendeKvar(t *testing.T) {
+	srv, db := testServer(t)
+	projekt, err := service.NewProjectService(db).GetByAlias(t.Context(), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := service.NewTaskService(db, service.NewPlanService(db), service.NewLabelService(db)).Create(
+		t.Context(), models.CreateTaskInput{
+			ProjectID: projekt.ID, Title: "Många körningar", Type: models.TaskType("task"), Priority: 3,
+			Actor: models.Actor{Kind: models.ActorKindHuman, Name: "rasmus"},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bas := timeutil.Now() - 100
+	for i := 0; i < 25; i++ {
+		status := pm.StatusKlar
+		exitkod := 0
+		if i%2 == 0 {
+			status = pm.StatusFel
+			exitkod = 1
+		}
+		_, err := db.Exec(`INSERT INTO pm_korningar(
+			id, project_id, task_id, task_ref, agent, status, exit_kod, skapad_at
+		) VALUES(?,?,?,?,?,?,?,?)`,
+			ids.New(), projekt.ID, task.ID, "TASK-1", "testagent", status, exitkod, bas+int64(i))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	pagaendeID := ids.New()
+	_, err = db.Exec(`INSERT INTO pm_korningar(
+		id, project_id, task_id, task_ref, agent, status, skapad_at
+	) VALUES(?,?,?,?,?,?,?)`,
+		pagaendeID, projekt.ID, task.ID, "TASK-1", "testagent", pm.StatusKor, bas-100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type korsvar struct {
+		Korningar  []pm.Korning `json:"korningar"`
+		Fler       bool         `json:"fler"`
+		NastaInnan string       `json:"nasta_innan"`
+	}
+	hamta := func(sokvag string) korsvar {
+		t.Helper()
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, sokvag, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s gav %d: %s", sokvag, w.Code, w.Body.String())
+		}
+		var svar korsvar
+		if err := json.NewDecoder(w.Body).Decode(&svar); err != nil {
+			t.Fatal(err)
+		}
+		return svar
+	}
+
+	forsta := hamta("/api/projects/demo/korningar")
+	if len(forsta.Korningar) != 20 {
+		t.Fatalf("standardgränsen gav %d körningar, ville ha 20", len(forsta.Korningar))
+	}
+	if !forsta.Fler || forsta.NastaInnan == "" {
+		t.Fatalf("svaret saknar cursor till äldre körningar: %+v", forsta)
+	}
+	if !slices.ContainsFunc(forsta.Korningar, func(k pm.Korning) bool { return k.ID == pagaendeID }) {
+		t.Fatal("den pågående körningen saknas utanför historikgränsen")
+	}
+
+	andra := hamta("/api/projects/demo/korningar?status=alla&limit=20&innan=" + forsta.NastaInnan)
+	if len(andra.Korningar) != 6 || andra.Fler {
+		t.Fatalf("andra sidan blev fel: antal=%d fler=%v", len(andra.Korningar), andra.Fler)
+	}
+	pagaende := hamta("/api/projects/demo/korningar?status=pagaende")
+	if len(pagaende.Korningar) != 1 || pagaende.Korningar[0].ID != pagaendeID {
+		t.Fatalf("statusfiltret tappade den pågående körningen: %+v", pagaende.Korningar)
+	}
+}

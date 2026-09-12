@@ -128,13 +128,6 @@ $("#taskform").addEventListener("submit", async (e) => {
     knapp.disabled = false;
   }
 });
-async function laddaKorningar() {
-  const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/korningar`);
-  fyll("#korningar", data.korningar, (k) => rad(`${taskLank(k.task_ref)}
-    <div class="t"><span class="mono">${esc(k.agent)}</span> ${esc(k.motivering)}
-      <span class="meta">${tid(k.skapad_at)}${k.modell ? " · modell " + esc(k.modell) : ""}${k.exit_kod !== undefined ? " · exit " + k.exit_kod : ""}</span></div>
-    <div class="act">${pill(k.status)}<button class="btn sm" data-kommentarer="${esc(k.task_ref)}">Kommentarer</button>${korningKnappar(k.id)}</div>`), "Inga körningar än.");
-}
 async function visaLogg(id) {
   stangKorningStrom();
   const data = await hamta(`/api/korningar/${encodeURIComponent(id)}?logg=1`);
@@ -365,6 +358,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // och skriva den själv.
   laddaProjektval();
   laddaAgenter().then(ladda);
-  // Polling håller pågående körningar aktuella utan omladdning.
-  setInterval(ladda, 4000);
+  // Pollningen hämtar bara rörlig data. Historiken laddas om när en körning avslutas.
+  setInterval(polla, 4000);
 });

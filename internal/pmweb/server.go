@@ -271,12 +271,69 @@ func (s *Server) hamtaKorningar(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, err, http.StatusNotFound)
 		return
 	}
-	korningar, err := pm.NewKorningStore(s.db).Lista(r.Context(), projectID, 0)
+	limit := 20
+	if v := r.URL.Query().Get("limit"); v != "" {
+		limit, err = strconv.Atoi(v)
+		if err != nil || limit < 1 || limit > 100 {
+			svaraFel(w, errors.New("limit måste vara ett heltal mellan 1 och 100"), http.StatusBadRequest)
+			return
+		}
+	}
+	var innan int64
+	if v := r.URL.Query().Get("innan"); v != "" {
+		innan, err = strconv.ParseInt(v, 10, 64)
+		if err != nil || innan < 1 {
+			svaraFel(w, errors.New("innan måste vara en giltig tidscursor"), http.StatusBadRequest)
+			return
+		}
+	}
+	status := r.URL.Query().Get("status")
+	if status != "" && status != "alla" && status != "pagaende" && status != pm.StatusKlar && status != pm.StatusFel {
+		svaraFel(w, errors.New("status måste vara alla, pågående, klar eller fel"), http.StatusBadRequest)
+		return
+	}
+	filterstatus := status
+	if filterstatus == "" || filterstatus == "alla" {
+		filterstatus = "avslutade"
+	}
+	queryLimit := limit + 1
+	if status == "pagaende" {
+		queryLimit = 0
+	}
+	store := pm.NewKorningStore(s.db)
+	korningar, err := store.ListaFiltrerad(r.Context(), pm.KorningFilter{
+		ProjectID: projectID, Status: filterstatus, Innan: innan, Limit: queryLimit,
+	})
 	if err != nil {
 		svaraFel(w, err, http.StatusInternalServerError)
 		return
 	}
-	svaraJSON(w, http.StatusOK, map[string]any{"korningar": korningar})
+	fler := queryLimit > 0 && len(korningar) > limit
+	if fler {
+		korningar = korningar[:limit]
+	}
+	if status == "" && innan == 0 {
+		pagaende, listfel := store.ListaFiltrerad(r.Context(), pm.KorningFilter{
+			ProjectID: projectID, Status: "pagaende",
+		})
+		if listfel != nil {
+			svaraFel(w, listfel, http.StatusInternalServerError)
+			return
+		}
+		historikplatser := max(0, limit-len(pagaende))
+		if len(korningar) > historikplatser {
+			fler = true
+			korningar = korningar[:historikplatser]
+		}
+		korningar = append(pagaende, korningar...)
+	}
+	nastaInnan := ""
+	if fler && len(korningar) > 0 {
+		nastaInnan = strconv.FormatInt(korningar[len(korningar)-1].SkapadAt, 10)
+	}
+	svaraJSON(w, http.StatusOK, map[string]any{
+		"korningar": korningar, "fler": fler, "nasta_innan": nastaInnan,
+	})
 }
 
 func (s *Server) hamtaAgenter(w http.ResponseWriter, r *http.Request) {

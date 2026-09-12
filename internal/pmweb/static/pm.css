@@ -362,3 +362,15 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
   .filvy { grid-template-columns: minmax(0, 1fr); }
   .filinnehall pre { max-height: 60vh; }
 }
+
+/* Körningslistan */
+.korningsdel { margin-top: 22px; }
+.statusfilter { display: flex; gap: 6px; margin-bottom: 10px; }
+.filterchip { background: var(--yta); border: 1px solid var(--kant); border-radius: 999px; color: var(--svag); padding: 4px 11px; }
+.filterchip.on { background: var(--accent-mjuk); border-color: var(--accent); color: var(--accent); }
+.pagaendelista .rad-post { border-left: 3px solid var(--kor); }
+.korningssnurra { animation: korningSnurr 1s linear infinite; border: 2px solid var(--kor-mjuk); border-radius: 50%; border-top-color: var(--kor); height: 14px; width: 14px; }
+.visa-fler { margin-top: 10px; }
+@keyframes korningSnurr { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .korningssnurra { animation: none; } }
+@media (max-width: 760px) { .visa-fler { width: 100%; } }
