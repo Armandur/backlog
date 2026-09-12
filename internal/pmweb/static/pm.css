@@ -103,7 +103,14 @@ h2 .n { font-weight: 500; background: var(--sankt); border-radius: 10px; padding
 /* Inlägget renderas som markdown, så egna radbrytningar sköts av renderaren.
    pre-wrap skulle annars ge dubbla blankrader mellan styckena. */
 .inlagg .text { margin: .35rem 0 0; overflow-wrap: anywhere; }
-.arbetskort { font-size: .92em; }
+/* Arbetskortet är inget inlägg, det hör till svaret intill. Därför smalare
+   och utan pratbubblans ram. */
+.arbetskort { font-size: .92em; margin: 2px 0 8px; max-width: 80%; padding: 6px 10px; }
+.arbetskort.arbetar { background: var(--kort); border: 1px solid var(--ram); border-radius: 10px; }
+/* Ett avslutat arbete är historik. Det ska gå att läsa, men inte konkurrera
+   med agentens svar om uppmärksamheten. */
+.arbetskort.avslutad { color: var(--svag); opacity: .7; }
+.arbetskort.avslutad:hover, .arbetskort.avslutad:focus-within { opacity: 1; }
 .arbetsrad { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
 .arbetsstatus { font-weight: 600; }
 .arbetsmeta { color: var(--svag); font-variant-numeric: tabular-nums; }
@@ -149,7 +156,9 @@ textarea { resize: vertical; }
 .handelse { display: grid; grid-template-columns: 4.5rem 5.5rem minmax(0, 1fr); gap: 8px; padding: 7px 8px; border-bottom: 1px solid var(--kant); overflow-wrap: anywhere; }
 .handelse:last-child { border-bottom: 0; }
 .handelse time { color: var(--svag); font-variant-numeric: tabular-nums; }
-.handelsesort { color: var(--accent); font-size: .78rem; font-weight: 700; text-transform: uppercase; }
+/* Sorten är ett enda ord. Utan nowrap bryter overflow-wrap mitt i det, så
+   kommando blev komman och do på två rader. */
+.handelsesort { color: var(--accent); font-size: .78rem; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
 .h-fel .handelsesort { color: var(--fel); }
 .logg { background: #0f1512; color: #cfe1d6; border-radius: 6px; padding: 12px 14px; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-x: auto; }
 .scrim { position: fixed; inset: 0; background: rgba(10,15,12,.45); display: none; z-index: 20; }

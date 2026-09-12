@@ -17,10 +17,14 @@ function tokentext(antal) {
   return `${(antal / 1000).toFixed(1)}k tokens`;
 }
 
+function sekundtext(sekunder) {
+  const hela = Math.max(0, Math.round(sekunder));
+  if (hela < 60) return `${hela} s`;
+  return `${Math.floor(hela / 60)} min ${String(hela % 60).padStart(2, "0")} s`;
+}
+
 function tidtext(start) {
-  const sekunder = Math.max(0, Math.round((Date.now() - start) / 1000));
-  if (sekunder < 60) return `${sekunder} s`;
-  return `${Math.floor(sekunder / 60)} min ${String(sekunder % 60).padStart(2, "0")} s`;
+  return sekundtext((Date.now() - start) / 1000);
 }
 
 // ritaArbetsrad uppdaterar bara statusraden, aldrig hela tråden. En timer som
@@ -31,9 +35,11 @@ function ritaArbetsrad(inlaggId) {
   if (!lage || !kort) return;
   const status = kort.querySelector(".arbetsstatus");
   const senaste = lage.senaste && lage.senaste.text ? lage.senaste.text.split("\n")[0] : "";
-  status.textContent = lage.klar ? "Agenten är klar" : senaste || "Agenten tänker";
+  status.textContent = lage.klar ? "Agentens arbete" : senaste || "Agenten tänker";
   kort.classList.toggle("arbetar", !lage.klar);
-  const delar = [tidtext(lage.start)];
+  const delar = [];
+  if (lage.start) delar.push(tidtext(lage.start));
+  else if (lage.varaktighet) delar.push(sekundtext(lage.varaktighet));
   const tokens = tokentext(lage.tokens);
   if (tokens) delar.push(tokens);
   kort.querySelector(".arbetsmeta").textContent = delar.join(" · ");
@@ -41,11 +47,24 @@ function ritaArbetsrad(inlaggId) {
 
 // byggArbetsinlagg lägger agentens arbete som ett eget inlägg på agentens
 // sida, så tråden läses som ett samtal och inte som en bilaga till frågan.
+// Kortet hör till svaret, inte till frågan. Medan agenten arbetar finns inget
+// svar ännu, och då hänger kortet på frågan tills svaret kommer.
 function byggSamtalsforlopp(post, lista) {
-  const lage = samtalskorningar.get(post.id);
+  let lage = samtalskorningar.get(post.id);
+  if (lage && lage.klar && !lage.historisk) {
+    // Svaret har landat och bär nu körningen. Frågans kort ska bort.
+    samtalskorningar.delete(post.id);
+    lage = null;
+  }
+  if (!lage && post.korning_id) {
+    // Ett avslutat svar har sin körning i databasen. Stegen hämtas först när
+    // användaren fäller ut rutan, annars läser PM filer ingen tittar på.
+    lage = { korningId: post.korning_id, handelser: [], klar: true, historisk: true, tokens: 0 };
+    samtalskorningar.set(post.id, lage);
+  }
   if (!lage) return;
   const li = document.createElement("li");
-  li.className = "inlagg ai arbetskort" + (lage.klar ? "" : " arbetar");
+  li.className = "arbetskort" + (lage.klar ? " avslutad" : " arbetar");
   li.dataset.arbetskort = post.id;
 
   const rad = document.createElement("div");
@@ -64,8 +83,12 @@ function byggSamtalsforlopp(post, lista) {
   detaljer.dataset.samtalskorning = post.id;
   detaljer.open = utfalldaForlopp.has(post.id);
   detaljer.addEventListener("toggle", () => {
-    if (detaljer.open) utfalldaForlopp.add(post.id);
-    else utfalldaForlopp.delete(post.id);
+    if (detaljer.open) {
+      utfalldaForlopp.add(post.id);
+      hamtaHistoriskaSteg(post.id, handelselista);
+    } else {
+      utfalldaForlopp.delete(post.id);
+    }
   });
   const rubrik = document.createElement("summary");
   rubrik.textContent = "Visa stegen";
@@ -77,6 +100,30 @@ function byggSamtalsforlopp(post, lista) {
   li.append(rad, detaljer);
   lista.append(li);
   ritaArbetsrad(post.id);
+}
+
+// hamtaHistoriskaSteg läser stegen för en avslutad körning, en gång.
+async function hamtaHistoriskaSteg(inlaggId, lista) {
+  const lage = samtalskorningar.get(inlaggId);
+  if (!lage || !lage.historisk || lage.hamtad) return;
+  lage.hamtad = true;
+  try {
+    const data = await hamta(`/api/korningar/${encodeURIComponent(lage.korningId)}/handelser`);
+    const alla = data.handelser || [];
+    lage.handelser = alla.filter((h) => h.sort !== "tokens" && h.sort !== "tokens_total");
+    // Slutsumman gäller när den finns, annars summan av stegen.
+    const total = alla.filter((h) => h.sort === "tokens_total").pop();
+    lage.tokens = total
+      ? Number(total.text) || 0
+      : alla.filter((h) => h.sort === "tokens").reduce((summa, h) => summa + (Number(h.text) || 0), 0);
+    if (data.startad_at && data.slut_at) lage.varaktighet = (data.slut_at - data.startad_at) / 1e9;
+    lista.replaceChildren();
+    lage.handelser.forEach((h) => lista.append(samtalshandelseElement(h)));
+    ritaArbetsrad(inlaggId);
+  } catch (err) {
+    lage.hamtad = false;
+    toast(err.message);
+  }
 }
 
 // Timern tickar i sin egen takt och rör bara statusraderna.

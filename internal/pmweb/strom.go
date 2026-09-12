@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mazen160/backlog/internal/pm"
@@ -191,4 +192,52 @@ func slutHandelse(korning *pm.Korning, avbruten bool) pm.Handelse {
 		text = "körningen avbröts, processen finns inte längre"
 	}
 	return pm.Handelse{Tid: tid, Sort: sort, Text: fmt.Sprintf("%s (exitkod %s)", text, exitkod)}
+}
+
+// hamtaKorningshandelser ger alla händelser för en körning på en gång.
+// Strömmen är till för det som pågår, den här är till för historiken.
+func (s *Server) hamtaKorningshandelser(w http.ResponseWriter, r *http.Request) {
+	korning, err := pm.NewKorningStore(s.db).Hamta(r.Context(), r.PathValue("id"))
+	if err != nil {
+		svaraFel(w, errors.New("körningen finns inte"), http.StatusNotFound)
+		return
+	}
+	logg := korning.Logg
+	if logg == "" {
+		logg = filepath.Join(pm.LoggKatalog(konfigWorkDir()), korning.ID+".log")
+	}
+	data, err := os.ReadFile(pm.HandelseSokvag(logg))
+	if errors.Is(err, os.ErrNotExist) {
+		svaraJSON(w, http.StatusOK, korningshandelsesvar(korning, []pm.Handelse{}))
+		return
+	}
+	if err != nil {
+		svaraFel(w, errors.New("PM kunde inte läsa körningens händelser"), http.StatusInternalServerError)
+		return
+	}
+	handelser := []pm.Handelse{}
+	for _, rad := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(rad) == "" {
+			continue
+		}
+		var h pm.Handelse
+		if json.Unmarshal([]byte(rad), &h) != nil {
+			continue
+		}
+		handelser = append(handelser, h)
+	}
+	svaraJSON(w, http.StatusOK, korningshandelsesvar(korning, handelser))
+}
+
+// korningshandelsesvar bär också körningens tider, så vyn kan visa hur länge
+// arbetet tog utan att räkna om det själv.
+func korningshandelsesvar(korning *pm.Korning, handelser []pm.Handelse) map[string]any {
+	svar := map[string]any{"handelser": handelser, "status": korning.Status}
+	if korning.StartadAt != nil {
+		svar["startad_at"] = *korning.StartadAt
+	}
+	if korning.SlutAt != nil {
+		svar["slut_at"] = *korning.SlutAt
+	}
+	return svar
 }

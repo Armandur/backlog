@@ -124,7 +124,7 @@ func korFraga(ctx context.Context, db *sql.DB, korare Korare, korning *Korning, 
 		return
 	}
 	text, minnesforslag := delaAgentsvar(res.Utdata)
-	_, err = NewSamtalStore(db).AddMedMinnesforslag(ctx, korning.ProjectID, "",
+	_, err = NewSamtalStore(db).AddMedKorning(ctx, korning.ProjectID, korning.ID,
 		models.Actor{Kind: models.ActorKindAI, Name: korare.Namn()}, text, minnesforslag)
 	if err != nil {
 		avslutaFragaMedFel(ctx, db, korning, korare.Namn(), err, nil)

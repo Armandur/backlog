@@ -19,8 +19,11 @@ type Inlagg struct {
 	Actor         models.Actor `json:"actor"`
 	Text          string       `json:"text"`
 	Minnesforslag string       `json:"minnesforslag,omitempty"`
-	KvitteradAt   *int64       `json:"kvitterad_at,omitempty"`
-	CreatedAt     int64        `json:"created_at"`
+	// KorningID pekar på körningen som skrev svaret, så agentens arbete går
+	// att fälla ut även efter en omladdning.
+	KorningID   string `json:"korning_id,omitempty"`
+	KvitteradAt *int64 `json:"kvitterad_at,omitempty"`
+	CreatedAt   int64  `json:"created_at"`
 }
 
 // SamtalStore läser och skriver projektsamtal i PM-databasen.
@@ -78,26 +81,43 @@ func (s *SamtalStore) AddMedMinnesforslag(ctx context.Context, projectID, taskID
 		task = taskID
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO pm_samtal(id, project_id, task_id, actor_kind, actor_name, text, minnesforslag, created_at)
-		 VALUES(?,?,?,?,?,?,?,?)`,
-		post.ID, post.ProjectID, task, string(post.Actor.Kind), post.Actor.Name, post.Text, post.Minnesforslag, post.CreatedAt)
+		`INSERT INTO pm_samtal(id, project_id, task_id, actor_kind, actor_name, text, minnesforslag, korning_id, created_at)
+		 VALUES(?,?,?,?,?,?,?,NULLIF(?,''),?)`,
+		post.ID, post.ProjectID, task, string(post.Actor.Kind), post.Actor.Name, post.Text, post.Minnesforslag,
+		post.KorningID, post.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("spara inlägg: %w", err)
 	}
 	return post, nil
 }
 
+// AddMedKorning sparar ett agentsvar och minns körningen som skrev det.
+func (s *SamtalStore) AddMedKorning(ctx context.Context, projectID, korningID string, actor models.Actor, text, minnesforslag string) (*Inlagg, error) {
+	post, err := s.AddMedMinnesforslag(ctx, projectID, "", actor, text, minnesforslag)
+	if err != nil {
+		return nil, err
+	}
+	if korningID == "" {
+		return post, nil
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE pm_samtal SET korning_id = ? WHERE id = ?`, korningID, post.ID); err != nil {
+		return nil, fmt.Errorf("koppla svaret till körningen: %w", err)
+	}
+	post.KorningID = korningID
+	return post, nil
+}
+
 // List ger trådens inlägg i tidsordning. limit <= 0 ger alla.
 func (s *SamtalStore) List(ctx context.Context, projectID string, limit int) ([]Inlagg, error) {
 	query := `SELECT id, project_id, COALESCE(task_id,''), actor_kind, actor_name, text,
-	                 minnesforslag, kvitterad_at, created_at
+	                 minnesforslag, kvitterad_at, COALESCE(korning_id,''), created_at
 	          FROM pm_samtal WHERE project_id = ? ORDER BY created_at ASC, id ASC`
 	args := []any{projectID}
 	if limit > 0 {
 		// De senaste N, men fortfarande i stigande ordning i svaret.
-		query = `SELECT id, project_id, task_id, actor_kind, actor_name, text, minnesforslag, kvitterad_at, created_at FROM (
+		query = `SELECT id, project_id, task_id, actor_kind, actor_name, text, minnesforslag, kvitterad_at, korning_id, created_at FROM (
 		           SELECT id, project_id, COALESCE(task_id,'') AS task_id, actor_kind, actor_name, text,
-		                  minnesforslag, kvitterad_at, created_at
+		                  minnesforslag, kvitterad_at, COALESCE(korning_id,'') AS korning_id, created_at
 		           FROM pm_samtal WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?
 		         ) ORDER BY created_at ASC, id ASC`
 		args = append(args, limit)
@@ -113,7 +133,7 @@ func (s *SamtalStore) List(ctx context.Context, projectID string, limit int) ([]
 		var p Inlagg
 		var kind string
 		if err := rows.Scan(&p.ID, &p.ProjectID, &p.TaskID, &kind, &p.Actor.Name, &p.Text,
-			&p.Minnesforslag, &p.KvitteradAt, &p.CreatedAt); err != nil {
+			&p.Minnesforslag, &p.KvitteradAt, &p.KorningID, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		p.Actor.Kind = models.ActorKind(kind)
