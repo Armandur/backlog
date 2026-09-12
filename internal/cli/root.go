@@ -45,6 +45,9 @@ var (
 
 var app = &App{}
 
+// defaultProfile är profilen som gäller utan --profile. Tom i vanliga backlog.
+var defaultProfile string
+
 // guard körs innan ett kommando får öppna databasen. backlog-pm sätter den
 // för att aldrig kunna köra mot vardagsdatabasen. Nil i vanliga backlog.
 var guard func(cmd *cobra.Command) error
@@ -59,6 +62,14 @@ var postOpen func(db *sql.DB) error
 
 // SetPostOpen registrerar ett steg som körs direkt efter att databasen öppnats.
 func SetPostOpen(f func(db *sql.DB) error) { postOpen = f }
+
+// SetDefaultProfile byter profilen som gäller när --profile saknas.
+// backlog-pm pekar den på sin egen profil, så att den aldrig råkar ta
+// vardagsdatabasen.
+func SetDefaultProfile(namn string) { defaultProfile = namn }
+
+// NewInitCmd ger init-kommandot så att backlog-pm kan bygga vidare på det.
+func NewInitCmd() *cobra.Command { return newInitCmd() }
 
 // DB ger den öppnade databasen. Giltig först när ett kommando kör.
 func DB() *sql.DB { return app.DB }
@@ -143,7 +154,7 @@ func newRootCmd() *cobra.Command {
 	}
 
 	root.PersistentFlags().StringVar(&flagDB, "db", "", "path to backlog.db")
-	root.PersistentFlags().StringVar(&flagProfile, "profile", "", "use named profile")
+	root.PersistentFlags().StringVar(&flagProfile, "profile", defaultProfile, "use named profile")
 	root.PersistentFlags().BoolVar(&flagJSON, "json", false, "output JSON")
 	root.PersistentFlags().BoolVar(&flagQuiet, "quiet", false, "suppress non-essential output")
 	root.PersistentFlags().StringVar(&flagAs, "as", "", "actor for this operation (e.g. human:alice or ai:claude-code)")

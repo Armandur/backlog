@@ -1,0 +1,40 @@
+# Konfiguration för backlog-pm.
+#
+# PM läser den här filen varje gång du delar ut en task, så du behöver inte
+# starta om webben efter en ändring. Sparar du konfigurationen i webbens
+# konfigvy skriver PM om filen, och då försvinner kommentarerna.
+
+# Agenten som tar en task när ingen regel eller egen valt agent säger annat.
+default_agent = "claude"
+
+# Portarna PM väljer mellan när ett projekt startar sin testserver.
+[portar]
+  fran = 8100
+  till = 8199
+
+[agenter]
+  [agenter.claude]
+    kommando = "claude"
+    args = ["-p", "{brief}"]
+    brief = "arg"
+    svar = "stdout"
+    stdin = "devnull"
+    timeout_sekunder = 900
+    mcp = true
+
+  [agenter.codex]
+    kommando = "codex"
+    args = ["exec", "-C", "{repo}", "-s", "workspace-write", "-c", "sandbox_workspace_write.network_access=true", "-o", "{svarsfil}", "{brief}"]
+    brief = "arg"
+    svar = "fil"
+    stdin = "devnull"
+    timeout_sekunder = 900
+
+# Så här startar du ett projekts testserver. Byt mitt-projekt mot projektets
+# alias och ta bort brädgårdarna. Blocket måste peka på ett projekt som finns.
+#
+# [testserver.mitt-projekt]
+#   kommando = "npm"
+#   args = ["run", "dev", "--", "--port", "{port}"]
+#   cwd = "/home/dittnamn/workspace/mitt-projekt"
+#   halsa = "/"

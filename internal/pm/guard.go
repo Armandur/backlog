@@ -135,3 +135,6 @@ func expandHome(p string) string {
 	}
 	return p
 }
+
+// DefaultPMProfil är profilen backlog-pm använder när --profile saknas.
+const DefaultPMProfil = "pm"

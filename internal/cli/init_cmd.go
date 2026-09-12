@@ -151,7 +151,7 @@ Use --path to store it elsewhere (e.g. a project directory or a separate git rep
 		},
 	}
 
-	cmd.Flags().StringVar(&profileName, "profile", "", "profile name (default: \"default\")")
+	cmd.Flags().StringVar(&profileName, "profile", defaultProfile, "profile name (default: \"default\")")
 	cmd.Flags().StringVar(&customPath, "path", "", "workspace directory (default: ~/.backlog/<profile>)")
 	cmd.Flags().BoolVar(&setDefault, "set-default", false, "make this the active profile")
 	cmd.Flags().StringVar(&actor, "actor", "", "default actor (e.g. human:alice)")

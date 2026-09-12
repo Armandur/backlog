@@ -34,6 +34,8 @@ var version = "dev"
 
 func main() {
 	cli.SetVersion(version)
+	// Utan flagga kör backlog-pm mot sin egen profil, aldrig vardagsprofilen.
+	cli.SetDefaultProfile(pm.DefaultPMProfil)
 	cli.SetGuard(pm.Guard)
 	cli.SetPostOpen(pm.Migrate)
 	mcpserver.SetExtension(pm.TestserverMCP(func() (*pm.TestserverStore, error) {
@@ -45,6 +47,7 @@ func main() {
 	}))
 
 	extra := []*cobra.Command{
+		pm.NewInitCmd(),
 		pm.NewPMCmd(),
 		pm.NewSamtalCmd(pm.RegisterFranProfil),
 		pm.NewDelaUtCmd(profilFlagga),
