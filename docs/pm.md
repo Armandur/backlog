@@ -34,6 +34,13 @@ backlog-pm web
 `init` skapar PM:s workspace, registrerar profilen `pm` och skriver en
 kommenterad `pm.toml`. Sedan skriver det ut vad du gör härnäst.
 
+PM frågar efter namn och lösenord. Färsk installation har `admin` och `admin`,
+som står i `pm.toml`. Byt lösenordet där innan du öppnar PM mot nätverket, eller
+sätt miljövariabeln `BACKLOG_PM_LOSENORD`.
+
+`web` lyssnar bara på den egna datorn. Vill du nå PM från en annan maskin startar
+du med `--bind 0.0.0.0`.
+
 `web` startar webben på port 6060. Är porten upptagen tar PM nästa lediga port
 och skriver ut adressen. Öppna adressen i webbläsaren.
 

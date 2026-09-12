@@ -20,6 +20,9 @@ func (k Konfig) Maskera() Konfig {
 		kopia.Testserver[namn] = server
 	}
 	kopia.Krok.Miljo = maskeraMiljo(k.Krok.Miljo)
+	if kopia.Webb.Losenord != "" {
+		kopia.Webb.Losenord = MaskeratVarde
+	}
 	return kopia
 }
 
@@ -39,6 +42,9 @@ func (k Konfig) AterstallMaskerat(sparad Konfig) Konfig {
 		kopia.Testserver[namn] = server
 	}
 	kopia.Krok.Miljo = aterstallMiljo(k.Krok.Miljo, sparad.Krok.Miljo)
+	if kopia.Webb.Losenord == MaskeratVarde {
+		kopia.Webb.Losenord = sparad.Webb.Losenord
+	}
 	return kopia
 }
 

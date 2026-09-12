@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -38,8 +39,13 @@ func NewWebCmd(hamtaRegister func() (*pm.AgentRegister, error)) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if _, err := pm.LasKonfig(cli.WorkDir()); err != nil {
+			startkonfig, err := pm.LasKonfig(cli.WorkDir())
+			if err != nil {
 				return err
+			}
+			inloggning := InloggningUrKonfig(startkonfig)
+			if varning := inloggning.Varning(filepath.Join(cli.WorkDir(), pm.KonfigFil)); varning != "" {
+				fmt.Fprint(cmd.ErrOrStderr(), varning)
 			}
 			workspace := cli.WorkDir()
 			profil := profilNamn()
@@ -76,21 +82,18 @@ func NewWebCmd(hamtaRegister func() (*pm.AgentRegister, error)) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			vard, felVard := os.Hostname()
-			if felVard != nil || vard == "" {
-				vard = "localhost"
-			}
+			vard := vardnamn(bind)
 			fmt.Fprintf(cmd.OutOrStdout(), "PM-webb: http://%s:%d/  tråd: http://%s:%d/pm/<alias>\n", vard, port, vard, port)
 
 			httpSrv := &http.Server{
-				Handler:           srv,
+				Handler:           KravInloggning(srv, inloggning),
 				ReadHeaderTimeout: 10 * time.Second,
 			}
 			return httpSrv.Serve(lyssnare)
 		},
 	}
 	cmd.Flags().IntVar(&port, "port", standardWebbport, "port att lyssna på, utan flaggan tar PM nästa lediga")
-	cmd.Flags().StringVar(&bind, "bind", "", "adress att binda till, tom betyder alla gränssnitt")
+	cmd.Flags().StringVar(&bind, "bind", "127.0.0.1", "adress att binda till, 0.0.0.0 öppnar mot nätverket")
 	return cmd
 }
 
@@ -114,6 +117,22 @@ func lyssna(bind string, port int, valdAvAnvandaren bool) (net.Listener, int, er
 		return nil, 0, fmt.Errorf("port %d är upptagen. Välj en annan port med --port, eller kör utan flaggan så letar PM själv", port)
 	}
 	return nil, 0, fmt.Errorf("portarna %d till %d är upptagna. Välj en ledig port med --port", port, sista)
+}
+
+// vardnamn väljer adressen som skrivs ut. Lyssnar PM bara på loopback går den
+// inte att nå utifrån, och då vore maskinens namn en länk som inte fungerar.
+func vardnamn(bind string) string {
+	switch bind {
+	case "127.0.0.1", "::1", "localhost":
+		return "localhost"
+	case "", "0.0.0.0", "::":
+		vard, err := os.Hostname()
+		if err != nil || vard == "" {
+			return "localhost"
+		}
+		return vard
+	}
+	return bind
 }
 
 func upptagen(err error) bool {

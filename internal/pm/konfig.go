@@ -76,6 +76,13 @@ type PortKonfig struct {
 	Till int `toml:"till" json:"till"`
 }
 
+// WebbKonfig är inloggningen till PM-webben. Lösenordet kan också komma från
+// miljövariabeln BACKLOG_PM_LOSENORD, som vinner över filen.
+type WebbKonfig struct {
+	Anvandare string `toml:"anvandare" json:"anvandare"`
+	Losenord  string `toml:"losenord" json:"losenord"`
+}
+
 // Konfig är hela PM-konfigurationen.
 type Konfig struct {
 	DefaultAgent string                      `toml:"default_agent" json:"default_agent"`
@@ -84,6 +91,7 @@ type Konfig struct {
 	Krok         Krok                        `toml:"krok" json:"krok"`
 	Portar       PortKonfig                  `toml:"portar" json:"portar"`
 	Testserver   map[string]TestserverKonfig `toml:"testserver" json:"testserver"`
+	Webb         WebbKonfig                  `toml:"webb" json:"webb"`
 	// Kalla är sökvägen konfigurationen kommer från, tom när PM använder defaulterna.
 	Kalla string `toml:"-" json:"-"`
 }

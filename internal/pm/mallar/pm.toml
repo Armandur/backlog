@@ -4,6 +4,12 @@
 # starta om webben efter en ändring. Sparar du konfigurationen i webbens
 # konfigvy skriver PM om filen, och då försvinner kommentarerna.
 
+# Inloggningen till PM-webben. Byt lösenordet innan du öppnar PM mot
+# nätverket. Miljövariabeln BACKLOG_PM_LOSENORD vinner över raden här.
+[webb]
+  anvandare = "admin"
+  losenord = "admin"
+
 # Agenten som tar en task när ingen regel eller egen valt agent säger annat.
 default_agent = "claude"
 
