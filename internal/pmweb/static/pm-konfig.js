@@ -2,6 +2,7 @@
 let konfig = null;
 let konfigProjekt = [];
 const agentutkast = new Set();
+const raderadeTestservrar = new Set();
 const AGENTMALLAR = {
   tom: { namn: "ny-agent", kommando: "", args: ["{brief}"], brief: "arg", svar: "stdout", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: false },
   claude: { namn: "claude", kommando: "claude", args: ["-p", "{brief}"], brief: "arg", svar: "stdout", stdin: "devnull", timeout_sekunder: 900, miljo: {}, mcp: true, strom: "claude-json" },
@@ -48,15 +49,23 @@ function normaliseraKonfig(data) {
 
 
 function renderaTestservrar() {
-  $("#testserverkort").innerHTML = konfigProjekt.map((projekt) => {
+  const projektalias = new Set(konfigProjekt.map((projekt) => projekt.alias));
+  const overgivna = Object.keys(konfig.testserver || {})
+    .filter((alias) => !projektalias.has(alias))
+    .sort((a, b) => a.localeCompare(b, "sv"))
+    .map((alias) => ({ alias, name: alias, overgiven: true }));
+  const kort = [...konfigProjekt, ...overgivna];
+  $("#testserverkort").innerHTML = kort.map((projekt) => {
     const server = konfig.testserver[projekt.alias];
     const aktiv = Boolean(server);
     const t = server || {};
-    return `<article class="konfigkort testserverkort" data-testserver="${esc(projekt.alias)}">
-      <div class="korthuvud testserverhuvud">
-        <strong>${esc(projekt.name)} <span class="mono">(${esc(projekt.alias)})</span></strong>
-        <label class="kryss testserveraktiv"><input type="checkbox" data-testserverfalt="aktiv"${aktiv ? " checked" : ""}> Konfigurera testserver</label>
-      </div>
+    const huvud = projekt.overgiven
+      ? `<div class="testservernamn"><strong class="mono">${esc(projekt.alias)}</strong><span class="overgivenmarke">Övergivet</span><small>Projektet finns inte längre.</small></div>
+        <button type="button" class="btn sm fara" data-ta-bort-testserver>Ta bort block</button>`
+      : `<strong>${esc(projekt.name)} <span class="mono">(${esc(projekt.alias)})</span></strong>
+        <label class="kryss testserveraktiv"><input type="checkbox" data-testserverfalt="aktiv"${aktiv ? " checked" : ""}> Konfigurera testserver</label>`;
+    return `<article class="konfigkort testserverkort${projekt.overgiven ? " overgiven" : ""}" data-testserver="${esc(projekt.alias)}"${projekt.overgiven ? ' data-overgiven="true"' : ""}>
+      <div class="korthuvud testserverhuvud">${huvud}</div>
       <fieldset class="testserverfalt"${aktiv ? "" : " disabled"}>
         <div class="faltgrid testservergrid">
           <label class="falt">Kommando<input data-testserverfalt="kommando" value="${esc(t.kommando || "")}" spellcheck="false"></label>
@@ -176,7 +185,7 @@ function samlaKonfig() {
   const testserverNy = {};
   document.querySelectorAll(".testserverkort").forEach((kort) => {
     const hamta = (falt) => kort.querySelector(`[data-testserverfalt="${falt}"]`);
-    if (!hamta("aktiv").checked) return;
+    if (hamta("aktiv") && !hamta("aktiv").checked) return;
     const port = hamta("port").value.trim();
     testserverNy[kort.dataset.testserver] = {
       kommando: hamta("kommando").value.trim(),
@@ -194,6 +203,7 @@ function samlaKonfig() {
     saknas: konfig?.saknas,
     default_agent: forval, agenter: agenterNy, regler: reglerNy,
     testserver: testserverNy,
+    raderade_testservrar: Array.from(raderadeTestservrar),
     krok: {
       anspraka: lasLista($("#krokAnspraka").value, "\n"),
       slapp: lasLista($("#krokSlapp").value, "\n"),
@@ -206,6 +216,7 @@ async function laddaKonfig() {
   try {
     const [konfigdata, projektdata] = await Promise.all([hamta("/api/konfig"), hamta("/api/projects")]);
     konfig = normaliseraKonfig(konfigdata);
+    raderadeTestservrar.clear();
     konfigProjekt = (projektdata.projects || []).slice().sort((a, b) => a.name.localeCompare(b.name, "sv"));
     renderaKonfig();
   } catch (err) {
@@ -256,6 +267,15 @@ $("#testserverkort").addEventListener("change", (e) => {
 $("#v-konfig").addEventListener("click", async (e) => {
   const agentkort = e.target.closest(".agentkort");
   const regelkort = e.target.closest(".regelkort");
+  const testserverkort = e.target.closest(".testserverkort");
+  if (e.target.closest("[data-ta-bort-testserver]")) {
+    try { konfig = samlaKonfig(); } catch (err) { return toast(err.message); }
+    const alias = testserverkort.dataset.testserver;
+    delete konfig.testserver[alias];
+    raderadeTestservrar.add(alias);
+    renderaKonfig();
+    return;
+  }
   if (e.target.closest("[data-ta-bort-agent]")) {
     try { konfig = samlaKonfig(); } catch (err) { return toast(err.message); }
     delete konfig.agenter[agentkort.querySelector('[data-agentfalt="namn"]').value.trim()];
@@ -309,6 +329,7 @@ $("#konfigform").addEventListener("submit", async (e) => {
     konfig = normaliseraKonfig(await hamta("/api/konfig", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(utkast) }));
     agenter = Object.keys(konfig.agenter || {}).sort();
     agentutkast.clear();
+    raderadeTestservrar.clear();
     renderaKonfig();
     toast("pm.toml är sparad.");
   } catch (err) {

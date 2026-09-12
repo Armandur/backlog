@@ -185,7 +185,22 @@ func SkrivKonfig(workspaceDir string, k Konfig) error {
 	if err := k.Validera(projektalias...); err != nil {
 		return err
 	}
+	return skrivKonfigfil(workspaceDir, k)
+}
 
+// SkrivKonfigMedOvergivna skriver konfigurationen utan att kräva att varje
+// testserver pekar på ett projekt som finns. Konfigvyn använder den för att
+// behålla ett block vars projekt raderats, i stället för att stryka det tyst.
+func SkrivKonfigMedOvergivna(workspaceDir string, k Konfig) error {
+	if err := k.Validera(); err != nil {
+		return err
+	}
+	return skrivKonfigfil(workspaceDir, k)
+}
+
+// skrivKonfigfil byter ut pm.toml atomiskt. Den validerar inget, det gör den
+// som anropar.
+func skrivKonfigfil(workspaceDir string, k Konfig) error {
 	var data bytes.Buffer
 	if err := toml.NewEncoder(&data).Encode(k); err != nil {
 		return fmt.Errorf("kunde inte skapa konfigurationsfilen: %w", err)
@@ -301,18 +316,28 @@ func (k Konfig) Validera(projektalias ...string) error {
 		if server.Port == 0 && !harPlatshallare(server.Args, "{port}") {
 			return fmt.Errorf("testservern för projektet %q saknar både fast port och {port} i args", alias)
 		}
-		if server.CWD != "" {
-			info, err := os.Stat(server.CWD)
-			if os.IsNotExist(err) {
-				return fmt.Errorf("testservern för projektet %q har cwd %q, men katalogen saknas", alias, server.CWD)
-			}
-			if err != nil {
-				return fmt.Errorf("kunde inte kontrollera cwd %q för projektet %q: %w", server.CWD, alias, err)
-			}
-			if !info.IsDir() {
-				return fmt.Errorf("testservern för projektet %q har cwd %q, men sökvägen är ingen katalog", alias, server.CWD)
+		// Katalogen kontrolleras bara när anroparen räknat upp projekten,
+		// alltså vid en sparning. Ett övergivet block vars katalog hunnit
+		// försvinna ska inte kunna hindra PM från att läsa konfigurationen.
+		if projektalias != nil && server.CWD != "" {
+			if err := kontrolleraKatalog(alias, server.CWD); err != nil {
+				return err
 			}
 		}
+	}
+	return nil
+}
+
+func kontrolleraKatalog(alias, cwd string) error {
+	info, err := os.Stat(cwd)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("testservern för projektet %q har cwd %q, men katalogen saknas", alias, cwd)
+	}
+	if err != nil {
+		return fmt.Errorf("kunde inte kontrollera cwd %q för projektet %q: %w", cwd, alias, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("testservern för projektet %q har cwd %q, men sökvägen är ingen katalog", alias, cwd)
 	}
 	return nil
 }

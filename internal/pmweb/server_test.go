@@ -1867,6 +1867,91 @@ func TestKonfigVisasAvenMedTestserverForRaderatProjekt(t *testing.T) {
 	}
 }
 
+func TestSparaOrelateradAndringBevararOvergivenTestserver(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	ursprung := `default_agent = "claude"
+
+[agenter.claude]
+kommando = "claude"
+args = ["{brief}"]
+
+[agenter.codex]
+kommando = "codex"
+args = ["{brief}"]
+
+[testserver.raderat]
+kommando = "python3"
+args = ["-m", "http.server", "{port}"]
+
+[testserver.raderat.miljo]
+SERVER_TOKEN = "hemlig-server-token"
+`
+	if err := os.WriteFile(filepath.Join(dir, pm.KonfigFil), []byte(ursprung), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv, _ := testServer(t)
+
+	hamta := httptest.NewRecorder()
+	srv.ServeHTTP(hamta, httptest.NewRequest(http.MethodGet, "/api/konfig", nil))
+	if hamta.Code != http.StatusOK {
+		t.Fatalf("GET gav %d: %s", hamta.Code, hamta.Body.String())
+	}
+	var utkast map[string]any
+	if err := json.NewDecoder(hamta.Body).Decode(&utkast); err != nil {
+		t.Fatal(err)
+	}
+	utkast["default_agent"] = "codex"
+	delete(utkast, "testserver")
+	data, err := json.Marshal(utkast)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	spara := httptest.NewRecorder()
+	srv.ServeHTTP(spara, httptest.NewRequest(http.MethodPut, "/api/konfig", bytes.NewReader(data)))
+	if spara.Code != http.StatusOK {
+		t.Fatalf("PUT gav %d: %s", spara.Code, spara.Body.String())
+	}
+	if strings.Contains(spara.Body.String(), "hemlig-server-token") {
+		t.Fatalf("PUT-svaret innehåller testserverns hemlighet: %s", spara.Body.String())
+	}
+	efter, err := pm.LasKonfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, finns := efter.Testserver["raderat"]
+	if !finns || server.Miljo["SERVER_TOKEN"] != "hemlig-server-token" {
+		t.Fatalf("den orelaterade ändringen tappade testserverblocket: %+v", efter.Testserver)
+	}
+	if efter.DefaultAgent != "codex" {
+		t.Fatalf("den orelaterade ändringen sparades inte: %q", efter.DefaultAgent)
+	}
+
+	var bort map[string]any
+	if err := json.NewDecoder(spara.Body).Decode(&bort); err != nil {
+		t.Fatal(err)
+	}
+	bort["testserver"] = map[string]any{}
+	bort["raderade_testservrar"] = []string{"raderat"}
+	data, err = json.Marshal(bort)
+	if err != nil {
+		t.Fatal(err)
+	}
+	radera := httptest.NewRecorder()
+	srv.ServeHTTP(radera, httptest.NewRequest(http.MethodPut, "/api/konfig", bytes.NewReader(data)))
+	if radera.Code != http.StatusOK {
+		t.Fatalf("aktiv borttagning gav %d: %s", radera.Code, radera.Body.String())
+	}
+	efter, err = pm.LasKonfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, finns := efter.Testserver["raderat"]; finns {
+		t.Fatalf("aktiv borttagning lämnade blocket: %+v", efter.Testserver)
+	}
+}
+
 func TestTestserverrutterStartarVisarOchStoppar(t *testing.T) {
 	srv, db := testServer(t)
 	dir := t.TempDir()

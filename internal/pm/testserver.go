@@ -469,6 +469,11 @@ func (s *TestserverStore) underlag(ctx context.Context, alias string) (Testserve
 	if !finns {
 		return TestserverKonfig{}, "", fmt.Errorf("projektet %q har inget startkommando. Lägg till ett testserverblock för %q under Konfig", alias, alias)
 	}
+	if serverKonfig.CWD != "" {
+		if err := kontrolleraKatalog(alias, serverKonfig.CWD); err != nil {
+			return TestserverKonfig{}, "", fmt.Errorf("%w. Rätta cwd under Konfig", err)
+		}
+	}
 	if serverKonfig.CWD == "" && repoPath == "" {
 		return TestserverKonfig{}, "", fmt.Errorf("projektet %q saknar arbetskatalog för testservern. Sätt cwd i testserverblocket under Konfig", alias)
 	}

@@ -42,12 +42,18 @@ func (s *Server) hamtaKonfig(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+type skrivKonfigBody struct {
+	pm.Konfig
+	RaderadeTestservrar []string `json:"raderade_testservrar"`
+}
+
 func (s *Server) skrivKonfig(w http.ResponseWriter, r *http.Request) {
-	var konfig pm.Konfig
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&konfig); err != nil {
+	var body skrivKonfigBody
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
 		svaraFel(w, errors.New("kunde inte läsa konfigurationen"), http.StatusBadRequest)
 		return
 	}
+	konfig := body.Konfig
 	konfig.Kalla = ""
 	workspace := konfigWorkDir()
 	sparad, err := pm.LasKonfig(workspace)
@@ -55,19 +61,79 @@ func (s *Server) skrivKonfig(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, err, http.StatusInternalServerError)
 		return
 	}
+	projektalias, err := s.projektalias(r.Context())
+	if err != nil {
+		svaraFel(w, err, http.StatusInternalServerError)
+		return
+	}
+	raderade := make(map[string]bool, len(body.RaderadeTestservrar))
+	for _, alias := range body.RaderadeTestservrar {
+		raderade[alias] = true
+		delete(konfig.Testserver, alias)
+	}
+	for alias := range konfig.Testserver {
+		_, fanns := sparad.Testserver[alias]
+		if !projektalias[alias] && !fanns {
+			svaraFel(w, fmt.Errorf("testservern pekar på projektet %q som inte finns", alias), http.StatusBadRequest)
+			return
+		}
+	}
+	if konfig.Testserver == nil {
+		konfig.Testserver = map[string]pm.TestserverKonfig{}
+	}
+	for alias, server := range sparad.Testserver {
+		if projektalias[alias] || raderade[alias] {
+			continue
+		}
+		if _, finns := konfig.Testserver[alias]; !finns {
+			konfig.Testserver[alias] = server
+		}
+	}
 	// Ett maskerat värde betyder att användaren lämnade hemligheten orörd.
 	konfig = konfig.AterstallMaskerat(sparad)
 	if err := konfig.Validera(); err != nil {
 		svaraFel(w, err, http.StatusBadRequest)
 		return
 	}
-	if err := pm.SkrivKonfig(workspace, konfig); err != nil {
+	harOvergivna := false
+	for alias := range konfig.Testserver {
+		if !projektalias[alias] {
+			harOvergivna = true
+			break
+		}
+	}
+	if harOvergivna {
+		err = pm.SkrivKonfigMedOvergivna(workspace, konfig)
+	} else {
+		err = pm.SkrivKonfig(workspace, konfig)
+	}
+	if err != nil {
 		svaraFel(w, err, http.StatusInternalServerError)
 		return
 	}
 	sokvag := filepath.Join(workspace, pm.KonfigFil)
 	konfig.Kalla = sokvag
 	svaraJSON(w, http.StatusOK, konfigSvar{Konfig: konfig.Maskera(), Sokvag: sokvag})
+}
+
+func (s *Server) projektalias(ctx context.Context) (map[string]bool, error) {
+	rader, err := s.db.QueryContext(ctx, `SELECT alias FROM projects WHERE archived_at IS NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("kunde inte läsa projekt för konfigurationen: %w", err)
+	}
+	defer rader.Close()
+	alias := map[string]bool{}
+	for rader.Next() {
+		var namn string
+		if err := rader.Scan(&namn); err != nil {
+			return nil, fmt.Errorf("kunde inte läsa projektalias: %w", err)
+		}
+		alias[namn] = true
+	}
+	if err := rader.Err(); err != nil {
+		return nil, fmt.Errorf("kunde inte läsa projektalias: %w", err)
+	}
+	return alias, nil
 }
 
 type provaKonfigBody struct {
