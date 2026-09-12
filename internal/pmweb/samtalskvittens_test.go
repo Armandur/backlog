@@ -70,13 +70,14 @@ func TestMinnesroutenSpararRedigeratForslagMedAgentaktor(t *testing.T) {
 	fraga := httptest.NewRecorder()
 	srv.ServeHTTP(fraga, httptest.NewRequest(http.MethodPost, "/api/projects/demo/samtal",
 		bytes.NewBufferString(`{"text":"Vilken databas?","fraga":true}`)))
-	if fraga.Code != http.StatusCreated {
+	if fraga.Code != http.StatusAccepted {
 		t.Fatalf("frågan gav %d: %s", fraga.Code, fraga.Body.String())
 	}
-	var svar pm.Inlagg
-	if err := json.NewDecoder(fraga.Body).Decode(&svar); err != nil {
+	var startad pm.StartadFraga
+	if err := json.NewDecoder(fraga.Body).Decode(&startad); err != nil {
 		t.Fatal(err)
 	}
+	svar := vantaPaAgentsvar(t, db)
 	if svar.Text != "Vi behåller SQLite." || svar.Minnesforslag != "Behåll SQLite." {
 		t.Fatalf("PM delade inte agentsvaret: %+v", svar)
 	}

@@ -1,0 +1,8 @@
+.samtalsforlopp { border-top: 1px solid var(--kant); margin-top: 10px; min-width: 0; padding-top: 8px; }
+.samtalsforlopp summary { color: var(--svag); cursor: pointer; font-size: .82rem; font-weight: 600; }
+.samtalsforlopp[open] summary { margin-bottom: 7px; }
+.samtalshandelser { background: var(--ground); border-radius: 6px; list-style: none; margin: 0; max-height: 260px; min-width: 0; overflow: auto; padding: 6px; }
+.samtalshandelser .handelse { font-size: .78rem; grid-template-columns: 3.5rem 4.5rem minmax(0, 1fr); padding: 5px 4px; }
+@media (max-width: 560px) {
+  .samtalshandelser .handelse { grid-template-columns: 1fr; gap: 2px; }
+}

@@ -31,6 +31,18 @@ func (f *fakeAgent) Fraga(ctx context.Context, prompt string) (string, error) {
 	return f.svar, nil
 }
 
+func (f *fakeAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) {
+	f.anrop++
+	f.sedd = in.Brief
+	if in.VidHandelse != nil {
+		in.VidHandelse(Handelse{Tid: timeutil.Now(), Sort: "verktyg", Text: "läser projektet"})
+	}
+	if f.felet != nil {
+		return Resultat{ExitKod: 1}, f.felet
+	}
+	return Resultat{Utdata: f.svar}, nil
+}
+
 func TestFragaSparerFragaOchSvarMedKontext(t *testing.T) {
 	db := testDB(t)
 	pid := testProjekt(t, db, "demo")

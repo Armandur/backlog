@@ -162,6 +162,7 @@ async function laddaSamtal() {
     text.className = "text";
     text.textContent = p.text;
     li.append(meta, text);
+    byggSamtalsforlopp(p, li);
     byggMinnesforslag(p, li);
     return li;
   }, "Tråden är tom. Skriv det första inlägget.");
@@ -181,12 +182,13 @@ $("#skrivform").addEventListener("submit", async (e) => {
   const fragar = $("#fraga").checked;
   toast(fragar ? "Frågar agenten..." : "Sparar...");
   try {
-    await hamta(`/api/projects/${encodeURIComponent(alias)}/samtal`, {
+    const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/samtal`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, actor: $("#aktor").value.trim(), fraga: fragar }),
     });
     $("#text").value = "";
+    if (fragar) startaSamtalsstrom(data.inlagg.id, data.korning.id);
     await laddaSamtal();
     skrollaNed($("#trad"));
   } catch (err) {

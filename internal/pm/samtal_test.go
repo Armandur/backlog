@@ -3,6 +3,7 @@ package pm
 import (
 	"context"
 	"database/sql"
+	basmigrate "github.com/mazen160/backlog/internal/migrate"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -57,13 +58,19 @@ func TestMigrateSkaparSamtalstabellenOchEgenVersion(t *testing.T) {
 	if v == "0" {
 		t.Fatalf("pm_schema_version kördes inte, fick %q", v)
 	}
-	// Upstreams version får inte ha rubbats av PM-migreringen.
-	var upstream string
-	if err := db.QueryRow(`SELECT value FROM schema_meta WHERE key='schema_version'`).Scan(&upstream); err != nil {
+	// Upstreams version får inte ha rubbats av PM-migreringen. Talen kan vara
+	// lika när kedjorna råkar vara lika långa, så provet jämför mot upstreams
+	// egen räkning i stället för mot PM:s tal.
+	var upstream int
+	if err := db.QueryRow(`SELECT CAST(value AS INTEGER) FROM schema_meta WHERE key='schema_version'`).Scan(&upstream); err != nil {
 		t.Fatalf("schema_version saknas: %v", err)
 	}
-	if upstream == v {
-		t.Fatalf("PM-migreringen ser ut att dela version med upstream (%q)", upstream)
+	upstreamAntal, err := basmigrate.Antal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upstream != upstreamAntal {
+		t.Fatalf("upstreams version är %d, men kedjan har %d migreringar", upstream, upstreamAntal)
 	}
 }
 

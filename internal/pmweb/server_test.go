@@ -53,6 +53,44 @@ func (f fakeAgent) Fraga(ctx context.Context, prompt string) (string, error) {
 	return f.svar, f.fel
 }
 
+func (f fakeAgent) Kor(ctx context.Context, in pm.KorInput) (pm.Resultat, error) {
+	if f.prompt != nil {
+		*f.prompt = in.Brief
+	}
+	if f.anrop != nil {
+		(*f.anrop)++
+	}
+	if in.VidHandelse != nil {
+		in.VidHandelse(pm.Handelse{Tid: timeutil.Now(), Sort: "text", Text: "tänker"})
+	}
+	if f.vanta {
+		<-ctx.Done()
+		return pm.Resultat{ExitKod: 1}, ctx.Err()
+	}
+	return pm.Resultat{Utdata: f.svar}, f.fel
+}
+
+func vantaPaAgentsvar(t *testing.T, db *sql.DB) pm.Inlagg {
+	t.Helper()
+	var projectID string
+	if err := db.QueryRow(`SELECT id FROM projects WHERE alias='demo'`).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		poster, err := pm.NewSamtalStore(db).List(t.Context(), projectID, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(poster) > 1 && poster[len(poster)-1].Actor.Kind == models.ActorKindAI {
+			return poster[len(poster)-1]
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("agentsvaret kom inte")
+	return pm.Inlagg{}
+}
+
 func testServer(t *testing.T) (*Server, *sql.DB) {
 	t.Helper()
 	db, err := repo.Open(filepath.Join(t.TempDir(), "backlog.db"))
@@ -137,18 +175,22 @@ func TestSamtalsroutenAvvisarTomTextOchFelMetod(t *testing.T) {
 	}
 }
 
-func TestFragaViaRoutenSparasSomAiInlagg(t *testing.T) {
-	srv, _ := testServer(t)
+func TestFragaViaRoutenStartarKorningOchSpararAiInlagg(t *testing.T) {
+	srv, db := testServer(t)
 	kropp := bytes.NewBufferString(`{"text":"vilka tasks är öppna?","actor":"human:rasmus","fraga":true}`)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/samtal", kropp))
-	if w.Code != http.StatusCreated {
+	if w.Code != http.StatusAccepted {
 		t.Fatalf("fråga gav %d: %s", w.Code, w.Body.String())
 	}
-	var post pm.Inlagg
-	if err := json.NewDecoder(w.Body).Decode(&post); err != nil {
+	var startad pm.StartadFraga
+	if err := json.NewDecoder(w.Body).Decode(&startad); err != nil {
 		t.Fatal(err)
 	}
+	if startad.Korning == nil || startad.Korning.ID == "" || startad.Inlagg == nil {
+		t.Fatalf("svaret saknar körning eller inlägg: %+v", startad)
+	}
+	post := vantaPaAgentsvar(t, db)
 	if post.Actor.Kind != models.ActorKindAI || post.Actor.Name != "fake-modell" {
 		t.Fatalf("svaret sparades inte som ai-inlägg: %+v", post.Actor)
 	}

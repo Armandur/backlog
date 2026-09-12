@@ -53,8 +53,10 @@ func (s *KorningStore) Skapa(ctx context.Context, k *Korning) error {
 	}
 	k.PID = os.Getpid()
 	_, err := s.db.ExecContext(ctx,
+		// NULLIF gör en tom task till NULL. En fråga i samtalet är en körning
+		// utan task, och en tom sträng matchar ingen rad i tasks.
 		`INSERT INTO pm_korningar(id, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, logg_sokvag, modell, anstrangning, skapad_at)
-		 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 VALUES(?,?,NULLIF(?,''),?,?,?,?,?,?,?,?,?,?)`,
 		k.ID, k.ProjectID, k.TaskID, k.TaskRef, k.Agent, k.Motivering, k.Status, k.RepoPath, k.PID, k.Logg, k.Modell, k.Anstrangning, k.SkapadAt)
 	if err != nil {
 		return fmt.Errorf("skapa körning: %w", err)
@@ -71,6 +73,12 @@ func (s *KorningStore) SattStatus(ctx context.Context, id, status string) error 
 	default:
 		_, err = s.db.ExecContext(ctx, `UPDATE pm_korningar SET status=? WHERE id=?`, status, id)
 	}
+	return err
+}
+
+// SattLogg kopplar körningen till loggen innan agenten startar.
+func (s *KorningStore) SattLogg(ctx context.Context, id, logg string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE pm_korningar SET logg_sokvag=? WHERE id=?`, logg, id)
 	return err
 }
 
@@ -205,10 +213,13 @@ func (s *KorningStore) fraga(ctx context.Context, q string, args ...any) ([]Korn
 		var k Korning
 		var exit sql.NullInt64
 		var startad, slut sql.NullInt64
-		if err := rows.Scan(&k.ID, &k.ProjectID, &k.TaskID, &k.TaskRef, &k.Agent, &k.Motivering, &k.Status,
+		// En fråga i samtalet är en körning utan task, och då är task_id NULL.
+		var taskID sql.NullString
+		if err := rows.Scan(&k.ID, &k.ProjectID, &taskID, &k.TaskRef, &k.Agent, &k.Motivering, &k.Status,
 			&k.RepoPath, &k.PID, &exit, &k.Logg, &k.Modell, &k.Anstrangning, &k.SkapadAt, &startad, &slut); err != nil {
 			return nil, err
 		}
+		k.TaskID = taskID.String
 		if exit.Valid {
 			v := int(exit.Int64)
 			k.ExitKod = &v

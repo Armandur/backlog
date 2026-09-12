@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -71,14 +72,15 @@ func (s *Server) skrivSamtal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.Fraga {
-		svar, err := pm.Fraga(r.Context(), s.db, s.aktuelltRegister(), pm.FragaInput{
+		startad, err := pm.StartaFraga(r.Context(), s.db, s.aktuelltRegister(), pm.FragaInput{
 			Alias: alias, ProjectID: projectID, Fraga: body.Text, Agent: body.Agent, Fragare: aktor,
+			WorkspaceDir: konfigWorkDir(), Profil: os.Getenv("BACKLOG_PROFILE"), PMBinar: pm.PMBinar(),
 		})
 		if err != nil {
 			svaraFel(w, err, http.StatusBadGateway)
 			return
 		}
-		svaraJSON(w, http.StatusCreated, svar)
+		svaraJSON(w, http.StatusAccepted, startad)
 		return
 	}
 
