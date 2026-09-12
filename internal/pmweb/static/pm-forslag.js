@@ -1,3 +1,110 @@
+const aktivaForslagsstrommar = new WeakMap();
+
+function avbrytForslagsstrom(status) {
+  const lage = aktivaForslagsstrommar.get(status);
+  if (!lage) return;
+  lage.kalla.close();
+  clearInterval(lage.timer);
+  aktivaForslagsstrommar.delete(status);
+}
+
+function skapaForslagskort(status) {
+  avbrytForslagsstrom(status);
+  const gammalt = status.parentElement.querySelector(`[data-forslagskort="${status.id}"]`);
+  if (gammalt) gammalt.remove();
+  status.classList.add("forslagsstatus");
+  const snurra = document.createElement("span");
+  snurra.className = "snurra";
+  snurra.setAttribute("aria-hidden", "true");
+  status.replaceChildren(snurra, document.createTextNode(" Agenten arbetar."));
+  status.hidden = false;
+
+  const kort = document.createElement("div");
+  kort.className = "arbetskort arbetar";
+  kort.dataset.forslagskort = status.id;
+  const rad = document.createElement("div");
+  rad.className = "arbetsrad";
+  const arbetsstatus = document.createElement("span");
+  arbetsstatus.className = "arbetsstatus";
+  arbetsstatus.textContent = "Agenten startar";
+  const meta = document.createElement("span");
+  meta.className = "arbetsmeta";
+  rad.append(arbetsstatus, meta);
+  const lista = document.createElement("ol");
+  lista.className = "samtalshandelser";
+  lista.setAttribute("aria-live", "polite");
+  kort.append(rad, lista);
+  status.insertAdjacentElement("afterend", kort);
+  return { kort, lista, arbetsstatus, meta };
+}
+
+function startaForslagsjobb(status, url, kropp) {
+  const vy = skapaForslagskort(status);
+  const start = Date.now();
+  let tokens = 0;
+  return hamta(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(kropp),
+  }).then((svar) => new Promise((resolve, reject) => {
+    const korningId = svar.korning.id;
+    const kalla = new EventSource(`/api/korningar/${encodeURIComponent(korningId)}/strom`);
+    const uppdateraMeta = () => {
+      const delar = [tidtext(start)];
+      if (tokens) delar.push(tokentext(tokens));
+      vy.meta.textContent = delar.join(" · ");
+    };
+    const laggTill = (event) => {
+      const handelse = JSON.parse(event.data);
+      if (handelse.sort === "tokens" || handelse.sort === "tokens_total") {
+        const antal = Number(handelse.text) || 0;
+        tokens = handelse.sort === "tokens_total" ? antal : tokens + antal;
+      } else {
+        vy.lista.append(samtalshandelseElement(handelse));
+        vy.arbetsstatus.textContent = handelse.text.split("\n")[0];
+        skrollaNed(vy.lista);
+      }
+      uppdateraMeta();
+    };
+    const avsluta = () => {
+      kalla.close();
+      clearInterval(lage.timer);
+      aktivaForslagsstrommar.delete(status);
+      vy.kort.classList.remove("arbetar");
+      vy.kort.classList.add("avslutad");
+      status.replaceChildren(document.createTextNode("Förslaget är klart."));
+    };
+    const lage = { kalla, timer: setInterval(uppdateraMeta, 1000) };
+    aktivaForslagsstrommar.set(status, lage);
+    uppdateraMeta();
+    kalla.onmessage = (event) => {
+      try { laggTill(event); } catch { toast("PM kunde inte läsa agentens händelse."); }
+    };
+    kalla.addEventListener("slut", async (event) => {
+      try {
+        laggTill(event);
+        avsluta();
+        resolve(await hamta(`/api/forslag/${encodeURIComponent(korningId)}`));
+      } catch (err) {
+        avsluta();
+        reject(err);
+      }
+    });
+    kalla.onerror = () => {
+      avsluta();
+      reject(new Error("Anslutningen till agenten bröts."));
+    };
+  })).catch((err) => {
+    status.replaceChildren();
+    vy.kort.classList.remove("arbetar");
+    vy.kort.classList.add("avslutad");
+    if (!vy.lista.children.length) {
+      vy.lista.append(samtalshandelseElement({ tid: Date.now() * 1e6, sort: "fel", text: err.message }));
+    }
+    throw err;
+  });
+}
+
 let taskforslagRef = "";
 let autoTaskPagar = false;
 const TASKLAGE_NYCKEL = "backlog-pm-tasklage";
@@ -65,11 +172,8 @@ $("#autotaskform").addEventListener("submit", async (event) => {
   sattAutoStatus("PM skapar ett förslag...");
 
   try {
-    const forslag = await hamta(`/api/projects/${encodeURIComponent(alias)}/foresla-task`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
+    const forslag = await startaForslagsjobb($("#autoTaskStatus"),
+      `/api/projects/${encodeURIComponent(alias)}/foresla-task`, { text });
     sattAutoStatus("Förslaget är klart. PM lägger till tasken...");
     const task = await hamta(`/api/projects/${encodeURIComponent(alias)}/tasks`, {
       method: "POST",
@@ -94,6 +198,7 @@ $("#autotaskform").addEventListener("submit", async (event) => {
 });
 
 function stangTaskforslag() {
+  avbrytForslagsstrom($("#taskforslagsStatus"));
   $("#forslagsdrawer").classList.remove("on");
   if (!$("#drawer").classList.contains("on") && !$("#kommentarsdrawer").classList.contains("on")) {
     $("#scrim").classList.remove("on");
@@ -120,11 +225,8 @@ async function hamtaTaskforslag(sort) {
   $("#sparaTaskforslag").disabled = true;
   $("#forslagDela").disabled = true;
   try {
-    const utkast = await hamta(`/api/tasks/${encodeURIComponent(ref)}/foresla`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sort, agent }),
-    });
+    const utkast = await startaForslagsjobb($("#taskforslagsStatus"),
+      `/api/tasks/${encodeURIComponent(ref)}/foresla`, { sort, agent });
     if (taskforslagRef !== ref) return;
     visaTaskutkast(utkast);
   } catch (err) {
@@ -193,4 +295,31 @@ $("#forslagDela").addEventListener("click", () => {
   oppnaDela(ref);
   $("#dModell").value = modell;
   $("#dAnstrangning").value = anstrangning;
+});
+
+
+$("#forslagsform").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const knapp = $("#hamtaForslag");
+  $("#forslagsFel").textContent = "";
+  knapp.disabled = true;
+  try {
+    konfig = samlaKonfig();
+    const forslag = await startaForslagsjobb($("#forslagsStatus"), "/api/konfig/foresla", {
+      alias, beskrivning: $("#verktygsbeskrivning").value,
+    });
+    const { namn: basnamn, ...agent } = forslag;
+    let namn = basnamn;
+    let nummer = 2;
+    while (konfig.agenter[namn]) namn = basnamn + "-" + nummer++;
+    konfig.agenter[namn] = agent;
+    agentutkast.add(namn);
+    if (!konfig.default_agent) konfig.default_agent = namn;
+    renderaKonfig();
+  } catch (err) {
+    $("#forslagsFel").textContent = err.message;
+  } finally {
+    knapp.disabled = false;
+    $("#forslagsStatus").hidden = true;
+  }
 });

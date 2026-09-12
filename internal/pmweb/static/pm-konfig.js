@@ -239,25 +239,6 @@ async function laddaKonfig() {
   }
 }
 
-$("#forslagsform").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const knapp = $("#hamtaForslag");
-  $("#forslagsFel").textContent = "";
-  knapp.disabled = true;
-  $("#forslagsStatus").hidden = false;
-  try {
-    konfig = samlaKonfig();
-    const forslag = await hamta("/api/konfig/foresla", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ beskrivning: $("#verktygsbeskrivning").value }),
-    });
-    const { namn: basnamn, ...agent } = forslag;
-    let namn = basnamn, nummer = 2;
-    while (konfig.agenter[namn]) namn = basnamn + "-" + nummer++;
-    konfig.agenter[namn] = agent; agentutkast.add(namn);
-    if (!konfig.default_agent) konfig.default_agent = namn;
-    renderaKonfig();
-  } catch (err) { $("#forslagsFel").textContent = err.message; } finally { knapp.disabled = false; $("#forslagsStatus").hidden = true; }
-});
 $("#laggTillAgent").onclick = () => {
   try { konfig = samlaKonfig(); } catch (err) { return toast(err.message); }
   const mall = AGENTMALLAR[$("#agentmall").value] || AGENTMALLAR.tom;

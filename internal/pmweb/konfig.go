@@ -140,6 +140,7 @@ type provaKonfigBody struct {
 }
 
 type foreslaAgentBody struct {
+	Alias       string `json:"alias"`
 	Beskrivning string `json:"beskrivning"`
 	Agent       string `json:"agent"`
 }
@@ -160,47 +161,47 @@ func (s *Server) foreslaAgent(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, errors.New("beskriv verktyget som agenten ska konfigurera"), http.StatusBadRequest)
 		return
 	}
-	agent, err := s.aktuelltRegister().Hamta(strings.TrimSpace(body.Agent))
+	var projectID string
+	var err error
+	if strings.TrimSpace(body.Alias) == "" {
+		err = s.db.QueryRowContext(r.Context(), `SELECT id FROM projects WHERE archived_at IS NULL ORDER BY created_at LIMIT 1`).Scan(&projectID)
+	} else {
+		projectID, err = pm.NewSamtalStore(s.db).ProjectIDByAlias(r.Context(), strings.TrimSpace(body.Alias))
+	}
+	if err != nil {
+		svaraFel(w, errors.New("välj ett projekt innan du hämtar förslaget"), http.StatusBadRequest)
+		return
+	}
+	korning, err := s.startaForslag(r.Context(), projectID, body.Agent, "förslag till agentkonfiguration",
+		byggForslagsprompt(body.Beskrivning), func(_ context.Context, svar string, _ pm.Agent) (any, error) {
+			var forslag agentForslag
+			if err := json.Unmarshal([]byte(svar), &forslag); err != nil {
+				return nil, errors.New("agenten svarade inte med ett giltigt agentblock")
+			}
+			forslag.Namn = strings.TrimSpace(forslag.Namn)
+			if forslag.Namn == "" {
+				return nil, errors.New("agentens förslag saknar ett namn")
+			}
+			if forslag.Args == nil {
+				forslag.Args = []string{}
+			}
+			if forslag.Miljo == nil {
+				forslag.Miljo = map[string]string{}
+			}
+			konfig := pm.Konfig{
+				DefaultAgent: forslag.Namn,
+				Agenter:      map[string]pm.AgentKonfig{forslag.Namn: forslag.AgentKonfig},
+			}
+			if err := konfig.Validera(); err != nil {
+				return nil, fmt.Errorf("agentens förslag går inte att använda: %w", err)
+			}
+			return forslag, nil
+		})
 	if err != nil {
 		svaraFel(w, err, http.StatusBadRequest)
 		return
 	}
-	ctx, avbryt := context.WithTimeout(r.Context(), provTimeout)
-	defer avbryt()
-	svar, err := agent.Fraga(ctx, byggForslagsprompt(body.Beskrivning))
-	if err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			svaraFel(w, errors.New("agenten hann inte skapa ett förslag"), http.StatusGatewayTimeout)
-			return
-		}
-		svaraFel(w, fmt.Errorf("agenten kunde inte skapa förslaget: %w", err), http.StatusBadGateway)
-		return
-	}
-	var forslag agentForslag
-	if err := json.Unmarshal([]byte(strings.TrimSpace(svar)), &forslag); err != nil {
-		svaraFel(w, errors.New("agenten svarade inte med ett giltigt agentblock"), http.StatusBadGateway)
-		return
-	}
-	forslag.Namn = strings.TrimSpace(forslag.Namn)
-	if forslag.Namn == "" {
-		svaraFel(w, errors.New("agentens förslag saknar ett namn"), http.StatusBadGateway)
-		return
-	}
-	if forslag.Args == nil {
-		forslag.Args = []string{}
-	}
-	if forslag.Miljo == nil {
-		forslag.Miljo = map[string]string{}
-	}
-	konfig := pm.Konfig{
-		DefaultAgent: forslag.Namn,
-		Agenter:      map[string]pm.AgentKonfig{forslag.Namn: forslag.AgentKonfig},
-	}
-	if err := konfig.Validera(); err != nil {
-		svaraFel(w, fmt.Errorf("agentens förslag går inte att använda: %w", err), http.StatusBadGateway)
-		return
-	}
-	svaraJSON(w, http.StatusOK, forslag)
+	svaraJSON(w, http.StatusAccepted, map[string]any{"korning": korning})
 }
 
 func byggForslagsprompt(beskrivning string) string {
@@ -246,3 +247,7 @@ func (s *Server) provaKonfig(w http.ResponseWriter, r *http.Request) {
 	}
 	svaraJSON(w, http.StatusOK, svar)
 }
+
+type forslagBearbetare func(context.Context, string, pm.Agent) (any, error)
+
+// startaForslag skapar en kort körning utan task och svarar innan agenten är klar.

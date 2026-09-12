@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/mazen160/backlog/internal/models"
@@ -85,7 +84,8 @@ type uppdateraTaskBody struct {
 
 func (s *Server) foreslaNyTask(w http.ResponseWriter, r *http.Request) {
 	alias := r.PathValue("alias")
-	if _, err := service.NewProjectService(s.db).GetByAlias(r.Context(), alias); err != nil {
+	project, err := service.NewProjectService(s.db).GetByAlias(r.Context(), alias)
+	if err != nil {
 		svaraFel(w, fmt.Errorf("projektet %q finns inte i PM-workspacet", alias), http.StatusNotFound)
 		return
 	}
@@ -105,52 +105,37 @@ func (s *Server) foreslaNyTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agent, err := s.aktuelltRegister().Hamta(strings.TrimSpace(body.Agent))
+	korning, err := s.startaForslag(r.Context(), project.ID, body.Agent, "förslag till ny task",
+		byggNyttTaskForslagsprompt(body.Text), func(ctx context.Context, svar string, agent pm.Agent) (any, error) {
+			var forslag nyttTaskForslag
+			if err := tolkaNyttTaskForslag(svar, &forslag); err != nil {
+				meddelande, kod := begripligtTaskfel(err)
+				if errors.Is(err, service.ErrTaskDescRequired) {
+					meddelande = "agentens förslag saknar en beskrivning"
+				} else if strings.Contains(err.Error(), "giltig JSON") || kod == http.StatusInternalServerError {
+					meddelande = err.Error()
+				}
+				return nil, errors.New(meddelande)
+			}
+			if konfig, konfigfel := taskForslagKonfig(); konfigfel == nil {
+				nyttSvar, lint, omskriven := pm.GranskaAgenttext(ctx, konfig.System, agent, svar, forslag.Titel+"\n\n"+forslag.Beskrivning)
+				if omskriven {
+					omskrivet := nyttTaskForslag{}
+					if err := tolkaNyttTaskForslag(nyttSvar, &omskrivet); err != nil {
+						omskriven = false
+					} else {
+						forslag = omskrivet
+					}
+				}
+				forslag.KlarsprakPoang, forslag.KlarsprakOmskriven = klarsprakPoang(lint), omskriven
+			}
+			return forslag, nil
+		})
 	if err != nil {
 		svaraFel(w, err, http.StatusBadRequest)
 		return
 	}
-	ctx, avbryt := context.WithTimeout(r.Context(), taskForslagTimeout)
-	defer avbryt()
-	svar, err := agent.Fraga(ctx, byggNyttTaskForslagsprompt(body.Text))
-	if err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			svaraFel(w, errors.New("agenten hann inte skapa ett förslag"), http.StatusGatewayTimeout)
-			return
-		}
-		svaraFel(w, fmt.Errorf("agenten kunde inte skapa förslaget: %w", err), http.StatusBadGateway)
-		return
-	}
-
-	var forslag nyttTaskForslag
-	svar = strings.TrimSpace(svar)
-	if err := tolkaNyttTaskForslag(svar, &forslag); err != nil {
-		meddelande, kod := begripligtTaskfel(err)
-		if errors.Is(err, service.ErrTaskDescRequired) {
-			meddelande = "agentens förslag saknar en beskrivning"
-		} else if strings.Contains(err.Error(), "giltig JSON") {
-			meddelande = err.Error()
-		} else if kod == http.StatusInternalServerError {
-			meddelande = err.Error()
-		}
-		svaraFel(w, errors.New(meddelande), http.StatusBadGateway)
-		return
-	}
-	if konfig, konfigfel := taskForslagKonfig(); konfigfel == nil {
-		nyttSvar, lint, omskriven := pm.GranskaAgenttext(ctx, konfig.System, agent, svar, forslag.Titel+"\n\n"+forslag.Beskrivning)
-		if omskriven {
-			// En omskrivning som inte går att tolka får inte kosta förslaget.
-			// Då visar PM originalet i stället, och säger att det inte skrevs om.
-			omskrivet := nyttTaskForslag{}
-			if err := tolkaNyttTaskForslag(nyttSvar, &omskrivet); err != nil {
-				omskriven = false
-			} else {
-				forslag = omskrivet
-			}
-		}
-		forslag.KlarsprakPoang, forslag.KlarsprakOmskriven = klarsprakPoang(lint), omskriven
-	}
-	svaraJSON(w, http.StatusOK, forslag)
+	svaraJSON(w, http.StatusAccepted, map[string]any{"korning": korning})
 }
 
 func tolkaNyttTaskForslag(svar string, forslag *nyttTaskForslag) error {
@@ -212,15 +197,9 @@ func (s *Server) foreslaTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tasks := nyTaskService(s)
-	task, err := tasks.Get(r.Context(), r.PathValue("id"), false, false)
+	task, err := nyTaskService(s).Get(r.Context(), r.PathValue("id"), false, false)
 	if err != nil {
 		svaraFel(w, errors.New("tasken finns inte"), http.StatusNotFound)
-		return
-	}
-	agent, err := s.aktuelltRegister().Hamta(strings.TrimSpace(body.Agent))
-	if err != nil {
-		svaraFel(w, err, http.StatusBadRequest)
 		return
 	}
 	var varden klassningsvarden
@@ -232,49 +211,42 @@ func (s *Server) foreslaTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	ctx, avbryt := context.WithTimeout(r.Context(), taskForslagTimeout)
-	defer avbryt()
-	svar, err := agent.Fraga(ctx, byggTaskForslagsprompt(body.Sort, task, varden))
-	if err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			svaraFel(w, errors.New("agenten hann inte skapa ett förslag"), http.StatusGatewayTimeout)
-			return
-		}
-		svaraFel(w, fmt.Errorf("agenten kunde inte skapa förslaget: %w", err), http.StatusBadGateway)
-		return
-	}
-
-	utkast := taskUtkast{
-		Sort: body.Sort, Ref: fmt.Sprintf("TASK-%d", task.Seq), Titel: task.Title,
-		Beskrivning: task.Description, Typ: task.Type, Prioritet: task.Priority,
-	}
-	svar = strings.TrimSpace(svar)
-	if err := tolkaTaskForslag(svar, &utkast, varden); err != nil {
-		meddelande, kod := begripligtTaskfel(err)
-		if errors.Is(err, service.ErrTaskDescRequired) {
-			meddelande = "agentens förslag saknar en beskrivning"
-		} else if kod == http.StatusInternalServerError {
-			meddelande = err.Error()
-		}
-		svaraFel(w, errors.New(meddelande), http.StatusBadGateway)
-		return
-	}
-	if body.Sort == forslagBerikning {
-		if konfig, konfigfel := taskForslagKonfig(); konfigfel == nil {
-			nyttSvar, lint, omskriven := pm.GranskaAgenttext(ctx, konfig.System, agent, svar, utkast.Titel+"\n\n"+utkast.Beskrivning)
-			if omskriven {
-				// Samma sak här: originalet är bättre än inget förslag alls.
-				omskrivet := taskUtkast{Sort: forslagBerikning}
-				if err := tolkaTaskForslag(nyttSvar, &omskrivet, varden); err != nil {
-					omskriven = false
-				} else {
-					utkast.Titel, utkast.Beskrivning = omskrivet.Titel, omskrivet.Beskrivning
+	korning, err := s.startaForslag(r.Context(), task.ProjectID, body.Agent, "förslag för task",
+		byggTaskForslagsprompt(body.Sort, task, varden), func(ctx context.Context, svar string, agent pm.Agent) (any, error) {
+			utkast := taskUtkast{
+				Sort: body.Sort, Ref: fmt.Sprintf("TASK-%d", task.Seq), Titel: task.Title,
+				Beskrivning: task.Description, Typ: task.Type, Prioritet: task.Priority,
+			}
+			if err := tolkaTaskForslag(svar, &utkast, varden); err != nil {
+				meddelande, kod := begripligtTaskfel(err)
+				if errors.Is(err, service.ErrTaskDescRequired) {
+					meddelande = "agentens förslag saknar en beskrivning"
+				} else if kod == http.StatusInternalServerError {
+					meddelande = err.Error()
+				}
+				return nil, errors.New(meddelande)
+			}
+			if body.Sort == forslagBerikning {
+				if konfig, konfigfel := taskForslagKonfig(); konfigfel == nil {
+					nyttSvar, lint, omskriven := pm.GranskaAgenttext(ctx, konfig.System, agent, svar, utkast.Titel+"\n\n"+utkast.Beskrivning)
+					if omskriven {
+						omskrivet := taskUtkast{Sort: forslagBerikning}
+						if err := tolkaTaskForslag(nyttSvar, &omskrivet, varden); err != nil {
+							omskriven = false
+						} else {
+							utkast.Titel, utkast.Beskrivning = omskrivet.Titel, omskrivet.Beskrivning
+						}
+					}
+					utkast.KlarsprakPoang, utkast.KlarsprakOmskriven = klarsprakPoang(lint), omskriven
 				}
 			}
-			utkast.KlarsprakPoang, utkast.KlarsprakOmskriven = klarsprakPoang(lint), omskriven
-		}
+			return utkast, nil
+		})
+	if err != nil {
+		svaraFel(w, err, http.StatusBadRequest)
+		return
 	}
-	svaraJSON(w, http.StatusOK, utkast)
+	svaraJSON(w, http.StatusAccepted, map[string]any{"korning": korning})
 }
 
 func klarsprakPoang(resultat *pm.KlarsprakResultat) *float64 {
@@ -367,62 +339,6 @@ Skriv på svenska. Beskrivningen ska ha rubrikerna Kontext, Acceptanskriterier o
 Nuvarande titel: %s
 Nuvarande beskrivning:
 %s`, task.Title, task.Description)
-}
-
-func (s *Server) hamtaKlassningsvarden(ctx context.Context) (klassningsvarden, error) {
-	konfig, err := pm.LasKonfig(konfigWorkDir())
-	if err != nil {
-		return klassningsvarden{}, err
-	}
-	modeller := map[string]struct{}{}
-	anstrangningar := map[string]struct{}{}
-	for _, agent := range konfig.Agenter {
-		laggTillKlassningsvarde(modeller, agent.Modell)
-		laggTillKlassningsvarde(anstrangningar, agent.Anstrangning)
-	}
-	// Bara de senaste körningarna behövs. Utan gräns läses hela tabellen vid
-	// varje klassning, och den växer.
-	korningar, err := pm.NewKorningStore(s.db).Lista(ctx, "", 200)
-	if err != nil {
-		return klassningsvarden{}, err
-	}
-	for _, korning := range korningar {
-		laggTillKlassningsvarde(modeller, korning.Modell)
-		if len(anstrangningar) > 0 {
-			laggTillKlassningsvarde(anstrangningar, korning.Anstrangning)
-		}
-	}
-	return klassningsvarden{
-		Modeller:       nycklar(modeller),
-		Anstrangningar: nycklar(anstrangningar),
-	}, nil
-}
-
-func laggTillKlassningsvarde(varden map[string]struct{}, varde string) {
-	if varde = strings.TrimSpace(varde); varde != "" {
-		varden[varde] = struct{}{}
-	}
-}
-
-func nycklar(varden map[string]struct{}) []string {
-	resultat := make([]string, 0, len(varden))
-	for varde := range varden {
-		resultat = append(resultat, varde)
-	}
-	sort.Strings(resultat)
-	return resultat
-}
-
-func valideraKlassningsvarde(namn, varde string, tillatna []string) error {
-	if varde == "" {
-		return nil
-	}
-	for _, tillatet := range tillatna {
-		if varde == tillatet {
-			return nil
-		}
-	}
-	return fmt.Errorf("agentens förslag innehåller ett okänt %s %q", namn, varde)
 }
 
 func (s *Server) uppdateraTask(w http.ResponseWriter, r *http.Request) {

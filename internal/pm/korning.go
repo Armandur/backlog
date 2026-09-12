@@ -17,11 +17,16 @@ const (
 	StatusKor  = "kor"
 	StatusKlar = "klar"
 	StatusFel  = "fel"
+
+	KorningSortTask    = "task"
+	KorningSortFraga   = "fraga"
+	KorningSortForslag = "forslag"
 )
 
 // Korning är en utdelad task.
 type Korning struct {
 	ID         string `json:"id"`
+	Sort       string `json:"sort"`
 	ProjectID  string `json:"project_id"`
 	TaskID     string `json:"task_id"`
 	TaskRef    string `json:"task_ref"`
@@ -51,13 +56,16 @@ func (s *KorningStore) Skapa(ctx context.Context, k *Korning) error {
 	if k.Status == "" {
 		k.Status = StatusKoad
 	}
+	if k.Sort == "" {
+		k.Sort = KorningSortTask
+	}
 	k.PID = os.Getpid()
 	_, err := s.db.ExecContext(ctx,
 		// NULLIF gör en tom task till NULL. En fråga i samtalet är en körning
 		// utan task, och en tom sträng matchar ingen rad i tasks.
-		`INSERT INTO pm_korningar(id, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, logg_sokvag, modell, anstrangning, skapad_at)
-		 VALUES(?,?,NULLIF(?,''),?,?,?,?,?,?,?,?,?,?)`,
-		k.ID, k.ProjectID, k.TaskID, k.TaskRef, k.Agent, k.Motivering, k.Status, k.RepoPath, k.PID, k.Logg, k.Modell, k.Anstrangning, k.SkapadAt)
+		`INSERT INTO pm_korningar(id, sort, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, logg_sokvag, modell, anstrangning, skapad_at)
+		 VALUES(?,?,?,NULLIF(?,''),?,?,?,?,?,?,?,?,?,?)`,
+		k.ID, k.Sort, k.ProjectID, k.TaskID, k.TaskRef, k.Agent, k.Motivering, k.Status, k.RepoPath, k.PID, k.Logg, k.Modell, k.Anstrangning, k.SkapadAt)
 	if err != nil {
 		return fmt.Errorf("skapa körning: %w", err)
 	}
@@ -112,13 +120,16 @@ func (s *KorningStore) Hamta(ctx context.Context, id string) (*Korning, error) {
 }
 
 func (s *KorningStore) Lista(ctx context.Context, projectID string, limit int) ([]Korning, error) {
-	return s.ListaFiltrerad(ctx, KorningFilter{ProjectID: projectID, Limit: limit})
+	return s.ListaFiltrerad(ctx, KorningFilter{
+		ProjectID: projectID, Sorter: []string{KorningSortTask, KorningSortFraga}, Limit: limit,
+	})
 }
 
 // KorningFilter avgränsar körningar för webbens statusfilter och cursor.
 type KorningFilter struct {
 	ProjectID string
 	Status    string
+	Sorter    []string
 	Innan     int64
 	Limit     int
 }
@@ -131,6 +142,14 @@ func (s *KorningStore) ListaFiltrerad(ctx context.Context, filter KorningFilter)
 	if filter.ProjectID != "" {
 		villkor = append(villkor, `project_id = ?`)
 		args = append(args, filter.ProjectID)
+	}
+	if len(filter.Sorter) > 0 {
+		platshallare := make([]string, len(filter.Sorter))
+		for i, sort := range filter.Sorter {
+			platshallare[i] = "?"
+			args = append(args, sort)
+		}
+		villkor = append(villkor, `sort IN (`+strings.Join(platshallare, ",")+`)`)
 	}
 	switch filter.Status {
 	case "pagaende":
@@ -211,7 +230,7 @@ func (s *KorningStore) StadaOmOvergiven(ctx context.Context, id string) (*Kornin
 	return uppdaterad, true, nil
 }
 
-const kolumner = `id, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, exit_kod, logg_sokvag, modell, anstrangning, skapad_at, startad_at, slut_at`
+const kolumner = `id, sort, project_id, task_id, task_ref, agent, motivering, status, repo_path, pid, exit_kod, logg_sokvag, modell, anstrangning, skapad_at, startad_at, slut_at`
 
 func (s *KorningStore) fraga(ctx context.Context, q string, args ...any) ([]Korning, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -226,7 +245,7 @@ func (s *KorningStore) fraga(ctx context.Context, q string, args ...any) ([]Korn
 		var startad, slut sql.NullInt64
 		// En fråga i samtalet är en körning utan task, och då är task_id NULL.
 		var taskID sql.NullString
-		if err := rows.Scan(&k.ID, &k.ProjectID, &taskID, &k.TaskRef, &k.Agent, &k.Motivering, &k.Status,
+		if err := rows.Scan(&k.ID, &k.Sort, &k.ProjectID, &taskID, &k.TaskRef, &k.Agent, &k.Motivering, &k.Status,
 			&k.RepoPath, &k.PID, &exit, &k.Logg, &k.Modell, &k.Anstrangning, &k.SkapadAt, &startad, &slut); err != nil {
 			return nil, err
 		}

@@ -12,6 +12,8 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -115,6 +117,7 @@ func (s *Server) rutter(upstream http.Handler) {
 	s.mux.HandleFunc("GET /api/konfig", s.hamtaKonfig)
 	s.mux.HandleFunc("PUT /api/konfig", s.skrivKonfig)
 	s.mux.HandleFunc("POST /api/konfig/foresla", s.foreslaAgent)
+	s.mux.HandleFunc("GET /api/forslag/{id}", s.hamtaForslag)
 	s.mux.HandleFunc("POST /api/konfig/prova", s.provaKonfig)
 	s.mux.HandleFunc("GET /pm/{alias}", s.tradVy)
 	s.mux.HandleFunc("GET /pm/", s.tradVy)
@@ -194,6 +197,8 @@ func (s *Server) delaUt(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+var synligaKorningssorter = []string{pm.KorningSortTask, pm.KorningSortFraga}
+
 func (s *Server) hamtaKorningar(w http.ResponseWriter, r *http.Request) {
 	projectID, err := pm.NewSamtalStore(s.db).ProjectIDByAlias(r.Context(), r.PathValue("alias"))
 	if err != nil {
@@ -231,7 +236,7 @@ func (s *Server) hamtaKorningar(w http.ResponseWriter, r *http.Request) {
 	}
 	store := pm.NewKorningStore(s.db)
 	korningar, err := store.ListaFiltrerad(r.Context(), pm.KorningFilter{
-		ProjectID: projectID, Status: filterstatus, Innan: innan, Limit: queryLimit,
+		ProjectID: projectID, Status: filterstatus, Sorter: synligaKorningssorter, Innan: innan, Limit: queryLimit,
 	})
 	if err != nil {
 		svaraFel(w, err, http.StatusInternalServerError)
@@ -243,7 +248,7 @@ func (s *Server) hamtaKorningar(w http.ResponseWriter, r *http.Request) {
 	}
 	if status == "" && innan == 0 {
 		pagaende, listfel := store.ListaFiltrerad(r.Context(), pm.KorningFilter{
-			ProjectID: projectID, Status: "pagaende",
+			ProjectID: projectID, Status: "pagaende", Sorter: synligaKorningssorter,
 		})
 		if listfel != nil {
 			svaraFel(w, listfel, http.StatusInternalServerError)
@@ -309,4 +314,69 @@ func svaraJSON(w http.ResponseWriter, kod int, v any) {
 
 func svaraFel(w http.ResponseWriter, err error, kod int) {
 	svaraJSON(w, kod, map[string]string{"error": err.Error()})
+}
+
+type sparatForslag struct {
+	Resultat json.RawMessage `json:"resultat,omitempty"`
+	Fel      string          `json:"fel,omitempty"`
+}
+
+func forslagResultatSokvag(id string) string {
+	return filepath.Join(pm.LoggKatalog(konfigWorkDir()), id+".forslag.json")
+}
+
+func (s *Server) hamtaKlassningsvarden(ctx context.Context) (klassningsvarden, error) {
+	konfig, err := pm.LasKonfig(konfigWorkDir())
+	if err != nil {
+		return klassningsvarden{}, err
+	}
+	modeller := map[string]struct{}{}
+	anstrangningar := map[string]struct{}{}
+	for _, agent := range konfig.Agenter {
+		laggTillKlassningsvarde(modeller, agent.Modell)
+		laggTillKlassningsvarde(anstrangningar, agent.Anstrangning)
+	}
+	// Bara de senaste körningarna behövs. Utan gräns läses hela tabellen vid
+	// varje klassning, och den växer.
+	korningar, err := pm.NewKorningStore(s.db).Lista(ctx, "", 200)
+	if err != nil {
+		return klassningsvarden{}, err
+	}
+	for _, korning := range korningar {
+		laggTillKlassningsvarde(modeller, korning.Modell)
+		if len(anstrangningar) > 0 {
+			laggTillKlassningsvarde(anstrangningar, korning.Anstrangning)
+		}
+	}
+	return klassningsvarden{
+		Modeller:       nycklar(modeller),
+		Anstrangningar: nycklar(anstrangningar),
+	}, nil
+}
+
+func laggTillKlassningsvarde(varden map[string]struct{}, varde string) {
+	if varde = strings.TrimSpace(varde); varde != "" {
+		varden[varde] = struct{}{}
+	}
+}
+
+func nycklar(varden map[string]struct{}) []string {
+	resultat := make([]string, 0, len(varden))
+	for varde := range varden {
+		resultat = append(resultat, varde)
+	}
+	sort.Strings(resultat)
+	return resultat
+}
+
+func valideraKlassningsvarde(namn, varde string, tillatna []string) error {
+	if varde == "" {
+		return nil
+	}
+	for _, tillatet := range tillatna {
+		if varde == tillatet {
+			return nil
+		}
+	}
+	return fmt.Errorf("agentens förslag innehåller ett okänt %s %q", namn, varde)
 }

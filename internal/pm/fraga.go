@@ -63,7 +63,7 @@ func StartaFraga(ctx context.Context, db *sql.DB, reg *AgentRegister, in FragaIn
 		return nil, fmt.Errorf("skapa körningens loggkatalog: %w", err)
 	}
 	korning := &Korning{
-		ProjectID: in.ProjectID, Agent: korare.Namn(),
+		Sort: KorningSortFraga, ProjectID: in.ProjectID, Agent: korare.Namn(),
 		Motivering: "fråga i projektsamtalet", Status: StatusKoad, RepoPath: repoPath,
 	}
 	korningsstore := NewKorningStore(db)

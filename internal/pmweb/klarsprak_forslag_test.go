@@ -32,6 +32,11 @@ func (a *svarsfoljdAgent) Fraga(_ context.Context, prompt string) (string, error
 	return a.svar[index], nil
 }
 
+func (a *svarsfoljdAgent) Kor(ctx context.Context, in pm.KorInput) (pm.Resultat, error) {
+	svar, err := a.Fraga(ctx, in.Brief)
+	return pm.Resultat{Utdata: svar}, err
+}
+
 func skapaTestlinter(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -81,7 +86,7 @@ func korBerikning(t *testing.T, agent *svarsfoljdAgent) taskUtkast {
 	srv.register = pm.NewAgentRegister()
 	srv.register.Registrera(agent)
 	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost,
+	w = korForslagsanrop(t, srv, httptest.NewRequest(http.MethodPost,
 		fmt.Sprintf("/api/tasks/TASK-%d/foresla", task.Seq),
 		bytes.NewBufferString(`{"sort":"berikning"}`)))
 	if w.Code != http.StatusOK {
@@ -203,7 +208,7 @@ func TestForeslaNyTaskLintarAgentensText(t *testing.T) {
 	srv.register = pm.NewAgentRegister()
 	srv.register.Registrera(agent)
 	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/projects/demo/foresla-task",
+	w = korForslagsanrop(t, srv, httptest.NewRequest(http.MethodPost, "/api/projects/demo/foresla-task",
 		strings.NewReader(`{"text":"Skapa en tydlig task från detta råmaterial."}`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("förslaget gav %d: %s", w.Code, w.Body.String())
