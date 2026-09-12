@@ -8,6 +8,15 @@
 # Värdet 0 eller lägre tar bort taket.
 max_samtidiga = 2
 
+# PM nekar repon som saknas i tillåtelselistan. Spärrlistan vinner alltid.
+# Skrivläget gäller alla tillåtna repon. Låt det vara avstängt utan isolering.
+# Skriv dina egna produktionsrepon i spärrlistan, så kan de aldrig tas med av
+# misstag.
+[github]
+  tillatna_repon = []
+  sparrade_repon = []
+  skrivlage = false
+
 # Systeminställningar gäller hela PM. Tom sökväg hoppar över lintningen.
 [system]
   klarsprak_aktiv = false

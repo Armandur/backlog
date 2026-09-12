@@ -101,6 +101,7 @@ type Konfig struct {
 	Testserver   map[string]TestserverKonfig `toml:"testserver" json:"testserver"`
 	Webb         WebbKonfig                  `toml:"webb" json:"webb"`
 	System       SystemKonfig                `toml:"system" json:"system"`
+	GitHub       GitHubKonfig                `toml:"github" json:"github"`
 	// Kalla är sökvägen konfigurationen kommer från, tom när PM använder defaulterna.
 	Kalla string `toml:"-" json:"-"`
 }
@@ -134,8 +135,7 @@ func StandardKonfig() Konfig {
 	}
 }
 
-// LasKonfig läser pm.toml ur workspace-katalogen. Saknas filen används
-// standardkonfigurationen.
+// LasKonfig läser pm.toml ur workspace-katalogen och använder standardkonfigurationen när filen saknas.
 func LasKonfig(workspaceDir string) (Konfig, error) {
 	sokvag := filepath.Join(workspaceDir, KonfigFil)
 	data, err := os.ReadFile(sokvag)
@@ -264,6 +264,9 @@ func fyllIStandard(a AgentKonfig) AgentKonfig {
 
 // Validera fångar konfigfel innan PM startar en körning.
 func (k Konfig) Validera(projektalias ...string) error {
+	if err := k.GitHub.validera(); err != nil {
+		return err
+	}
 	if k.System.KlarsprakMaxPer100 < 0 {
 		return fmt.Errorf("gränsen för klarspråksfynd får inte vara negativ")
 	}
