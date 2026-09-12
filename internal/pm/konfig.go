@@ -86,6 +86,7 @@ type WebbKonfig struct {
 // Konfig är hela PM-konfigurationen.
 type Konfig struct {
 	DefaultAgent string                      `toml:"default_agent" json:"default_agent"`
+	MaxSamtidiga int                         `toml:"max_samtidiga" json:"max_samtidiga"`
 	Agenter      map[string]AgentKonfig      `toml:"agenter" json:"agenter"`
 	Regler       []Regel                     `toml:"regler" json:"regler"`
 	Krok         Krok                        `toml:"krok" json:"krok"`
@@ -100,6 +101,7 @@ type Konfig struct {
 func StandardKonfig() Konfig {
 	return Konfig{
 		DefaultAgent: "claude",
+		MaxSamtidiga: 2,
 		Portar:       PortKonfig{Fran: 8100, Till: 8199},
 		Agenter: map[string]AgentKonfig{
 			"claude": {
@@ -136,11 +138,15 @@ func LasKonfig(workspaceDir string) (Konfig, error) {
 		return Konfig{}, fmt.Errorf("läs %s: %w", sokvag, err)
 	}
 	k := Konfig{}
-	if err := toml.Unmarshal(data, &k); err != nil {
+	metadata, err := toml.Decode(string(data), &k)
+	if err != nil {
 		return Konfig{}, fmt.Errorf("%s är trasig: %w", sokvag, err)
 	}
 	k.Kalla = sokvag
 	std := StandardKonfig()
+	if !metadata.IsDefined("max_samtidiga") {
+		k.MaxSamtidiga = std.MaxSamtidiga
+	}
 	if k.Portar.Fran == 0 && k.Portar.Till == 0 {
 		k.Portar = std.Portar
 	}

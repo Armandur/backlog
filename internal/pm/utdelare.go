@@ -12,6 +12,7 @@ import (
 
 	"github.com/mazen160/backlog/internal/models"
 	"github.com/mazen160/backlog/internal/service"
+	"github.com/mazen160/backlog/internal/timeutil"
 )
 
 // UtdelInput är en utdelning av en task till en agent.
@@ -102,19 +103,22 @@ func (u *Utdelare) DelaUt(ctx context.Context, in UtdelInput) (*Korning, error) 
 		}
 	}
 	defer las.Slapp()
+	if err := u.vantaPaPlats(ctx, store, korning, in.KoTimeout); err != nil {
+		return korning, err
+	}
 
 	u.krok(ctx, u.konfig.Krok.Anspraka, fakta, korning, in)
 	defer u.krok(context.WithoutCancel(ctx), u.konfig.Krok.Slapp, fakta, korning, in)
 
-	return u.kor(ctx, store, korare, fakta, korning, in)
+	resultat, err := u.kor(ctx, store, korare, fakta, korning, in)
+	if err != nil {
+		_ = store.Avsluta(context.WithoutCancel(ctx), korning.ID, StatusFel, 1, korning.Logg)
+		korning.Status = StatusFel
+	}
+	return resultat, err
 }
 
 func (u *Utdelare) kor(ctx context.Context, store *KorningStore, korare Korare, fakta TaskFakta, korning *Korning, in UtdelInput) (*Korning, error) {
-	if err := store.SattStatus(ctx, korning.ID, StatusKor); err != nil {
-		return korning, err
-	}
-	korning.Status = StatusKor
-
 	tasks := service.NewTaskService(u.db, service.NewPlanService(u.db), service.NewLabelService(u.db))
 	agentAktor := models.Actor{Kind: models.ActorKindAI, Name: korare.Namn()}
 	if _, err := tasks.Move(ctx, fakta.ID, models.TaskStatus("doing"), agentAktor); err != nil {
@@ -172,6 +176,64 @@ func (u *Utdelare) kor(ctx context.Context, store *KorningStore, korare Korare, 
 	kod := res.ExitKod
 	korning.ExitKod = &kod
 	return korning, nil
+}
+
+// vantaPaPlats reserverar en global plats genom körningstabellen. Uppdateringen
+// är atomisk, så även flera PM-processer följer samma tak.
+func (u *Utdelare) vantaPaPlats(ctx context.Context, store *KorningStore, korning *Korning, timeout time.Duration) error {
+	if timeout <= 0 {
+		timeout = 30 * time.Minute
+	}
+	ctx, avbryt := context.WithTimeout(ctx, timeout)
+	defer avbryt()
+	intervall := u.Vanteintervall
+	if intervall <= 0 {
+		intervall = 500 * time.Millisecond
+	}
+	for {
+		// En körning vars process dött håller annars sin plats för evigt.
+		if _, err := store.StadaOvergivna(ctx); err != nil {
+			return err
+		}
+		tagen, err := u.forsokTaPlats(ctx, korning.ID)
+		if err != nil {
+			return err
+		}
+		if tagen {
+			korning.Status = StatusKor
+			return nil
+		}
+		timer := time.NewTimer(intervall)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			_ = store.Avsluta(context.WithoutCancel(ctx), korning.ID, StatusFel, 1, korning.Logg)
+			return fmt.Errorf("ingen agentplats blev ledig före kötidens slut: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+}
+
+func (u *Utdelare) forsokTaPlats(ctx context.Context, korningID string) (bool, error) {
+	if u.konfig.MaxSamtidiga <= 0 {
+		if err := NewKorningStore(u.db).SattStatus(ctx, korningID, StatusKor); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	resultat, err := u.db.ExecContext(ctx, `UPDATE pm_korningar
+		SET status=?, startad_at=?
+		WHERE id=? AND status=?
+		AND (SELECT COUNT(*) FROM pm_korningar WHERE status=?) < ?`,
+		StatusKor, timeutil.Now(), korningID, StatusKoad, StatusKor, u.konfig.MaxSamtidiga)
+	if err != nil {
+		return false, fmt.Errorf("kunde inte reservera en agentplats: %w", err)
+	}
+	antal, err := resultat.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("kunde inte kontrollera agentplatsen: %w", err)
+	}
+	return antal == 1, nil
 }
 
 func (u *Utdelare) skrivKommentar(ctx context.Context, fakta TaskFakta, korning *Korning, res Resultat, korfel error, aktor models.Actor) {

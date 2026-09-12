@@ -43,6 +43,9 @@ func TestLasKonfigUtanFilGerStandard(t *testing.T) {
 	if k.DefaultAgent != "claude" {
 		t.Fatalf("default-agenten skulle vara claude, är %q", k.DefaultAgent)
 	}
+	if k.MaxSamtidiga != 2 {
+		t.Fatalf("standardtaket skulle vara 2, är %d", k.MaxSamtidiga)
+	}
 	if _, finns := k.Agenter["codex"]; !finns {
 		t.Fatal("codex saknas i standardkonfigurationen")
 	}
@@ -54,6 +57,19 @@ func TestLasKonfigUtanFilGerStandard(t *testing.T) {
 	}
 	if k.Portar.Fran != 8100 || k.Portar.Till != 8199 {
 		t.Fatalf("standardintervallet ska vara 8100 till 8199: %+v", k.Portar)
+	}
+}
+
+func TestLasKonfigLaserMaxSamtidiga(t *testing.T) {
+	for _, varde := range []int{4, 0, -1} {
+		dir := skrivKonfig(t, fmt.Sprintf("max_samtidiga = %d\n", varde))
+		k, err := LasKonfig(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if k.MaxSamtidiga != varde {
+			t.Fatalf("max_samtidiga skulle vara %d, är %d", varde, k.MaxSamtidiga)
+		}
 	}
 }
 

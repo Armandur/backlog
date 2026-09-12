@@ -4,6 +4,10 @@
 # starta om webben efter en ändring. Sparar du konfigurationen i webbens
 # konfigvy skriver PM om filen, och då försvinner kommentarerna.
 
+# Högst så här många agentprocesser får köra samtidigt i hela PM.
+# Värdet 0 eller lägre tar bort taket.
+max_samtidiga = 2
+
 # Inloggningen till PM-webben. Byt lösenordet innan du öppnar PM mot
 # nätverket. Miljövariabeln BACKLOG_PM_LOSENORD vinner över raden här.
 [webb]
