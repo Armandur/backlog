@@ -97,13 +97,39 @@ Varje start ska först kontrollera databasens två schemaversioner. PM ska sedan
 
 PM ska vägra starta om någon schemaversion är nyare än programmets version. Felmeddelandet ska hänvisa till en kompatibel programversion eller backup.
 
-Ta en backup med den gamla programversionen före en uppgradering:
+### Säkerhetskopiera och återställ
+
+Stoppa PM och alla agentkörningar som skriver i databasen före en uppgradering.
+
+Backupkommandot migrerar databasen innan det kopierar den. Använd därför den gamla binären före installationen.
+
+Skapa målkatalogen och ta sedan en namngiven säkerhetskopia utanför PM:s workspace:
 
 ```sh
-backlog-pm doctor backup --to /sökväg/pm-före-uppgradering.db
+mkdir -p ~/backuper
+cp "$(command -v backlog-pm)" ~/backuper/backlog-pm-gammal
+backlog-pm doctor backup --profile pm --to ~/backuper/pm-före-uppgradering.db
 ```
 
-Behåll backupen tills du har kontrollerat uppgraderingen. PM stöder ingen nedgradering av databasen.
+Kontrollera att den gamla binären kan öppna säkerhetskopian:
+
+```sh
+~/backuper/backlog-pm-gammal doctor check --db ~/backuper/pm-före-uppgradering.db
+```
+
+Kommandot ska skriva att databasens integritet är ok. Behåll säkerhetskopian tills du har kontrollerat uppgraderingen.
+
+Återställ alltid till ett tomt workspace. Då lämnar du den nuvarande databasen orörd.
+
+```sh
+mkdir -p ~/.config/backlog/pm-aterstallt
+cp ~/backuper/pm-före-uppgradering.db ~/.config/backlog/pm-aterstallt/backlog.db
+~/backuper/backlog-pm-gammal profile add pm-aterstallt --path ~/.config/backlog/pm-aterstallt
+~/backuper/backlog-pm-gammal doctor check --profile pm-aterstallt
+~/backuper/backlog-pm-gammal web --profile pm-aterstallt
+```
+
+Kontrollera projekt, tasks, samtal och körningar i det återställda workspacet. PM stöder ingen automatisk nedgradering.
 
 Dagens kod uppfyller inte hela avtalet. Vanliga kommandon migrerar databasen före användning, men `init` kör bara upstreams migreringar.
 PM godtar också en databas med en okänd, nyare schemaversion. Räkna därför databasen som kastbar tills uppföljningstaskerna i utredningen är klara.
