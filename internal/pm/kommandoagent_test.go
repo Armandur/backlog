@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -172,6 +173,72 @@ func TestKorHangerInteNarRadenArForLang(t *testing.T) {
 	}
 	if !strings.Contains(sammanslaget, "efter") {
 		t.Fatalf("raden efter den överlånga tolkades inte: %s", sammanslaget)
+	}
+}
+
+// En subprocess som ärver agentens pipe får inte hålla körningen eller repolåset öppet.
+func TestDelaUtHangerInteNarAgentenForgrenarSig(t *testing.T) {
+	dir := t.TempDir()
+	skript := filepath.Join(dir, "forgrena.sh")
+	barnPIDFil := filepath.Join(dir, "barn.pid")
+	kropp := "#!/bin/sh\nsleep 30 &\nprintf '%s\\n' \"$!\" > \"$1\"\n"
+	if err := os.WriteFile(skript, []byte(kropp), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	db := testDB(t)
+	ws := t.TempDir()
+	repo := t.TempDir()
+	projektID := projektMedRepo(t, db, "forgrening", repo)
+	taskID := testTask(t, db, projektID, "Förgrena agenten", "Testa timeouten.", 1783)
+	t.Cleanup(func() {
+		data, err := os.ReadFile(barnPIDFil)
+		if err != nil {
+			return
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		if err != nil {
+			return
+		}
+		process, err := os.FindProcess(pid)
+		if err == nil {
+			_ = process.Kill()
+		}
+	})
+
+	agentkonfig := AgentKonfig{
+		Kommando: skript, Args: []string{barnPIDFil}, Brief: "stdin",
+		Svar: "stdout", TimeoutSekunder: 1,
+	}
+	konfig := StandardKonfig()
+	konfig.DefaultAgent = "forgrenare"
+	konfig.Agenter["forgrenare"] = agentkonfig
+	utdelare := NewUtdelare(db, konfig, FranKonfig(konfig))
+
+	type utfall struct {
+		korning *Korning
+		fel     error
+	}
+	klart := make(chan utfall, 1)
+	go func() {
+		korning, err := utdelare.DelaUt(t.Context(), UtdelInput{TaskID: taskID, WorkspaceDir: ws})
+		klart <- utfall{korning: korning, fel: err}
+	}()
+
+	select {
+	case resultat := <-klart:
+		if resultat.fel != nil {
+			t.Fatalf("dela-ut misslyckades: %v", resultat.fel)
+		}
+		if resultat.korning.ExitKod == nil || *resultat.korning.ExitKod != 124 {
+			t.Fatalf("timeouten gav fel körning: %+v", resultat.korning)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("agentens subprocess höll körningen öppen efter timeouten")
+	}
+
+	if _, err := os.Stat(NyRepoLas(ws, repo).Sokvag()); !os.IsNotExist(err) {
+		t.Fatalf("repolåset låg kvar efter körningen: %v", err)
 	}
 }
 
