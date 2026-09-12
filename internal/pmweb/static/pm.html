@@ -55,6 +55,7 @@
           <label class="falt hel" for="projektStart">Startkommando, valfritt
             <input id="projektStart" name="startkommando" spellcheck="false" placeholder="npm run dev -- --port {port}">
             <span class="falttips">Kommandot startar projektets testserver. Skriv {port} där porten ska stå. Citattecken fungerar inte.</span>
+            <button type="button" class="btn sm" id="foreslaStart" hidden>Fråga agenten om startkommandot</button>
           </label>
         </div>
         <div class="projektfot">
@@ -489,5 +490,6 @@
 <script src="/pm-static/pm-forslag.js"></script>
 <script src="/pm-static/pm-projektstad.js"></script>
 <script src="/pm-static/pm-taskredigering.js"></script>
+<script src="/pm-static/pm-projektform.js"></script>
 </body>
 </html>

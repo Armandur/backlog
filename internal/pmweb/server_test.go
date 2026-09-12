@@ -2791,3 +2791,47 @@ func TestFilroutenAvvisarStorOchBinarFil(t *testing.T) {
 		}
 	}
 }
+
+func TestForeslaTestserverForSokvagInnanProjektetFinns(t *testing.T) {
+	srv, _ := serverMedAgentsvar(t, `{"kommando":"npm","args":["run","dev","--","--port","{port}"],"halsa":"/","port":0,"forklaring":"package.json har ett dev-skript."}`)
+	bas := t.TempDir()
+	medProjektBas(t, bas)
+	repo := filepath.Join(bas, "befintligt")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "package.json"), []byte(`{"scripts":{"dev":"vite"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/foresla-testserver", bytes.NewBufferString(`{"sokvag":"befintligt"}`))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("förslaget gav %d: %s", w.Code, w.Body.String())
+	}
+	var f testserverForslag
+	if err := json.Unmarshal(w.Body.Bytes(), &f); err != nil {
+		t.Fatal(err)
+	}
+	if f.Kommando != "npm" || f.CWD != repo {
+		t.Fatalf("fel förslag: %+v", f)
+	}
+}
+
+func TestForeslaTestserverForSokvagAvvisarUtanforWorkspace(t *testing.T) {
+	srv, _ := serverMedAgentsvar(t, "{}")
+	medProjektBas(t, t.TempDir())
+
+	for _, sokvag := range []string{"../hemligt", "/etc"} {
+		w := httptest.NewRecorder()
+		kropp, _ := json.Marshal(map[string]string{"sokvag": sokvag})
+		req := httptest.NewRequest(http.MethodPost, "/api/foresla-testserver", bytes.NewReader(kropp))
+		req.Header.Set("Content-Type", "application/json")
+		srv.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("sökvägen %q gav %d: %s", sokvag, w.Code, w.Body.String())
+		}
+	}
+}

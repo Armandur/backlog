@@ -287,35 +287,6 @@ function uppdateraProjektlage() {
     : "Katalogen måste redan finnas och innehålla en .git-katalog.";
 }
 document.querySelectorAll('input[name="lage"]').forEach((val) => val.addEventListener("change", uppdateraProjektlage));
-$("#projektform").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const knapp = $("#skapaProjekt");
-  $("#projektFel").textContent = "";
-  $("#projektSvar").hidden = true;
-  knapp.disabled = true;
-  try {
-    const data = await hamta("/api/projekt", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        alias: $("#projektAlias").value,
-        namn: $("#projektNamn").value,
-        beskrivning: $("#projektBeskrivning").value,
-        lage: document.querySelector('input[name="lage"]:checked').value,
-        sokvag: $("#projektSokvag").value,
-        startkommando: $("#projektStart").value,
-      }),
-    });
-    $("#projektLank").href = data.lank;
-    $("#projektLank").textContent = `Öppna ${data.projekt.name}`;
-    $("#projektSvar").hidden = false;
-    if (data.varning) toast(data.varning);
-  } catch (err) {
-    $("#projektFel").textContent = err.message;
-  } finally {
-    knapp.disabled = false;
-  }
-});
 function byt(ny, behallScroll) {
   if (!alias && ny !== "projekt-nytt" && ny !== "konfig") ny = "projekt-nytt";
   const bytteVy = vy !== ny;

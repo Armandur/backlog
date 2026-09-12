@@ -32,6 +32,8 @@ var startfiler = []string{
 
 type testserverForslagBody struct {
 	Agent string `json:"agent"`
+	// Sokvag används innan projektet finns, alltså när ett repo kopplas.
+	Sokvag string `json:"sokvag"`
 }
 
 type testserverForslag struct {
@@ -63,20 +65,45 @@ func (s *Server) foreslaTestserver(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, fmt.Errorf("projektet %q saknar arbetskatalog, så PM kan inte läsa koden", alias), http.StatusBadRequest)
 		return
 	}
-	underlag, err := lasStartunderlag(projekt.RepoPath)
+	s.svaraMedTestserverforslag(w, r, projekt.RepoPath, body.Agent)
+}
+
+// foreslaTestserverForSokvag gäller innan projektet finns i databasen, alltså
+// när användaren kopplar ett repo som redan ligger på disken.
+func (s *Server) foreslaTestserverForSokvag(w http.ResponseWriter, r *http.Request) {
+	var body testserverForslagBody
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
+		svaraFel(w, errors.New("kunde inte läsa sökvägen"), http.StatusBadRequest)
+		return
+	}
+	// Samma spärr som när ett projekt skapas: under ~/workspace, inga .. och
+	// inga symboliska länkar.
+	sokvag, err := sakerProjektSokvag(body.Sokvag)
 	if err != nil {
 		svaraFel(w, err, http.StatusBadRequest)
 		return
 	}
+	if info, err := os.Stat(sokvag); err != nil || !info.IsDir() {
+		svaraFel(w, errors.New("mappen finns inte, så PM kan inte läsa den"), http.StatusBadRequest)
+		return
+	}
+	s.svaraMedTestserverforslag(w, r, sokvag, body.Agent)
+}
 
-	agent, err := s.aktuelltRegister().Hamta(strings.TrimSpace(body.Agent))
+func (s *Server) svaraMedTestserverforslag(w http.ResponseWriter, r *http.Request, repo, agentnamn string) {
+	underlag, err := lasStartunderlag(repo)
+	if err != nil {
+		svaraFel(w, err, http.StatusBadRequest)
+		return
+	}
+	agent, err := s.aktuelltRegister().Hamta(strings.TrimSpace(agentnamn))
 	if err != nil {
 		svaraFel(w, err, http.StatusBadRequest)
 		return
 	}
 	ctx, avbryt := context.WithTimeout(r.Context(), provTimeout)
 	defer avbryt()
-	svar, err := agent.Fraga(ctx, byggTestserverprompt(projekt.RepoPath, underlag))
+	svar, err := agent.Fraga(ctx, byggTestserverprompt(repo, underlag))
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			svaraFel(w, errors.New("agenten hann inte svara"), http.StatusGatewayTimeout)
@@ -85,7 +112,7 @@ func (s *Server) foreslaTestserver(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, fmt.Errorf("agenten kunde inte svara: %w", err), http.StatusBadGateway)
 		return
 	}
-	forslag, err := tolkaTestserverforslag(svar, projekt.RepoPath)
+	forslag, err := tolkaTestserverforslag(svar, repo)
 	if err != nil {
 		svaraFel(w, err, http.StatusBadGateway)
 		return
