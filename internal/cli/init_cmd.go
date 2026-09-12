@@ -63,6 +63,9 @@ Use --path to store it elsewhere (e.g. a project directory or a separate git rep
 			// Check if already initialized
 			dbPath := filepath.Join(workspaceDir, "backlog.db")
 			if _, err := os.Stat(dbPath); err == nil && !reset {
+				if err := migreraInitDatabas(dbPath); err != nil {
+					return err
+				}
 				out := output.New(flagJSON, flagQuiet)
 				out.Success(fmt.Sprintf("already initialized; workspace directory exists (profile: %q, path: %s)", profileName, workspaceDir))
 				return nil
@@ -80,13 +83,8 @@ Use --path to store it elsewhere (e.g. a project directory or a separate git rep
 			}
 
 			// Initialize DB
-			db, err := repo.Open(dbPath)
-			if err != nil {
+			if err := migreraInitDatabas(dbPath); err != nil {
 				return err
-			}
-			defer db.Close()
-			if err := migrate.Run(db); err != nil {
-				return fmt.Errorf("migrate: %w", err)
 			}
 
 			// Write workspace config
@@ -160,6 +158,23 @@ Use --path to store it elsewhere (e.g. a project directory or a separate git rep
 	cmd.Flags().StringVar(&taskType, "type", "", "default task type")
 	cmd.Flags().BoolVar(&reset, "reset", false, "wipe and reinitialize existing workspace")
 	return cmd
+}
+
+func migreraInitDatabas(dbPath string) error {
+	db, err := repo.Open(dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if err := migrate.Run(db); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	if postOpen != nil {
+		if err := postOpen(db); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func resetWorkspaceFiles(workspaceDir string) error {
