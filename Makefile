@@ -4,7 +4,7 @@ BUILD_DIR  := .
 VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS    := -ldflags "-X main.version=$(VERSION)"
 
-.PHONY: build build-pm test test-verbose test-race test-e2e fmt vet lint cover install clean snapshot tidy
+.PHONY: build build-pm test test-verbose test-race test-e2e fmt vet lint lint-klarsprak cover install clean snapshot tidy
 
 build:
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BIN) ./cmd/backlog
@@ -42,6 +42,9 @@ lint:
 	else \
 		go vet ./...; \
 	fi
+
+lint-klarsprak:
+	@python3 scripts/linta-klarsprak.py
 
 cover:
 	go test -coverprofile=coverage.out ./...

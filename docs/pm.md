@@ -68,3 +68,21 @@ PM skriver fel på svenska och säger vad du ska göra. Några vanliga:
 
 Testserverns utskrifter läser du i loggrutan på projektsidan, eller med
 `backlog-pm testserver logg <alias>`.
+
+## Klarspråkslint
+
+Kör `make lint-klarsprak` för att granska projektets svenska texter.
+Skriptet granskar UI-text i `pm.html`, Go-strängar, Go-kommentarer och dokumentation.
+Varje fynd visar ursprungsfilens namn och radnummer.
+
+Skriptet läser linterns sökväg från `KLARSPRAK_LINTER`.
+Standardvärdet är `~/workspace/klarspråk/klarsprak_lint.py`.
+Om filen saknas hoppar skriptet över granskningen och skriver ett tydligt besked.
+
+Lintningen är rådgivande.
+Skriptet rapporterar fynd men returnerar exitkod noll.
+Den blockerar därför inte annat arbete.
+
+Första körningen den 12 september 2026 gav 132 textbitar med fynd.
+De flesta fynd gäller linterns passivheuristik.
+Granska långa agentprompter i Go-koden först eftersom de har mer sammansatta fynd.
