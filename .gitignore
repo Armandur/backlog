@@ -41,3 +41,7 @@ PRODUCT.md
 tests/*.txt
 bin/backlog-test
 tests/
+
+# Testartefakter från körningar och dev-loggar
+internal/pmweb/korningar/
+dev.log
