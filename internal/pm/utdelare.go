@@ -110,12 +110,32 @@ func (u *Utdelare) DelaUt(ctx context.Context, in UtdelInput) (*Korning, error) 
 	u.krok(ctx, u.konfig.Krok.Anspraka, fakta, korning, in)
 	defer u.krok(context.WithoutCancel(ctx), u.konfig.Krok.Slapp, fakta, korning, in)
 
+	// Platsen släpps oavsett hur körningen slutar, också vid en panik.
+	// Annars räknas den som upptagen tills hela processen dör.
+	defer u.slappPlats(ctx, store, korning)
+
 	resultat, err := u.kor(ctx, store, korare, fakta, korning, in)
 	if err != nil {
 		_ = store.Avsluta(context.WithoutCancel(ctx), korning.ID, StatusFel, 1, korning.Logg)
 		korning.Status = StatusFel
 	}
 	return resultat, err
+}
+
+// slappPlats avslutar körningen om den fortfarande står som köad eller körande.
+// En körning som avslutat sig själv rörs inte.
+func (u *Utdelare) slappPlats(ctx context.Context, store *KorningStore, korning *Korning) {
+	kvar, err := store.Hamta(context.WithoutCancel(ctx), korning.ID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "kunde inte läsa körningen %s vid städningen: %v\n", korning.ID, err)
+		return
+	}
+	if kvar.Status != StatusKoad && kvar.Status != StatusKor {
+		return
+	}
+	if err := store.Avsluta(context.WithoutCancel(ctx), korning.ID, StatusFel, 1, korning.Logg); err != nil {
+		fmt.Fprintf(os.Stderr, "kunde inte avsluta körningen %s vid städningen: %v\n", korning.ID, err)
+	}
 }
 
 func (u *Utdelare) kor(ctx context.Context, store *KorningStore, korare Korare, fakta TaskFakta, korning *Korning, in UtdelInput) (*Korning, error) {

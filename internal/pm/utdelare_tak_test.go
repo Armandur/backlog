@@ -108,3 +108,44 @@ func vantaPaStart(t *testing.T, startad <-chan struct{}) {
 		t.Fatal("agentkörningen startade inte")
 	}
 }
+
+type paniskKorare struct{}
+
+func (paniskKorare) Namn() string                                  { return "panisk" }
+func (paniskKorare) Fraga(context.Context, string) (string, error) { return "", nil }
+func (paniskKorare) Kor(context.Context, KorInput) (Resultat, error) {
+	panic("agenten sprack")
+}
+
+func TestPanikILopandeKorningSlapperPlatsen(t *testing.T) {
+	db := testDB(t)
+	ws := t.TempDir()
+	konfig := StandardKonfig()
+	konfig.MaxSamtidiga = 1
+	konfig.DefaultAgent = "panisk"
+	konfig.Agenter["panisk"] = AgentKonfig{Kommando: "true", Args: []string{"{brief}"}, Brief: "arg", Svar: "stdout"}
+	register := NewAgentRegister()
+	register.RegistreraKorare(paniskKorare{})
+	register.SattForval("panisk")
+	utdelare := NewUtdelare(db, konfig, register)
+
+	projektID := projektMedRepo(t, db, "panik", t.TempDir())
+	taskID := testTask(t, db, projektID, "Task", "text", 90)
+
+	func() {
+		defer func() {
+			if orsak := recover(); orsak == nil {
+				t.Error("körningen paniserade inte som testet förutsätter")
+			}
+		}()
+		_, _ = utdelare.DelaUt(context.Background(), UtdelInput{TaskID: taskID, WorkspaceDir: ws, KoTimeout: 2 * time.Second})
+	}()
+
+	var kvar int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pm_korningar WHERE status IN (?,?)`, StatusKoad, StatusKor).Scan(&kvar); err != nil {
+		t.Fatal(err)
+	}
+	if kvar != 0 {
+		t.Fatalf("platsen släpptes inte efter paniken, %d körningar står kvar", kvar)
+	}
+}
