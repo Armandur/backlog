@@ -330,6 +330,7 @@ function byt(ny, behallScroll) {
   if (ny !== "korningar") stangKorningStrom();
   if (ny === "konfig") laddaKonfig();
   if (ny === "kunskap") laddaKunskap().catch((err) => toast(err.message));
+  if (ny === "filer") laddaFiler("").catch((err) => toast(err.message));
 }
 $("#nav").addEventListener("click", (e) => {
   const b = e.target.closest("button");

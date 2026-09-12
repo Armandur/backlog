@@ -324,6 +324,7 @@ func TestLasrutterAvvisarSkrivmetoder(t *testing.T) {
 		"/api/projects/demo/docs",
 		"/api/docs/ett-id",
 		"/api/projects/demo/minne",
+		"/api/projects/demo/filer",
 	} {
 		for _, metod := range []string{http.MethodPost, http.MethodPut} {
 			w := httptest.NewRecorder()
@@ -340,7 +341,7 @@ func TestPMVyInnehallerKunskapOchKommentarspanel(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/pm/demo", nil))
 	body := w.Body.String()
-	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`, `id="testserverKnapp"`, `id="testserverLank"`, `id="testserverBadge"`, `id="testserverLoggruta"`, `id="testserverLogg"`} {
+	for _, innehall := range []string{`data-v="kunskap"`, `data-v="filer"`, `id="fillista"`, `id="filtext"`, `pm-filer.js`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`, `id="testserverKnapp"`, `id="testserverLank"`, `id="testserverBadge"`, `id="testserverLoggruta"`, `id="testserverLogg"`} {
 		if !strings.Contains(body, innehall) {
 			t.Fatalf("PM-vyn saknar %s", innehall)
 		}
@@ -2668,5 +2669,125 @@ func TestForeslaTestserverUtanRepoSagerTill(t *testing.T) {
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("projekt utan repo gav %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestFilroutenListarOchLaserText(t *testing.T) {
+	srv, db := testServer(t)
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	innehall := "# Demo\n<script>alert('nej')</script>\n"
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte(innehall), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE projects SET repo_path=? WHERE alias='demo'`, repo); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/filer", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("rotlistan gav %d: %s", w.Code, w.Body.String())
+	}
+	var lista filsvar
+	if err := json.NewDecoder(w.Body).Decode(&lista); err != nil {
+		t.Fatal(err)
+	}
+	if !lista.Katalog || len(lista.Poster) != 2 {
+		t.Fatalf("rotlistan är fel: %+v", lista)
+	}
+	if lista.Poster[0].Namn != "docs" || !lista.Poster[0].Katalog {
+		t.Fatalf("mappar ska ligga först: %+v", lista.Poster)
+	}
+	for _, post := range lista.Poster {
+		if post.Namn == ".git" {
+			t.Fatal("filbläddraren visade .git")
+		}
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/filer?path=README.md", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("textfilen gav %d: %s", w.Code, w.Body.String())
+	}
+	var fil filsvar
+	if err := json.NewDecoder(w.Body).Decode(&fil); err != nil {
+		t.Fatal(err)
+	}
+	if fil.Innehall != innehall || fil.Namn != "README.md" {
+		t.Fatalf("filinnehållet är fel: %+v", fil)
+	}
+}
+
+func TestFilroutenAvvisarOsakraSokvagar(t *testing.T) {
+	srv, db := testServer(t)
+	repo := t.TempDir()
+	utanfor := filepath.Join(t.TempDir(), "hemlig.txt")
+	if err := os.WriteFile(utanfor, []byte("hemligt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(utanfor, filepath.Join(repo, "lank.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE projects SET repo_path=? WHERE alias='demo'`, repo); err != nil {
+		t.Fatal(err)
+	}
+
+	fall := []struct {
+		sokvag string
+		text   string
+	}{
+		{"../hemlig.txt", "får inte innehålla .."},
+		{utanfor, "måste ligga under projektets repo"},
+		{"lank.txt", "symbolisk länk"},
+		{".git/config", ".git-katalogen visas inte"},
+	}
+	for _, test := range fall {
+		t.Run(test.text, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			adress := "/api/projects/demo/filer?path=" + test.sokvag
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, adress, nil))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("%q gav %d: %s", test.sokvag, w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), test.text) {
+				t.Fatalf("%q saknas i svaret: %s", test.text, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestFilroutenAvvisarStorOchBinarFil(t *testing.T) {
+	srv, db := testServer(t)
+	repo := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, "stor.txt"), make([]byte, maxFilstorlek+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "bild.bin"), []byte{'P', 'N', 'G', 0, 1}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE projects SET repo_path=? WHERE alias='demo'`, repo); err != nil {
+		t.Fatal(err)
+	}
+
+	fall := []struct {
+		fil  string
+		kod  int
+		text string
+	}{
+		{"stor.txt", http.StatusRequestEntityTooLarge, "1048577 byte"},
+		{"bild.bin", http.StatusUnsupportedMediaType, "binär"},
+	}
+	for _, test := range fall {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/filer?path="+test.fil, nil))
+		if w.Code != test.kod || !strings.Contains(w.Body.String(), test.text) {
+			t.Fatalf("%s gav %d: %s", test.fil, w.Code, w.Body.String())
+		}
 	}
 }

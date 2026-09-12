@@ -337,3 +337,26 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
   .testserverpanel { align-items: stretch; flex-direction: column; }
   .testserverknappar .btn { flex: 1; text-align: center; }
 }
+
+/* Projektets filbläddrare */
+.filsmulor { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+.filsmulor button { background: none; border: 0; color: var(--accent); padding: 2px 4px; }
+.filsmulor span { color: var(--svag); padding: 2px 0; }
+.filvy { display: grid; grid-template-columns: minmax(240px, .45fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.fillista { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; overflow: hidden; }
+.filrad { align-items: center; background: none; border: 0; border-top: 1px solid var(--kant); color: var(--text); display: flex; gap: 9px; padding: 9px 12px; text-align: left; width: 100%; }
+.filrad:first-child { border-top: 0; }
+.filrad:hover { background: var(--sankt); }
+.filrad:disabled { color: var(--svag); cursor: default; }
+.filrad .filikon { color: var(--svag); flex: 0 0 4.5rem; font-size: 12px; text-transform: uppercase; }
+.filrad .filstorlek { color: var(--svag); font-size: 12px; margin-left: auto; }
+.filinnehall { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; min-width: 0; overflow: hidden; }
+.filhuvud { align-items: center; border-bottom: 1px solid var(--kant); display: flex; gap: 12px; justify-content: space-between; padding: 10px 14px; }
+.filhuvud h2 { margin: 0; overflow-wrap: anywhere; text-transform: none; }
+.filinnehall pre { margin: 0; max-height: calc(100vh - 210px); overflow: auto; padding: 14px; white-space: pre; }
+@media (max-width: 760px) {
+  .rail { overflow-x: auto; }
+  .rail button { flex: 0 0 88px; padding-inline: 6px; width: 88px; }
+  .filvy { grid-template-columns: minmax(0, 1fr); }
+  .filinnehall pre { max-height: 60vh; }
+}

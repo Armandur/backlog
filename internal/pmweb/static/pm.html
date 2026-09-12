@@ -22,6 +22,7 @@
     <button data-v="projekt-nytt">Nytt projekt</button>
     <button data-v="samtal">Samtal</button>
     <button data-v="kunskap">Kunskap</button>
+    <button data-v="filer">Filer</button>
     <button data-v="korningar">Körningar <span class="n" id="nRun"></span></button>
     <button data-v="konfig">Konfig</button>
   </nav>
@@ -163,6 +164,20 @@
             <div class="list" id="blockerat"></div>
           </section>
         </div>
+      </div>
+    </section>
+
+    <section class="view" id="v-filer">
+      <h1>Filer</h1>
+      <p class="lead">Här kan du läsa projektets mappar och textfiler.</p>
+      <nav class="filsmulor" id="filsmulor" aria-label="Sökväg"></nav>
+      <p class="fel-text" id="filfel" role="alert"></p>
+      <div class="filvy">
+        <div class="fillista" id="fillista"></div>
+        <section class="filinnehall" id="filinnehall" hidden>
+          <div class="filhuvud"><h2 id="filnamn"></h2><span class="meta" id="filstorlek"></span></div>
+          <pre id="filtext"></pre>
+        </section>
       </div>
     </section>
 
@@ -467,6 +482,7 @@
 
 <script src="/pm-static/pm-markdown.js"></script>
 <script src="/pm-static/pm.js"></script>
+<script src="/pm-static/pm-filer.js"></script>
 <script src="/pm-static/pm-testserver.js"></script>
 <script src="/pm-static/pm-konfig.js"></script>
 <script src="/pm-static/pm-strom.js"></script>
