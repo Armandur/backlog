@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mazen160/backlog/internal/cli"
+	"github.com/mazen160/backlog/internal/mcpserver"
 	"github.com/mazen160/backlog/internal/pm"
 	"github.com/mazen160/backlog/internal/pmweb"
 )
@@ -35,6 +36,13 @@ func main() {
 	cli.SetVersion(version)
 	cli.SetGuard(pm.Guard)
 	cli.SetPostOpen(pm.Migrate)
+	mcpserver.SetExtension(pm.TestserverMCP(func() (*pm.TestserverStore, error) {
+		konfig, err := pm.LasKonfig(cli.WorkDir())
+		if err != nil {
+			return nil, err
+		}
+		return pm.NewTestserverStore(cli.DB(), konfig, cli.WorkDir()), nil
+	}))
 
 	extra := []*cobra.Command{
 		pm.NewPMCmd(),

@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mazen160/backlog/internal/models"
@@ -32,6 +33,40 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
+// ToolDefinition describes one tool exposed by the MCP server.
+type ToolDefinition struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	InputSchema map[string]interface{} `json:"inputSchema"`
+}
+
+// ToolHandler handles one extension tool call.
+type ToolHandler func(context.Context, map[string]interface{}) (interface{}, error)
+
+// Extension adds tools without changing the standard backlog server.
+type Extension struct {
+	Tools    []ToolDefinition
+	Handlers map[string]ToolHandler
+}
+
+var configuredExtension struct {
+	sync.RWMutex
+	extension Extension
+}
+
+// SetExtension configures extra tools for this process.
+func SetExtension(extension Extension) {
+	configuredExtension.Lock()
+	configuredExtension.extension = extension
+	configuredExtension.Unlock()
+}
+
+func currentExtension() Extension {
+	configuredExtension.RLock()
+	defer configuredExtension.RUnlock()
+	return configuredExtension.extension
+}
+
 // Serve runs the MCP stdio server until the reader closes.
 func Serve(db *sql.DB, actor models.Actor) {
 	srv := &server{
@@ -39,6 +74,7 @@ func Serve(db *sql.DB, actor models.Actor) {
 		actor: actor,
 		r:     bufio.NewReader(os.Stdin),
 		w:     os.Stdout,
+		extra: currentExtension(),
 	}
 	srv.run()
 }
@@ -48,6 +84,7 @@ type server struct {
 	actor models.Actor
 	r     *bufio.Reader
 	w     io.Writer
+	extra Extension
 }
 
 func (s *server) run() {
@@ -88,7 +125,8 @@ func (s *server) handle(msg message) {
 	case "initialized":
 		// notification, no response
 	case "tools/list":
-		s.send(message{JSONRPC: "2.0", ID: msg.ID, Result: map[string]interface{}{"tools": tools()}})
+		available := append(tools(), s.extra.Tools...)
+		s.send(message{JSONRPC: "2.0", ID: msg.ID, Result: map[string]interface{}{"tools": available}})
 	case "tools/call":
 		result, err := s.callTool(ctx, msg.Params)
 		if err != nil {
@@ -124,6 +162,9 @@ func (s *server) callTool(ctx context.Context, params json.RawMessage) (interfac
 	}
 	if args == nil {
 		args = map[string]interface{}{}
+	}
+	if handler, ok := s.extra.Handlers[p.Name]; ok {
+		return handler(ctx, args)
 	}
 
 	planSvc := service.NewPlanService(s.db)
@@ -378,13 +419,18 @@ func contentText(s string) map[string]interface{} {
 	}
 }
 
+// TextResult returns a standard MCP text result containing JSON.
+func TextResult(v interface{}) interface{} {
+	return contentText(toJSON(v))
+}
+
 func toJSON(v interface{}) string {
 	b, _ := json.MarshalIndent(v, "", "  ")
 	return string(b)
 }
 
-func tools() []map[string]interface{} {
-	return []map[string]interface{}{
+func tools() []ToolDefinition {
+	return []ToolDefinition{
 		tool("project_list", "List all projects", props()),
 		tool("task_create", "Create a new task", props(
 			req("project", "string", "project alias"),
@@ -465,8 +511,8 @@ func tools() []map[string]interface{} {
 	}
 }
 
-func tool(name, desc string, inputSchema map[string]interface{}) map[string]interface{} {
-	return map[string]interface{}{"name": name, "description": desc, "inputSchema": inputSchema}
+func tool(name, desc string, inputSchema map[string]interface{}) ToolDefinition {
+	return ToolDefinition{Name: name, Description: desc, InputSchema: inputSchema}
 }
 
 func props(fields ...map[string]interface{}) map[string]interface{} {
