@@ -85,7 +85,7 @@ func (s *TestserverStore) Starta(ctx context.Context, alias string) (*Testserver
 	}
 	if befintlig, err := s.Hamta(ctx, alias); err == nil {
 		if befintlig.Lever {
-			return nil, fmt.Errorf("testservern för %q kör redan på port %d", alias, befintlig.Port)
+			return nil, fmt.Errorf("testservern för %q kör redan på port %d. Stoppa den först om du vill starta om den", alias, befintlig.Port)
 		}
 		if err := s.taBortRad(ctx, befintlig); err != nil {
 			return nil, err
@@ -109,14 +109,14 @@ func (s *TestserverStore) Starta(ctx context.Context, alias string) (*Testserver
 
 	logg := filepath.Join(s.workspace, "loggar", "testserver-"+alias+".log")
 	if err := os.MkdirAll(filepath.Dir(logg), 0o755); err != nil {
-		return nil, fmt.Errorf("kunde inte skapa testserverns loggkatalog: %w", err)
+		return nil, fmt.Errorf("kunde inte skapa testserverns loggkatalog: %w. Kontrollera att PM får skriva i workspace-katalogen", err)
 	}
 	if err := roteraTestserverlogg(logg); err != nil {
 		return nil, err
 	}
 	loggfil, err := os.OpenFile(logg, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("kunde inte öppna testserverns logg: %w", err)
+		return nil, fmt.Errorf("kunde inte öppna testserverns logg: %w. Kontrollera att PM får skriva i workspace-katalogen", err)
 	}
 	defer loggfil.Close()
 
@@ -132,7 +132,7 @@ func (s *TestserverStore) Starta(ctx context.Context, alias string) (*Testserver
 		return nil, fmt.Errorf("kunde inte kontrollera testserverns start: %w", err)
 	}
 	if antal == 0 {
-		return nil, fmt.Errorf("testservern för %q startades redan av en annan process", alias)
+		return nil, fmt.Errorf("en annan process hann starta testservern för %q först. Läs status igen", alias)
 	}
 	radSparad := true
 	defer func() {
@@ -153,7 +153,7 @@ func (s *TestserverStore) Starta(ctx context.Context, alias string) (*Testserver
 	kommando.Stderr = loggfil
 	kommando.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := kommando.Start(); err != nil {
-		return nil, fmt.Errorf("kunde inte starta testservern för %q: %w", alias, err)
+		return nil, fmt.Errorf("kunde inte starta testservern för %q: %w. Kontrollera kommandot under Konfig", alias, err)
 	}
 	pid := kommando.Process.Pid
 	exitfil := testserverExitfil(logg, pid)
@@ -235,7 +235,7 @@ func (s *TestserverStore) Hamta(ctx context.Context, alias string) (*Testserver,
 func (s *TestserverStore) Stoppa(ctx context.Context, alias string) (*Testserver, error) {
 	server, err := s.Hamta(ctx, alias)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("testservern för %q kör inte", alias)
+		return nil, fmt.Errorf("testservern för %q kör inte, så det finns inget att stoppa", alias)
 	}
 	if err != nil {
 		return nil, err
@@ -269,7 +269,7 @@ func (s *TestserverStore) Stoppa(ctx context.Context, alias string) (*Testserver
 				}
 			}
 			if processgruppLever(server.PID) {
-				return nil, fmt.Errorf("testservern för %q kunde inte stoppas", alias)
+				return nil, fmt.Errorf("testservern för %q svarar inte på stoppsignalen. Vänta en stund och försök igen", alias)
 			}
 		}
 	}
@@ -412,7 +412,7 @@ func (s *TestserverStore) kopplaProcess(ctx context.Context, alias string, port,
 	}
 	antal, err := rad.RowsAffected()
 	if err != nil || antal != 1 {
-		return fmt.Errorf("testserverns startrad försvann innan processen kunde sparas")
+		return fmt.Errorf("testserverns startrad försvann innan PM hann spara processen. Försök igen")
 	}
 	reservation, err := tx.ExecContext(ctx,
 		`UPDATE pm_portar SET pid=? WHERE port=? AND projekt=? AND pid=?`, pid, port, alias, os.Getpid())
@@ -421,7 +421,7 @@ func (s *TestserverStore) kopplaProcess(ctx context.Context, alias string, port,
 	}
 	antal, err = reservation.RowsAffected()
 	if err != nil || antal != 1 {
-		return fmt.Errorf("testserverns portreservation försvann innan processen kunde sparas")
+		return fmt.Errorf("testserverns portreservation försvann innan PM hann spara processen. Försök igen")
 	}
 	return tx.Commit()
 }
@@ -430,12 +430,12 @@ func (s *TestserverStore) signaleraRegistrerad(ctx context.Context, alias string
 	var registreradPID int
 	if err := s.db.QueryRowContext(ctx, `SELECT pid FROM pm_testservrar WHERE alias=?`, alias).Scan(&registreradPID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("testservern saknar en registrerad process och stoppades inte")
+			return fmt.Errorf("PM hittar ingen registrerad process för testservern och stoppade därför ingen. Läs status igen")
 		}
 		return err
 	}
 	if registreradPID != pid {
-		return fmt.Errorf("testserverns registrerade process ändrades och stoppades inte")
+		return fmt.Errorf("en annan process har tagit över numret PM sparade, så PM stoppade ingen. Läs status igen")
 	}
 	if err := syscall.Kill(-pid, signal); err != nil && !errors.Is(err, syscall.ESRCH) {
 		return fmt.Errorf("kunde inte stoppa testservern för %q: %w", alias, err)
@@ -459,20 +459,22 @@ func (s *TestserverStore) taBortRad(ctx context.Context, server *Testserver) err
 }
 
 func (s *TestserverStore) underlag(ctx context.Context, alias string) (TestserverKonfig, string, error) {
-	serverKonfig, finns := s.konfig.Testserver[alias]
-	if !finns {
-		return TestserverKonfig{}, "", fmt.Errorf("projektet %q saknar konfiguration för testserver", alias)
-	}
+	// Projektet kontrolleras först. Annars får den som skrivit fel alias veta
+	// att startkommandot saknas, och letar efter fel sak.
 	var repoPath string
 	if err := s.db.QueryRowContext(ctx,
 		`SELECT COALESCE(repo_path,'') FROM projects WHERE alias=? AND archived_at IS NULL`, alias).Scan(&repoPath); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return TestserverKonfig{}, "", fmt.Errorf("projektet %q finns inte i PM-workspacet", alias)
+			return TestserverKonfig{}, "", fmt.Errorf("projektet %q finns inte i PM-workspacet. Lägg till det under Nytt projekt", alias)
 		}
 		return TestserverKonfig{}, "", err
 	}
+	serverKonfig, finns := s.konfig.Testserver[alias]
+	if !finns {
+		return TestserverKonfig{}, "", fmt.Errorf("projektet %q har inget startkommando. Lägg till ett testserverblock för %q under Konfig", alias, alias)
+	}
 	if serverKonfig.CWD == "" && repoPath == "" {
-		return TestserverKonfig{}, "", fmt.Errorf("projektet %q saknar arbetskatalog för testservern", alias)
+		return TestserverKonfig{}, "", fmt.Errorf("projektet %q saknar arbetskatalog för testservern. Sätt cwd i testserverblocket under Konfig", alias)
 	}
 	return serverKonfig, repoPath, nil
 }

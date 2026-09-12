@@ -56,9 +56,9 @@ func testserverStartCmd() *cobra.Command {
 				return err
 			}
 			if server.Status == TestserverKrasch {
-				return fmt.Errorf("testservern för %q kraschade innan den svarade", args[0])
+				return fmt.Errorf("testservern för %q kraschade innan den svarade. Läs loggen med backlog-pm testserver logg %s", args[0], args[0])
 			}
-			return fmt.Errorf("testservern för %q svarade inte inom 15 sekunder", args[0])
+			return fmt.Errorf("testservern för %q svarade inte inom 15 sekunder. Läs loggen med backlog-pm testserver logg %s", args[0], args[0])
 		},
 	}
 }

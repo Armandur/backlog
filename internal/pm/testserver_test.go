@@ -328,3 +328,16 @@ func testserverPort(t *testing.T, serverURL string) int {
 	}
 	return port
 }
+
+func TestStartaOkantProjektSagerAttProjektetSaknas(t *testing.T) {
+	db := testDB(t)
+	store := NewTestserverStore(db, Konfig{}, t.TempDir())
+
+	_, err := store.Starta(context.Background(), "finns-inte")
+	if err == nil {
+		t.Fatal("PM startade en testserver för ett projekt som inte finns")
+	}
+	if !strings.Contains(err.Error(), "finns inte i PM-workspacet") {
+		t.Fatalf("felet pekar åt fel håll: %v", err)
+	}
+}
