@@ -62,6 +62,7 @@ func TestKvitteringsroutenTommerOversiktenUtanAgentanrop(t *testing.T) {
 }
 
 func TestMinnesroutenSpararRedigeratForslagMedAgentaktor(t *testing.T) {
+	medKonfigDir(t, t.TempDir())
 	srv, db := testServer(t)
 	reg := pm.NewAgentRegister()
 	reg.Registrera(fakeAgent{svar: "Vi behåller SQLite.\n<pm-minne>Behåll SQLite.</pm-minne>"})

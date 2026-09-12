@@ -40,6 +40,11 @@ func StartaFraga(ctx context.Context, db *sql.DB, reg *AgentRegister, in FragaIn
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(in.WorkspaceDir) == "" {
+		// Utan workspace hamnar körningens loggar i arbetskatalogen, alltså i
+		// repot när PM körs därifrån.
+		return nil, fmt.Errorf("frågan saknar workspace, så PM vet inte var loggen ska ligga")
+	}
 	store := NewSamtalStore(db)
 	fraga, err := store.Add(ctx, in.ProjectID, "", in.Fragare, in.Fraga)
 	if err != nil {

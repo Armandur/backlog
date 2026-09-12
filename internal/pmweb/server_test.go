@@ -176,6 +176,8 @@ func TestSamtalsroutenAvvisarTomTextOchFelMetod(t *testing.T) {
 }
 
 func TestFragaViaRoutenStartarKorningOchSpararAiInlagg(t *testing.T) {
+	// Frågan skapar en körning med logg, så provet behöver ett eget workspace.
+	medKonfigDir(t, t.TempDir())
 	srv, db := testServer(t)
 	kropp := bytes.NewBufferString(`{"text":"vilka tasks är öppna?","actor":"human:rasmus","fraga":true}`)
 	w := httptest.NewRecorder()
