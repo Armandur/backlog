@@ -107,7 +107,7 @@ func (s *TestserverStore) Starta(ctx context.Context, alias string) (*Testserver
 		}
 	}()
 
-	logg := filepath.Join(s.workspace, "loggar", "testserver-"+alias+".log")
+	logg := TestserverLoggfil(s.workspace, alias)
 	if err := os.MkdirAll(filepath.Dir(logg), 0o755); err != nil {
 		return nil, fmt.Errorf("kunde inte skapa testserverns loggkatalog: %w. Kontrollera att PM får skriva i workspace-katalogen", err)
 	}
@@ -183,6 +183,11 @@ func (s *TestserverStore) Starta(ctx context.Context, alias string) (*Testserver
 		Alias: alias, PID: pid, Port: reservation.Port, StartadAt: nu,
 		Logg: logg, Lever: true, Status: TestserverStartar,
 	}, nil
+}
+
+// TestserverLoggfil ger sökvägen till ett projekts testserverlogg.
+func TestserverLoggfil(workspace, alias string) string {
+	return filepath.Join(workspace, "loggar", "testserver-"+alias+".log")
 }
 
 func roteraTestserverlogg(logg string) error {

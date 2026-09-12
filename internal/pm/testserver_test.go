@@ -341,3 +341,35 @@ func TestStartaOkantProjektSagerAttProjektetSaknas(t *testing.T) {
 		t.Fatalf("felet pekar åt fel håll: %v", err)
 	}
 }
+
+func TestTestserverLoggKommandotFinnsOchVisarSlutet(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspace, "loggar"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	logg := TestserverLoggfil(workspace, "demo")
+	if err := os.WriteFile(logg, []byte("rad ett\nrad två\nrad tre\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Felmeddelandena hänvisar till det här kommandot, så det måste finnas.
+	logga, _, err := NewTestserverCmd().Find([]string{"logg", "demo"})
+	if err != nil || logga.Name() != "logg" {
+		t.Fatalf("kommandot logg saknas: %v", err)
+	}
+	if logga.Flags().Lookup("rader") == nil {
+		t.Fatal("kommandot logg saknar flaggan rader")
+	}
+
+	ut := &strings.Builder{}
+	if err := skrivLoggrader(ut, logg, 2); err != nil {
+		t.Fatalf("kunde inte skriva loggrader: %v", err)
+	}
+	text := ut.String()
+	if !strings.Contains(text, "rad två") || !strings.Contains(text, "rad tre") {
+		t.Fatalf("slutet av loggen saknas: %q", text)
+	}
+	if strings.Contains(text, "rad ett") {
+		t.Fatalf("för många rader: %q", text)
+	}
+}

@@ -16,7 +16,7 @@ import (
 // NewTestserverCmd bygger kommandona för projektens testservrar.
 func NewTestserverCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "testserver", Short: "Starta, stoppa och visa projektets testserver"}
-	cmd.AddCommand(testserverStartCmd(), testserverStopCmd(), testserverStatusCmd())
+	cmd.AddCommand(testserverStartCmd(), testserverStopCmd(), testserverStatusCmd(), testserverLoggCmd())
 	return cmd
 }
 
@@ -97,6 +97,26 @@ func testserverStatusCmd() *cobra.Command {
 	}
 }
 
+func testserverLoggCmd() *cobra.Command {
+	var rader int
+	cmd := &cobra.Command{
+		Use: "logg <alias>", Short: "Visa slutet av testserverns logg", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if rader < 1 {
+				return fmt.Errorf("antalet rader måste vara minst 1")
+			}
+			sokvag := TestserverLoggfil(cli.WorkDir(), args[0])
+			if _, err := os.Stat(sokvag); err != nil {
+				return fmt.Errorf("testservern för %q har ingen logg ännu. Starta den först", args[0])
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Logg: %s\n", sokvag)
+			return skrivLoggrader(cmd.OutOrStdout(), sokvag, rader)
+		},
+	}
+	cmd.Flags().IntVar(&rader, "rader", 200, "antal rader från slutet")
+	return cmd
+}
+
 func skrivTestserverStatus(cmd *cobra.Command, server *Testserver) error {
 	if cli.JSONOutput() {
 		return skrivJSON(cmd, server)
@@ -155,6 +175,11 @@ func vantaPaTestserver(
 }
 
 func skrivSistaLoggrader(cmd *cobra.Command, sokvag string, antal int) error {
+	fmt.Fprintln(cmd.ErrOrStderr(), "Senaste loggraderna:")
+	return skrivLoggrader(cmd.ErrOrStderr(), sokvag, antal)
+}
+
+func skrivLoggrader(ut io.Writer, sokvag string, antal int) error {
 	fil, err := os.Open(sokvag)
 	if err != nil {
 		return fmt.Errorf("kunde inte läsa testserverns logg: %w", err)
@@ -185,11 +210,10 @@ func skrivSistaLoggrader(cmd *cobra.Command, sokvag string, antal int) error {
 	if len(rader) > antal {
 		rader = rader[len(rader)-antal:]
 	}
-	fmt.Fprintln(cmd.ErrOrStderr(), "Senaste loggraderna:")
 	if len(rader) == 1 && rader[0] == "" {
-		fmt.Fprintln(cmd.ErrOrStderr(), "(loggen är tom)")
+		fmt.Fprintln(ut, "(loggen är tom)")
 		return nil
 	}
-	fmt.Fprintln(cmd.ErrOrStderr(), strings.Join(rader, "\n"))
+	fmt.Fprintln(ut, strings.Join(rader, "\n"))
 	return nil
 }

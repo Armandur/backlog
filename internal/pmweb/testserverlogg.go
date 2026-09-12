@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -40,7 +39,7 @@ func (s *Server) strommaTestserverlogg(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, fmt.Errorf("kunde inte läsa testservern: %w", err), http.StatusInternalServerError)
 		return
 	}
-	logg := filepath.Join(konfigWorkDir(), "loggar", "testserver-"+alias+".log")
+	logg := pm.TestserverLoggfil(konfigWorkDir(), alias)
 	if server != nil && server.Logg != "" {
 		logg = server.Logg
 	}
