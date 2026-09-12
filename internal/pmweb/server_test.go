@@ -2426,6 +2426,36 @@ func TestTaBortTaskMedKoadKorningAvvisas(t *testing.T) {
 	}
 }
 
+func TestTaBortTaskMedPagaendeKorningAvvisas(t *testing.T) {
+	srv, db := testServer(t)
+	taskID, ref := taskForRedigering(t, db, 76, "Task under arbete")
+	var projectID string
+	if err := db.QueryRow(`SELECT id FROM projects WHERE alias='demo'`).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO pm_korningar(id, project_id, task_id, task_ref, agent, status, skapad_at)
+	                      VALUES(?,?,?,?,'claude',?,?)`,
+		ids.New(), projectID, taskID, ref, pm.StatusKor, timeutil.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/tasks/"+ref, nil))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("borttagning under pågående körning gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "pågår") {
+		t.Fatalf("felet säger inte att körningen pågår: %s", w.Body.String())
+	}
+	var antal int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE task_seq=76`).Scan(&antal); err != nil {
+		t.Fatal(err)
+	}
+	if antal != 1 {
+		t.Fatal("tasken togs bort trots den pågående körningen")
+	}
+}
+
 func TestEtiketterViaRutterna(t *testing.T) {
 	srv, db := testServer(t)
 	_, ref := taskForRedigering(t, db, 74, "Task med etiketter")
