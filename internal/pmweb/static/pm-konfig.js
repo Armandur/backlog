@@ -40,6 +40,10 @@ function normaliseraKonfig(data) {
   data.agenter ||= {};
   data.regler ||= [];
   data.testserver ||= {};
+  data.system ||= {};
+  data.system.klarsprak_aktiv ??= false;
+  data.system.klarsprak_sokvag ||= "";
+  data.system.klarsprak_max_per100 ??= 3;
   data.krok ||= {};
   data.krok.anspraka ||= [];
   data.krok.slapp ||= [];
@@ -148,6 +152,9 @@ function renderaKonfig() {
 
   renderaTestservrar();
 
+  $("#klarsprakAktiv").checked = Boolean(konfig.system?.klarsprak_aktiv);
+  $("#klarsprakSokvag").value = konfig.system?.klarsprak_sokvag || "";
+  $("#klarsprakMax").value = String(konfig.system?.klarsprak_max_per100 ?? 3);
   $("#krokAnspraka").value = rader(konfig.krok?.anspraka);
   $("#krokSlapp").value = rader(konfig.krok?.slapp);
   $("#krokMiljo").value = miljoRader(konfig.krok?.miljo);
@@ -207,6 +214,11 @@ function samlaKonfig() {
     default_agent: forval, agenter: agenterNy, regler: reglerNy,
     testserver: testserverNy,
     raderade_testservrar: Array.from(raderadeTestservrar),
+    system: {
+      klarsprak_aktiv: $("#klarsprakAktiv").checked,
+      klarsprak_sokvag: $("#klarsprakSokvag").value.trim(),
+      klarsprak_max_per100: Number($("#klarsprakMax").value),
+    },
     krok: {
       anspraka: lasLista($("#krokAnspraka").value, "\n"),
       slapp: lasLista($("#krokSlapp").value, "\n"),
@@ -375,4 +387,23 @@ $("#konfigform").addEventListener("submit", async (e) => {
   } finally {
     knapp.disabled = false;
   }
+});
+
+
+// Förslagsmodulen laddas efter den här filen. Koppla in poängen när hela sidan finns.
+window.addEventListener("DOMContentLoaded", () => {
+  const visaUtkast = window.visaTaskutkast;
+  if (typeof visaUtkast !== "function") return;
+  window.visaTaskutkast = (utkast) => {
+    visaUtkast(utkast);
+    const rad = $("#utkastKlarsprak");
+    if (typeof utkast.klarsprak_poang !== "number") {
+      rad.hidden = true;
+      rad.textContent = "";
+      return;
+    }
+    const omskriven = utkast.klarsprak_omskriven ? " efter en omskrivning" : "";
+    rad.textContent = `Klarspråk: ${utkast.klarsprak_poang.toFixed(2)} fynd per hundra ord${omskriven}.`;
+    rad.hidden = false;
+  };
 });

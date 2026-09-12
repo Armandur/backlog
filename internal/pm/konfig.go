@@ -83,6 +83,13 @@ type WebbKonfig struct {
 	Losenord  string `toml:"losenord" json:"losenord"`
 }
 
+// SystemKonfig samlar inställningar som gäller hela PM.
+type SystemKonfig struct {
+	KlarsprakAktiv     bool    `toml:"klarsprak_aktiv" json:"klarsprak_aktiv"`
+	KlarsprakSokvag    string  `toml:"klarsprak_sokvag" json:"klarsprak_sokvag"`
+	KlarsprakMaxPer100 float64 `toml:"klarsprak_max_per100" json:"klarsprak_max_per100"`
+}
+
 // Konfig är hela PM-konfigurationen.
 type Konfig struct {
 	DefaultAgent string                      `toml:"default_agent" json:"default_agent"`
@@ -93,6 +100,7 @@ type Konfig struct {
 	Portar       PortKonfig                  `toml:"portar" json:"portar"`
 	Testserver   map[string]TestserverKonfig `toml:"testserver" json:"testserver"`
 	Webb         WebbKonfig                  `toml:"webb" json:"webb"`
+	System       SystemKonfig                `toml:"system" json:"system"`
 	// Kalla är sökvägen konfigurationen kommer från, tom när PM använder defaulterna.
 	Kalla string `toml:"-" json:"-"`
 }
@@ -256,6 +264,9 @@ func fyllIStandard(a AgentKonfig) AgentKonfig {
 
 // Validera fångar konfigfel innan PM startar en körning.
 func (k Konfig) Validera(projektalias ...string) error {
+	if k.System.KlarsprakMaxPer100 < 0 {
+		return fmt.Errorf("gränsen för klarspråksfynd får inte vara negativ")
+	}
 	portar := k.Portar
 	if portar.Fran == 0 && portar.Till == 0 {
 		portar = PortKonfig{Fran: 8100, Till: 8199}

@@ -8,6 +8,12 @@
 # Värdet 0 eller lägre tar bort taket.
 max_samtidiga = 2
 
+# Systeminställningar gäller hela PM. Tom sökväg hoppar över lintningen.
+[system]
+  klarsprak_aktiv = false
+  klarsprak_sokvag = ""
+  klarsprak_max_per100 = 3.0
+
 # Inloggningen till PM-webben. Byt lösenordet innan du öppnar PM mot
 # nätverket. Miljövariabeln BACKLOG_PM_LOSENORD vinner över raden här.
 [webb]

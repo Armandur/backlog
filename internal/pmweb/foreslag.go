@@ -19,7 +19,12 @@ const (
 	forslagBerikning = "berikning"
 )
 
-var taskForslagTimeout = provTimeout
+var (
+	taskForslagTimeout = provTimeout
+	taskForslagKonfig  = func() (pm.Konfig, error) {
+		return pm.LasKonfig(konfigWorkDir())
+	}
+)
 
 type foreslaTaskBody struct {
 	Sort  string `json:"sort"`
@@ -49,21 +54,25 @@ type berikningsforslag struct {
 }
 
 type taskUtkast struct {
-	Sort         string          `json:"sort"`
-	Ref          string          `json:"ref"`
-	Titel        string          `json:"titel"`
-	Beskrivning  string          `json:"beskrivning"`
-	Typ          models.TaskType `json:"typ"`
-	Prioritet    int             `json:"prioritet"`
-	Modell       string          `json:"modell"`
-	Anstrangning string          `json:"anstrangning"`
+	Sort               string          `json:"sort"`
+	KlarsprakPoang     *float64        `json:"klarsprak_poang,omitempty"`
+	KlarsprakOmskriven bool            `json:"klarsprak_omskriven,omitempty"`
+	Ref                string          `json:"ref"`
+	Titel              string          `json:"titel"`
+	Beskrivning        string          `json:"beskrivning"`
+	Typ                models.TaskType `json:"typ"`
+	Prioritet          int             `json:"prioritet"`
+	Modell             string          `json:"modell"`
+	Anstrangning       string          `json:"anstrangning"`
 }
 
 type nyttTaskForslag struct {
-	Titel       string          `json:"titel"`
-	Beskrivning string          `json:"beskrivning"`
-	Typ         models.TaskType `json:"typ"`
-	Prioritet   int             `json:"prioritet"`
+	Titel              string          `json:"titel"`
+	KlarsprakPoang     *float64        `json:"klarsprak_poang,omitempty"`
+	KlarsprakOmskriven bool            `json:"klarsprak_omskriven,omitempty"`
+	Beskrivning        string          `json:"beskrivning"`
+	Typ                models.TaskType `json:"typ"`
+	Prioritet          int             `json:"prioritet"`
 }
 
 type uppdateraTaskBody struct {
@@ -114,7 +123,8 @@ func (s *Server) foreslaNyTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var forslag nyttTaskForslag
-	if err := tolkaNyttTaskForslag(strings.TrimSpace(svar), &forslag); err != nil {
+	svar = strings.TrimSpace(svar)
+	if err := tolkaNyttTaskForslag(svar, &forslag); err != nil {
 		meddelande, kod := begripligtTaskfel(err)
 		if errors.Is(err, service.ErrTaskDescRequired) {
 			meddelande = "agentens förslag saknar en beskrivning"
@@ -125,6 +135,20 @@ func (s *Server) foreslaNyTask(w http.ResponseWriter, r *http.Request) {
 		}
 		svaraFel(w, errors.New(meddelande), http.StatusBadGateway)
 		return
+	}
+	if konfig, konfigfel := taskForslagKonfig(); konfigfel == nil {
+		nyttSvar, lint, omskriven := pm.GranskaAgenttext(ctx, konfig.System, agent, svar, forslag.Titel+"\n\n"+forslag.Beskrivning)
+		if omskriven {
+			// En omskrivning som inte går att tolka får inte kosta förslaget.
+			// Då visar PM originalet i stället, och säger att det inte skrevs om.
+			omskrivet := nyttTaskForslag{}
+			if err := tolkaNyttTaskForslag(nyttSvar, &omskrivet); err != nil {
+				omskriven = false
+			} else {
+				forslag = omskrivet
+			}
+		}
+		forslag.KlarsprakPoang, forslag.KlarsprakOmskriven = klarsprakPoang(lint), omskriven
 	}
 	svaraJSON(w, http.StatusOK, forslag)
 }
@@ -224,7 +248,8 @@ func (s *Server) foreslaTask(w http.ResponseWriter, r *http.Request) {
 		Sort: body.Sort, Ref: fmt.Sprintf("TASK-%d", task.Seq), Titel: task.Title,
 		Beskrivning: task.Description, Typ: task.Type, Prioritet: task.Priority,
 	}
-	if err := tolkaTaskForslag(strings.TrimSpace(svar), &utkast, varden); err != nil {
+	svar = strings.TrimSpace(svar)
+	if err := tolkaTaskForslag(svar, &utkast, varden); err != nil {
 		meddelande, kod := begripligtTaskfel(err)
 		if errors.Is(err, service.ErrTaskDescRequired) {
 			meddelande = "agentens förslag saknar en beskrivning"
@@ -234,7 +259,30 @@ func (s *Server) foreslaTask(w http.ResponseWriter, r *http.Request) {
 		svaraFel(w, errors.New(meddelande), http.StatusBadGateway)
 		return
 	}
+	if body.Sort == forslagBerikning {
+		if konfig, konfigfel := taskForslagKonfig(); konfigfel == nil {
+			nyttSvar, lint, omskriven := pm.GranskaAgenttext(ctx, konfig.System, agent, svar, utkast.Titel+"\n\n"+utkast.Beskrivning)
+			if omskriven {
+				// Samma sak här: originalet är bättre än inget förslag alls.
+				omskrivet := taskUtkast{Sort: forslagBerikning}
+				if err := tolkaTaskForslag(nyttSvar, &omskrivet, varden); err != nil {
+					omskriven = false
+				} else {
+					utkast.Titel, utkast.Beskrivning = omskrivet.Titel, omskrivet.Beskrivning
+				}
+			}
+			utkast.KlarsprakPoang, utkast.KlarsprakOmskriven = klarsprakPoang(lint), omskriven
+		}
+	}
 	svaraJSON(w, http.StatusOK, utkast)
+}
+
+func klarsprakPoang(resultat *pm.KlarsprakResultat) *float64 {
+	if resultat == nil {
+		return nil
+	}
+	poang := resultat.TotaltPer100Ord
+	return &poang
 }
 
 func tolkaTaskForslag(svar string, utkast *taskUtkast, varden klassningsvarden) error {

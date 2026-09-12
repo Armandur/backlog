@@ -312,6 +312,22 @@
           <div id="testserverkort" class="kortlista"></div>
         </section>
 
+        <section class="konfigsektion">
+          <div class="sektionshuvud"><h2>Systeminställningar</h2></div>
+          <article class="konfigkort systemkort">
+            <label class="kryss"><input id="klarsprakAktiv" type="checkbox"> Linta agentens tasktexter</label>
+            <div class="faltgrid">
+              <label class="falt">Sökväg till lintern
+                <input id="klarsprakSokvag" spellcheck="false" placeholder="/sökväg/till/klarsprak_lint.py">
+              </label>
+              <label class="falt">Högsta antal fynd per hundra ord
+                <input id="klarsprakMax" type="number" min="0" step="0.01">
+              </label>
+            </div>
+            <p class="regel">PM hoppar över lintningen när du stänger av den eller lämnar sökvägen tom.</p>
+          </article>
+        </section>
+
         <details class="konfigsektion kroksektion">
           <summary>Krok för anspråk</summary>
           <div class="faltgrid">
@@ -445,6 +461,7 @@
         <label class="falt" for="utkastBeskrivning">Beskrivning
           <textarea id="utkastBeskrivning" rows="12" maxlength="65535"></textarea>
         </label>
+        <p class="klarsprakspoang" id="utkastKlarsprak" hidden></p>
         <div class="taskutkast-rad">
           <label class="falt" for="utkastTyp">Typ
             <select id="utkastTyp">
