@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -144,7 +145,17 @@ func processMatcharStarttid(pid int, starttid string) bool {
 		return false
 	}
 	faktiskStarttid, err := processStarttid(pid)
-	return err == nil && faktiskStarttid == starttid
+	if err != nil {
+		// Går ps inte att fråga vet PM ingenting. Då är det säkrare att låta
+		// låset stå kvar än att två körningar tar samma repo.
+		var exitFel *exec.ExitError
+		if errors.As(err, &exitFel) && exitFel.ExitCode() == 1 {
+			return false
+		}
+		fmt.Fprintf(os.Stderr, "kunde inte läsa starttiden för process %d: %v\n", pid, err)
+		return true
+	}
+	return faktiskStarttid == starttid
 }
 
 // processStarttid använder ps eftersom kommandot finns på både Linux och macOS.

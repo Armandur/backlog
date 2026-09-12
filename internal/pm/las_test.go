@@ -55,3 +55,40 @@ func skrivLasfil(t *testing.T, las *RepoLas, innehall lasInnehall) {
 		t.Fatal(err)
 	}
 }
+
+func TestRepoLasBehallerLasetNarPsSaknas(t *testing.T) {
+	// Går ps inte att köra vet PM ingenting om ägaren. Då ska låset stå kvar.
+	t.Setenv("PATH", t.TempDir())
+	ws := t.TempDir()
+	repo := t.TempDir()
+	las := NyRepoLas(ws, repo)
+	skrivLasfil(t, las, lasInnehall{
+		PID:      os.Getpid(),
+		Starttid: "någon starttid",
+		Korning:  "pågående",
+	})
+
+	_, lever, err := las.Agare()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lever {
+		t.Fatal("PM kallade låset dött trots att den inte kunde fråga ps")
+	}
+}
+
+func TestRepoLasSlapperLasetNarProcessenSaknas(t *testing.T) {
+	ws := t.TempDir()
+	repo := t.TempDir()
+	las := NyRepoLas(ws, repo)
+	// Ett pid som garanterat inte finns. ps svarar med exitkod 1.
+	skrivLasfil(t, las, lasInnehall{PID: 2147483600, Starttid: "någon starttid"})
+
+	_, lever, err := las.Agare()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lever {
+		t.Fatal("PM kallade ett lås utan process levande")
+	}
+}
