@@ -2,17 +2,26 @@ package pmweb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/mazen160/backlog/internal/cli"
 	"github.com/mazen160/backlog/internal/pm"
+)
+
+const (
+	standardWebbport = 6060
+	// PM provar 6060 och de tjugo portarna efter den innan det blir fel.
+	webbportSpann = 20
 )
 
 // NewWebCmd ersätter upstreams web-kommando med PM-webben: samma UI plus
@@ -63,24 +72,52 @@ func NewWebCmd(hamtaRegister func() (*pm.AgentRegister, error)) *cobra.Command {
 					}()
 					return "körningen startad, följ den under pågående körningar"
 				})
-			addr := net.JoinHostPort(bind, fmt.Sprintf("%d", port))
+			lyssnare, port, err := lyssna(bind, port, cmd.Flags().Changed("port"))
+			if err != nil {
+				return err
+			}
 			vard, felVard := os.Hostname()
 			if felVard != nil || vard == "" {
-				vard = "ubuntu-ai"
+				vard = "localhost"
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "PM-webb: http://%s:%d/  tråd: http://%s:%d/pm/<alias>\n", vard, port, vard, port)
 
 			httpSrv := &http.Server{
-				Addr:              addr,
 				Handler:           srv,
 				ReadHeaderTimeout: 10 * time.Second,
 			}
-			return httpSrv.ListenAndServe()
+			return httpSrv.Serve(lyssnare)
 		},
 	}
-	cmd.Flags().IntVar(&port, "port", 6060, "port att lyssna på")
+	cmd.Flags().IntVar(&port, "port", standardWebbport, "port att lyssna på, utan flaggan tar PM nästa lediga")
 	cmd.Flags().StringVar(&bind, "bind", "", "adress att binda till, tom betyder alla gränssnitt")
 	return cmd
+}
+
+// lyssna öppnar porten. En vald port måste vara ledig, annars säger PM vilken
+// port som är ledig i stället. Utan flagga letar PM själv uppåt från 6060.
+func lyssna(bind string, port int, valdAvAnvandaren bool) (net.Listener, int, error) {
+	sista := port
+	if !valdAvAnvandaren {
+		sista = port + webbportSpann
+	}
+	for prova := port; prova <= sista; prova++ {
+		lyssnare, err := net.Listen("tcp", net.JoinHostPort(bind, strconv.Itoa(prova)))
+		if err == nil {
+			return lyssnare, prova, nil
+		}
+		if !upptagen(err) {
+			return nil, 0, fmt.Errorf("PM kunde inte öppna port %d: %w", prova, err)
+		}
+	}
+	if valdAvAnvandaren {
+		return nil, 0, fmt.Errorf("port %d är upptagen. Välj en annan port med --port, eller kör utan flaggan så letar PM själv", port)
+	}
+	return nil, 0, fmt.Errorf("portarna %d till %d är upptagna. Välj en ledig port med --port", port, sista)
+}
+
+func upptagen(err error) bool {
+	return errors.Is(err, syscall.EADDRINUSE) || errors.Is(err, syscall.EACCES)
 }
 
 // profilNamn läser --profile ur argumenten, så körningar och MCP pekar på
