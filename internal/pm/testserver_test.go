@@ -97,6 +97,86 @@ func TestTestserverStartarSpararOchStopparProcessgrupp(t *testing.T) {
 	}
 }
 
+func TestTestserverCLIStartFangarSenExitkod(t *testing.T) {
+	store, _, dir := testserverStore(t)
+	skript := filepath.Join(dir, "krascha.sh")
+	if err := os.WriteFile(skript, []byte("#!/bin/sh\nsleep 1\nexit 23\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pidfil := filepath.Join(dir, "pid")
+	hjalp := exec.Command(os.Args[0], "-test.run=^TestTestserverCLIStartHjalpprocess$")
+	hjalp.Env = append(os.Environ(),
+		"PM_TESTSERVER_HJALP=1",
+		"PM_TESTSERVER_DIR="+dir,
+		"PM_TESTSERVER_KOMMANDO="+skript,
+		"PM_TESTSERVER_PIDFIL="+pidfil,
+	)
+	if ut, err := hjalp.CombinedOutput(); err != nil {
+		t.Fatalf("hjälpprocessen misslyckades: %v\n%s", err, ut)
+	}
+	piddata, err := os.ReadFile(pidfil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(piddata)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if processgruppLever(pid) {
+			_ = syscall.Kill(-pid, syscall.SIGKILL)
+		}
+	})
+
+	exitfil := testserverExitfil(TestserverLoggfil(dir, "demo"), pid)
+	slut := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(exitfil); err == nil {
+			break
+		} else if !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		if time.Now().After(slut) {
+			t.Fatal("följaren skrev ingen exitkod efter CLI-processens avslut")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	server, err := store.Status(context.Background(), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if server.Status != TestserverKrasch || server.Exitkod == nil || *server.Exitkod != 23 {
+		t.Fatalf("status efter sen krasch blev %+v", server)
+	}
+	if processgruppLever(pid) {
+		t.Fatal("testserverns processgrupp lever efter kraschen")
+	}
+}
+
+func TestTestserverCLIStartHjalpprocess(t *testing.T) {
+	if os.Getenv("PM_TESTSERVER_HJALP") != "1" {
+		return
+	}
+	dir := os.Getenv("PM_TESTSERVER_DIR")
+	db, err := repo.Open(filepath.Join(dir, "backlog.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	konfig := StandardKonfig()
+	konfig.Portar = PortKonfig{Fran: 18100, Till: 18199}
+	konfig.Testserver = map[string]TestserverKonfig{
+		"demo": {Kommando: os.Getenv("PM_TESTSERVER_KOMMANDO"), CWD: dir},
+	}
+	server, err := NewTestserverStore(db, konfig, dir).Starta(context.Background(), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(os.Getenv("PM_TESTSERVER_PIDFIL"), []byte(strconv.Itoa(server.PID)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTestserverFyllerPortOchMiljo(t *testing.T) {
 	store, _, dir := testserverStore(t)
 	utfil := filepath.Join(dir, "argument.txt")

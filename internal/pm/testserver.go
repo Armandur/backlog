@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -143,15 +142,7 @@ func (s *TestserverStore) Starta(ctx context.Context, alias string) (*Testserver
 	}()
 
 	args := ersattPort(serverKonfig.Args, reservation.Port)
-	kommando := exec.Command(serverKonfig.Kommando, args...)
-	kommando.Dir = serverKonfig.CWD
-	if kommando.Dir == "" {
-		kommando.Dir = repoPath
-	}
-	kommando.Env = miljo(serverKonfig.Miljo)
-	kommando.Stdout = loggfil
-	kommando.Stderr = loggfil
-	kommando.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	kommando := testserverProcesskommando(serverKonfig, args, repoPath, logg, loggfil)
 	if err := kommando.Start(); err != nil {
 		return nil, fmt.Errorf("kunde inte starta testservern för %q: %w. Kontrollera kommandot under Konfig", alias, err)
 	}

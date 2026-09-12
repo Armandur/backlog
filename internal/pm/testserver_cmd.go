@@ -5,13 +5,41 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/mazen160/backlog/internal/cli"
 )
+
+const testserverFoljarSkript = `logg=$1
+shift
+"$@"
+exitkod=$?
+printf '%s\n' "$exitkod" > "${logg}.$$.exitkod"
+exit "$exitkod"`
+
+func testserverProcesskommando(
+	konfig TestserverKonfig,
+	args []string,
+	repoPath, logg string,
+	loggfil *os.File,
+) *exec.Cmd {
+	foljarArgs := []string{"-c", testserverFoljarSkript, "backlog-pm-testserver", logg, konfig.Kommando}
+	kommando := exec.Command("/bin/sh", append(foljarArgs, args...)...)
+	kommando.Dir = konfig.CWD
+	if kommando.Dir == "" {
+		kommando.Dir = repoPath
+	}
+	kommando.Env = miljo(konfig.Miljo)
+	kommando.Stdout = loggfil
+	kommando.Stderr = loggfil
+	kommando.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	return kommando
+}
 
 // NewTestserverCmd bygger kommandona för projektens testservrar.
 func NewTestserverCmd() *cobra.Command {
