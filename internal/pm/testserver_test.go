@@ -453,3 +453,33 @@ func TestTestserverLoggKommandotFinnsOchVisarSlutet(t *testing.T) {
 		t.Fatalf("för många rader: %q", text)
 	}
 }
+
+func TestTestserverMCPSvararNereUtanKonfiguration(t *testing.T) {
+	store, _, _ := testserverStore(t)
+	store.konfig.Testserver = nil
+	extension := TestserverMCP(func() (*TestserverStore, error) { return store, nil })
+	args := map[string]interface{}{"project": "demo"}
+
+	resultat, err := extension.Handlers["testserver_status"](context.Background(), args)
+	if err != nil {
+		t.Fatalf("testserver_status utan konfiguration: %v", err)
+	}
+	svar, ok := resultat.(map[string]interface{})
+	if !ok {
+		t.Fatalf("testserver_status gav oväntat svar: %#v", resultat)
+	}
+	innehall, ok := svar["content"].([]map[string]string)
+	if !ok || len(innehall) != 1 {
+		t.Fatalf("testserver_status gav oväntat innehåll: %#v", svar["content"])
+	}
+	if text := innehall[0]["text"]; !strings.Contains(text, `"status": "nere"`) {
+		t.Fatalf("testserver_status svarade inte nere: %s", text)
+	}
+
+	for _, verktyg := range []string{"testserver_start", "testserver_stop"} {
+		_, err := extension.Handlers[verktyg](context.Background(), args)
+		if err == nil || !strings.Contains(err.Error(), "saknar konfiguration för testserver") {
+			t.Fatalf("%s ska kräva konfiguration, fick %v", verktyg, err)
+		}
+	}
+}

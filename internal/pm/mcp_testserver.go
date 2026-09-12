@@ -11,6 +11,7 @@ import (
 func TestserverMCP(nyStore func() (*TestserverStore, error)) mcpserver.Extension {
 	handler := func(
 		anrop func(context.Context, *TestserverStore, string) (*Testserver, error),
+		kraverKonfig bool,
 	) mcpserver.ToolHandler {
 		return func(ctx context.Context, args map[string]interface{}) (interface{}, error) {
 			alias, _ := args["project"].(string)
@@ -21,7 +22,7 @@ func TestserverMCP(nyStore func() (*TestserverStore, error)) mcpserver.Extension
 			if err != nil {
 				return nil, err
 			}
-			if _, finns := store.konfig.Testserver[alias]; !finns {
+			if _, finns := store.konfig.Testserver[alias]; kraverKonfig && !finns {
 				return nil, fmt.Errorf("projektet %q saknar konfiguration för testserver", alias)
 			}
 			server, err := anrop(ctx, store, alias)
@@ -48,13 +49,13 @@ func TestserverMCP(nyStore func() (*TestserverStore, error)) mcpserver.Extension
 		Handlers: map[string]mcpserver.ToolHandler{
 			"testserver_start": handler(func(ctx context.Context, store *TestserverStore, alias string) (*Testserver, error) {
 				return store.Starta(ctx, alias)
-			}),
+			}, true),
 			"testserver_stop": handler(func(ctx context.Context, store *TestserverStore, alias string) (*Testserver, error) {
 				return store.Stoppa(ctx, alias)
-			}),
+			}, true),
 			"testserver_status": handler(func(ctx context.Context, store *TestserverStore, alias string) (*Testserver, error) {
 				return store.Status(ctx, alias)
-			}),
+			}, false),
 		},
 	}
 }
