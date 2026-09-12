@@ -6,6 +6,42 @@ const TESTSERVER_STATUS = {
   krasch: { etikett: "Krasch", klass: "p-fel" },
 };
 let testserverLever = false;
+let testserverLoggstrom = null;
+
+function stangTestserverLoggstrom() {
+  if (testserverLoggstrom) testserverLoggstrom.close();
+  testserverLoggstrom = null;
+}
+
+function laggTestserverLoggrad(event) {
+  const ruta = $("#testserverLogg");
+  const foljMed = vidBotten(ruta);
+  try {
+    ruta.append(document.createTextNode(JSON.parse(event.data) + "\n"));
+    if (foljMed) skrollaNed(ruta);
+  } catch {
+    toast("PM kunde inte läsa testserverns logg.");
+  }
+}
+
+function visaTestserverlogg() {
+  stangTestserverLoggstrom();
+  const ruta = $("#testserverLogg");
+  ruta.textContent = "";
+  const kallan = new EventSource(`/api/projects/${encodeURIComponent(alias)}/testserver/logg`);
+  testserverLoggstrom = kallan;
+  kallan.onmessage = laggTestserverLoggrad;
+  kallan.addEventListener("slut", (event) => {
+    laggTestserverLoggrad(event);
+    kallan.close();
+    if (testserverLoggstrom === kallan) testserverLoggstrom = null;
+  });
+  kallan.onerror = () => {
+    kallan.close();
+    if (testserverLoggstrom === kallan) testserverLoggstrom = null;
+    toast("Anslutningen till testserverns logg bröts.");
+  };
+}
 
 function sattTestserverBadge(status) {
   const lage = TESTSERVER_STATUS[status] || TESTSERVER_STATUS.nere;
@@ -46,9 +82,16 @@ $("#testserverKnapp").onclick = async () => {
     await hamta(`/api/projects/${encodeURIComponent(alias)}/testserver/${skaStoppa ? "stop" : "start"}`, { method: "POST" });
     toast(skaStoppa ? "Testservern har stoppats." : "Testservern har startats.");
     await laddaTestserver();
+    if ($("#testserverLoggruta").open) visaTestserverlogg();
   } catch (err) {
     toast(err.message);
   } finally {
     knapp.disabled = false;
   }
 };
+
+$("#testserverLoggruta").addEventListener("toggle", (event) => {
+  if (event.target.open) visaTestserverlogg();
+  else stangTestserverLoggstrom();
+});
+window.addEventListener("beforeunload", stangTestserverLoggstrom);

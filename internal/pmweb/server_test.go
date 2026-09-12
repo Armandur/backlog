@@ -14,7 +14,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -338,7 +340,7 @@ func TestPMVyInnehallerKunskapOchKommentarspanel(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/pm/demo", nil))
 	body := w.Body.String()
-	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`, `id="testserverKnapp"`, `id="testserverLank"`, `id="testserverBadge"`} {
+	for _, innehall := range []string{`data-v="kunskap"`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`, `id="testserverKnapp"`, `id="testserverLank"`, `id="testserverBadge"`, `id="testserverLoggruta"`, `id="testserverLogg"`} {
 		if !strings.Contains(body, innehall) {
 			t.Fatalf("PM-vyn saknar %s", innehall)
 		}
@@ -1216,6 +1218,141 @@ func TestStromSagerAvbrottAvenUtanTidigareHandelser(t *testing.T) {
 	}
 	if strings.Contains(kropp, "strömmar inte") {
 		t.Fatalf("beskedet blev missvisande: %s", kropp)
+	}
+}
+
+func testserverLoggdata(t *testing.T, kropp io.Reader) []string {
+	t.Helper()
+	var rader []string
+	skanner := bufio.NewScanner(kropp)
+	for skanner.Scan() {
+		rad := strings.TrimPrefix(skanner.Text(), "data: ")
+		if rad == skanner.Text() {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal([]byte(rad), &text); err != nil {
+			t.Fatalf("ogiltig loggdata %q: %v", rad, err)
+		}
+		rader = append(rader, text)
+	}
+	if err := skanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return rader
+}
+
+func TestTestserverloggSpelarUppSistaRaderna(t *testing.T) {
+	srv, _ := testServer(t)
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	logg := filepath.Join(dir, "loggar", "testserver-demo.log")
+	if err := os.MkdirAll(filepath.Dir(logg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logg, []byte("ett\ntvå\ntre\n<b>fyra</b>\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/testserver/logg?tail=2", nil))
+	if w.Code != http.StatusOK || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("strömmen gav %d och %q", w.Code, w.Header().Get("Content-Type"))
+	}
+	fick := testserverLoggdata(t, w.Body)
+	vantat := []string{"tre", "<b>fyra</b>", "Testservern har stoppats."}
+	if !slices.Equal(fick, vantat) {
+		t.Fatalf("loggen blev %#v, väntade %#v", fick, vantat)
+	}
+}
+
+func TestTestserverloggFortsatterMedNyRadOchStoppbesked(t *testing.T) {
+	srv, db := testServer(t)
+	dir := t.TempDir()
+	logg := filepath.Join(dir, "testserver.log")
+	if err := os.WriteFile(logg, []byte("redan skriven\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	process := exec.Command("sleep", "300")
+	process.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := process.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = syscall.Kill(-process.Process.Pid, syscall.SIGKILL)
+		_, _ = process.Process.Wait()
+	})
+	if _, err := db.Exec(`INSERT INTO pm_testservrar(alias,pid,port,startad_at,logg_sokvag) VALUES(?,?,?,?,?)`,
+		"demo", process.Process.Pid, 18123, timeutil.Now(), logg); err != nil {
+		t.Fatal(err)
+	}
+	webbserver := httptest.NewServer(srv)
+	t.Cleanup(webbserver.Close)
+
+	ctx, avbryt := context.WithCancel(t.Context())
+	defer avbryt()
+	begaran, err := http.NewRequestWithContext(ctx, http.MethodGet, webbserver.URL+"/api/projects/demo/testserver/logg", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svar, err := webbserver.Client().Do(begaran)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svar.Body.Close()
+	skanner := bufio.NewScanner(svar.Body)
+	if !skanner.Scan() || !strings.Contains(skanner.Text(), "redan skriven") {
+		t.Fatalf("första raden saknas: %q", skanner.Text())
+	}
+
+	fil, err := os.OpenFile(logg, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fil.WriteString("ny rad\n"); err != nil {
+		fil.Close()
+		t.Fatal(err)
+	}
+	if err := fil.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DELETE FROM pm_testservrar WHERE alias='demo'`); err != nil {
+		t.Fatal(err)
+	}
+
+	klart := make(chan []string, 1)
+	go func() {
+		var rader []string
+		for skanner.Scan() {
+			if !strings.HasPrefix(skanner.Text(), "data: ") {
+				continue
+			}
+			var text string
+			if json.Unmarshal([]byte(strings.TrimPrefix(skanner.Text(), "data: ")), &text) == nil {
+				rader = append(rader, text)
+			}
+		}
+		klart <- rader
+	}()
+	select {
+	case rader := <-klart:
+		if !slices.Equal(rader, []string{"ny rad", "Testservern har stoppats."}) {
+			t.Fatalf("liveflödet blev %#v", rader)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("liveflödet stängdes inte efter stopp")
+	}
+}
+
+func TestTestserverloggUtanFilGerBesked(t *testing.T) {
+	srv, _ := testServer(t)
+	medKonfigDir(t, t.TempDir())
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/testserver/logg", nil))
+	fick := testserverLoggdata(t, w.Body)
+	vantat := []string{"Testserverns logg finns inte ännu.", "Testservern kör inte."}
+	if !slices.Equal(fick, vantat) {
+		t.Fatalf("beskedet blev %#v, väntade %#v", fick, vantat)
 	}
 }
 

@@ -111,7 +111,10 @@ func (s *TestserverStore) Starta(ctx context.Context, alias string) (*Testserver
 	if err := os.MkdirAll(filepath.Dir(logg), 0o755); err != nil {
 		return nil, fmt.Errorf("kunde inte skapa testserverns loggkatalog: %w", err)
 	}
-	loggfil, err := os.OpenFile(logg, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err := roteraTestserverlogg(logg); err != nil {
+		return nil, err
+	}
+	loggfil, err := os.OpenFile(logg, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("kunde inte öppna testserverns logg: %w", err)
 	}
@@ -180,6 +183,13 @@ func (s *TestserverStore) Starta(ctx context.Context, alias string) (*Testserver
 		Alias: alias, PID: pid, Port: reservation.Port, StartadAt: nu,
 		Logg: logg, Lever: true, Status: TestserverStartar,
 	}, nil
+}
+
+func roteraTestserverlogg(logg string) error {
+	if err := os.Rename(logg, logg+".1"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("kunde inte rotera testserverns logg: %w", err)
+	}
+	return nil
 }
 
 // Status kontrollerar både processen och om dess HTTP-port svarar.

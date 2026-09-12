@@ -129,6 +129,40 @@ func TestTestserverFyllerPortOchMiljo(t *testing.T) {
 	t.Fatal("servern skrev inte argument och miljö")
 }
 
+func TestTestserverStartRoterarLoggen(t *testing.T) {
+	store, _, dir := testserverStore(t)
+	logg := filepath.Join(dir, "loggar", "testserver-demo.log")
+	if err := os.MkdirAll(filepath.Dir(logg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logg, []byte("förra starten\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logg+".1", []byte("äldre start\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server, err := store.Starta(context.Background(), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = store.Stoppa(context.Background(), "demo") })
+
+	forra, err := os.ReadFile(logg + ".1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(forra) != "förra starten\n" {
+		t.Fatalf("roterad logg blev %q", forra)
+	}
+	ny, err := os.ReadFile(server.Logg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ny) != 0 {
+		t.Fatalf("den nya loggen innehåller %q", ny)
+	}
+}
+
 func TestTestserverStadarDodRad(t *testing.T) {
 	store, db, dir := testserverStore(t)
 	if _, err := db.Exec(`INSERT INTO pm_testservrar(alias,pid,port,startad_at,logg_sokvag) VALUES(?,?,?,?,?)`,
