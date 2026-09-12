@@ -11,6 +11,23 @@ import (
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
+// Antal ger hur många migreringar den här versionen av backlog känner till.
+// backlog-pm jämför talet med databasens version, för att vägra öppna en
+// databas som en nyare version skrivit.
+func Antal() (int, error) {
+	entries, err := migrationFiles.ReadDir("migrations")
+	if err != nil {
+		return 0, err
+	}
+	antal := 0
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
+			antal++
+		}
+	}
+	return antal, nil
+}
+
 func Run(db *sql.DB) error {
 	if err := ensureMeta(db); err != nil {
 		return fmt.Errorf("migrate: ensure meta: %w", err)
