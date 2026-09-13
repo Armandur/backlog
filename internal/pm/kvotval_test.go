@@ -16,7 +16,16 @@ func kvotlage(fem, sju float64, framat bool) Anvandning {
 	return Anvandning{
 		FemTimmar: &Kvotfonster{Andel: fem, NollstallsAt: nollstalls},
 		SjuDagar:  &Kvotfonster{Andel: sju, NollstallsAt: nollstalls},
+		AvlastAt:  timeutil.Now(),
 	}
+}
+
+// gammaltKvotlage är samma läge avläst för så länge sedan att det inte längre
+// får styra ett byte.
+func gammaltKvotlage(fem, sju float64, alder time.Duration) Anvandning {
+	lage := kvotlage(fem, sju, true)
+	lage.AvlastAt = timeutil.Now() - int64(alder)
+	return lage
 }
 
 func kvotkonfig() Konfig {
@@ -133,5 +142,54 @@ func TestKvottaketGarAttSatta(t *testing.T) {
 		"claude": kvotlage(0.95, 0.10, true), "codex": kvotlage(0.10, 0.10, true),
 	}); ny.Agent != "codex" {
 		t.Fatalf("ett orimligt tak ska falla tillbaka på %v, blev %s", StandardKvottak, ny.Agent)
+	}
+}
+
+// Förbrukningen växer mellan avläsningarna, så en gammal siffra är alltid för
+// låg. Ett läge från i förrgår får varken flytta arbete eller ta emot det.
+func TestGammalAvlasningStyrInteValet(t *testing.T) {
+	val := AgentVal{Agent: "claude", Motivering: "ingen regel matchade"}
+
+	// Den valda agenten ser full ut, men siffran är två dygn gammal.
+	ny := ValjAgentEfterKvot(kvotkonfig(), val, false, map[string]Anvandning{
+		"claude": gammaltKvotlage(0.99, 0.99, 48*time.Hour),
+		"codex":  kvotlage(0.10, 0.10, true),
+	})
+	if ny.Agent != "claude" {
+		t.Fatalf("en gammal avläsning flyttade arbetet: %+v", ny)
+	}
+
+	// Den andra agenten ser ledig ut, men siffran är lika gammal.
+	ny = ValjAgentEfterKvot(kvotkonfig(), val, false, map[string]Anvandning{
+		"claude": kvotlage(0.95, 0.95, true),
+		"codex":  gammaltKvotlage(0.10, 0.10, 48*time.Hour),
+	})
+	if ny.Agent != "claude" {
+		t.Fatalf("arbetet gick till en agent med gammal avläsning: %+v", ny)
+	}
+	if !strings.Contains(ny.Motivering, "ingen annan agent har utrymme") {
+		t.Fatalf("motiveringen säger inte varför bytet uteblev: %q", ny.Motivering)
+	}
+}
+
+// Ett veckofönster nollställs var sjunde dag. En avläsning som gjordes före
+// det pågående fönstret började gäller ett fönster som redan är slut.
+func TestFonsterFranEnTidigarePeriodRaknasInte(t *testing.T) {
+	nu := timeutil.Now()
+	lage := Anvandning{
+		// Fönstret nollställs om en timme, alltså började det för sju dagar
+		// sedan minus en timme. Avläsningen gjordes före det.
+		SjuDagar: &Kvotfonster{Andel: 0.99, NollstallsAt: nu + int64(time.Hour)},
+		AvlastAt: nu - int64(8*24*time.Hour),
+	}
+	if _, kant := lage.Anstrangning(); kant {
+		t.Fatal("en avläsning från ett tidigare fönster ska inte räknas")
+	}
+
+	// Samma fönster, men avläst inne i perioden.
+	lage.AvlastAt = nu - int64(time.Hour)
+	hogst, kant := lage.Anstrangning()
+	if !kant || hogst != 0.99 {
+		t.Fatalf("avläsningen inne i fönstret skulle räknas, fick %v (%v)", hogst, kant)
 	}
 }
