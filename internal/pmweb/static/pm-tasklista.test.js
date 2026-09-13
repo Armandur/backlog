@@ -81,6 +81,15 @@ provaa("referenssortering räknar siffran, inte texten", filtreradeTasks(tasks)[
 satt({ sortering: "titel" });
 provaa("titelsortering följer svensk ordning", filtreradeTasks(tasks)[0].titel === "Avatarbomb");
 
+// Kolumnläget visar alla tre statusarna sida vid sida. Då är det ett ickeval
+// att också filtrera på en av dem, så fliken ska inte gälla.
+satt({ flik: "todo", sok: "", typ: "", prioritet: "", sortering: "prioritet", kolumner: true });
+provaa("fliken gäller inte i kolumnläget", filtreradeTasks(tasks).length === 4);
+satt({ typ: "bug" });
+provaa("övriga filter gäller ändå i kolumnläget", filtreradeTasks(tasks).length === 1);
+satt({ typ: "", kolumner: false });
+provaa("fliken gäller igen i listläget", filtreradeTasks(tasks).length === 2);
+
 if (fel > 0) {
   console.error(`${fel} prov föll`);
   process.exit(1);

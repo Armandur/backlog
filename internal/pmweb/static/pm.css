@@ -465,6 +465,9 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 }
 .taskverktyg { display: grid; gap: 8px; margin-bottom: 10px; }
 .taskflikar { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Egen display vinner över webbläsarens regel för hidden, så flikraden måste
+   döljas uttryckligen när kolumnläget visar alla statusar ändå. */
+.taskflikar[hidden] { display: none; }
 .taskflik { background: var(--yta); border: 1px solid var(--kant); border-radius: 999px; color: var(--svag); cursor: pointer; font-size: 12.5px; font-weight: 600; margin: 0; padding: 5px 12px; }
 .taskflik:hover { background: var(--sankt); }
 .taskflik.on { background: var(--accent); border-color: var(--accent); color: #fff; }

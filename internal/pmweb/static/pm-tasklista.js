@@ -48,10 +48,13 @@ function taskSeq(t) {
   return siffror ? Number(siffror[1]) : 0;
 }
 
+// I kolumnläget visas alla tre statusarna sida vid sida. Att då också välja en
+// status är ett ickeval, så fliken gäller bara listläget.
 function filtreradeTasks(tasks) {
   const sok = tasklistlage.sok.trim().toLowerCase();
+  const flikgaller = !tasklistlage.kolumner && tasklistlage.flik !== "alla";
   const valda = tasks.filter((t) => {
-    if (tasklistlage.flik !== "alla" && taskStatusnyckel(t) !== tasklistlage.flik) return false;
+    if (flikgaller && taskStatusnyckel(t) !== tasklistlage.flik) return false;
     if (tasklistlage.typ && t.typ !== tasklistlage.typ) return false;
     if (tasklistlage.prioritet && String(t.prioritet) !== tasklistlage.prioritet) return false;
     if (!sok) return true;
@@ -69,7 +72,7 @@ function filtreradeTasks(tasks) {
 
 function ritaTaskflikar(tasks) {
   const ruta = $("#taskflikar");
-  ruta.textContent = "";
+  const nytt = document.createDocumentFragment();
   TASKFLIKAR.forEach((flik) => {
     const antal = flik.nyckel === "alla"
       ? tasks.length
@@ -81,8 +84,9 @@ function ritaTaskflikar(tasks) {
     knapp.setAttribute("role", "tab");
     knapp.setAttribute("aria-selected", String(tasklistlage.flik === flik.nyckel));
     knapp.textContent = `${flik.etikett} ${antal}`;
-    ruta.append(knapp);
+    nytt.append(knapp);
   });
+  ruta.replaceChildren(nytt);
 }
 
 function fyllTaskval(tasks) {
@@ -113,10 +117,8 @@ function fyllTaskval(tasks) {
 
 function ritaTaskkolumner(valda, korningar) {
   const ruta = $("#taskkolumner");
-  ruta.textContent = "";
-  const kolumner = tasklistlage.flik === "alla"
-    ? TASKFLIKAR.filter((f) => f.nyckel !== "alla")
-    : TASKFLIKAR.filter((f) => f.nyckel === tasklistlage.flik);
+  const nytt = document.createDocumentFragment();
+  const kolumner = TASKFLIKAR.filter((f) => f.nyckel !== "alla");
   kolumner.forEach((flik) => {
     const poster = valda.filter((t) => taskStatusnyckel(t) === flik.nyckel);
     const kolumn = document.createElement("section");
@@ -131,8 +133,9 @@ function ritaTaskkolumner(valda, korningar) {
       kolumn.append(tom);
     }
     poster.forEach((t) => kolumn.append(byggTaskrad(t, korningar)));
-    ruta.append(kolumn);
+    nytt.append(kolumn);
   });
+  ruta.replaceChildren(nytt);
 }
 
 // ritaTasklista anropas av pm.js varje gång översikten hämtats, alltså var
@@ -150,6 +153,7 @@ function ritaTasklista(o) {
     : `Visar ${valda.length} av ${tasks.length} tasks.`;
   $("#taskVylage").textContent = tasklistlage.kolumner ? "Lista" : "Kolumner";
   $("#taskVylage").setAttribute("aria-pressed", String(tasklistlage.kolumner));
+  $("#taskflikar").hidden = tasklistlage.kolumner;
   $("#tasks").hidden = tasklistlage.kolumner;
   $("#taskkolumner").hidden = !tasklistlage.kolumner;
   if (tasklistlage.kolumner) {
@@ -161,8 +165,13 @@ function ritaTasklista(o) {
   textrader.forEach((el) => el.setAttribute("title", el.textContent.trim()));
 }
 
+// Ett filterbyte ändrar listans höjd. Byter man från 121 klara till 21 öppna
+// krymper sidan, och då hamnar man någonstans ovanför listan man just valde.
+// Verktygsraden dras därför in i vyn, men bara när den faktiskt hamnat utanför.
 function rittaOmTasklistan() {
-  if (senasteTaskdata) ritaTasklista(senasteTaskdata);
+  if (!senasteTaskdata) return;
+  ritaTasklista(senasteTaskdata);
+  $("#taskverktyg").scrollIntoView({ block: "nearest" });
 }
 
 $("#taskflikar").addEventListener("click", (event) => {

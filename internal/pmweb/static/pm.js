@@ -53,17 +53,20 @@ function rad(html) {
   el.innerHTML = html;
   return el;
 }
+// Innehållet byts i ett svep. Tömdes rutan först skulle sidan krympa till
+// ingenting mitt i omritningen, och webbläsaren kastar då bort skrollpositionen.
 function fyll(id, poster, bygg, tomtext) {
   const ruta = $(id);
-  ruta.textContent = "";
+  const nytt = document.createDocumentFragment();
   if (!poster.length) {
     const tom = document.createElement("div");
     tom.className = "tom";
     tom.textContent = tomtext;
-    ruta.append(tom);
-    return;
+    nytt.append(tom);
+  } else {
+    poster.forEach((p) => nytt.append(bygg(p)));
   }
-  poster.forEach((p) => ruta.append(bygg(p)));
+  ruta.replaceChildren(nytt);
 }
 async function hamta(url, init) {
   const svar = await fetch(url, init);
