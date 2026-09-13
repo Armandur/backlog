@@ -40,6 +40,7 @@
           <legend>Arbetsmapp</legend>
           <label><input type="radio" name="lage" value="nytt" checked> Skapa nytt projekt</label>
           <label><input type="radio" name="lage" value="befintligt"> Koppla befintligt repo</label>
+          <label><input type="radio" name="lage" value="github"> Klona från GitHub</label>
         </fieldset>
         <div class="projektfalt">
           <label class="falt" for="projektAlias">Alias
@@ -51,6 +52,10 @@
           </label>
           <label class="falt hel" for="projektBeskrivning">Beskrivning, valfri
             <textarea id="projektBeskrivning" name="beskrivning" rows="3"></textarea>
+          </label>
+          <label class="falt hel" for="projektGitHubRepo" id="projektGitHubFalt" hidden>GitHub-repo
+            <input id="projektGitHubRepo" name="repo" spellcheck="false" autocomplete="off" placeholder="ägare/namn">
+            <span class="falttips">PM klonar bara repon som står i tillåtelselistan.</span>
           </label>
           <label class="falt hel" for="projektSokvag">Sökväg under ~/workspace
             <input id="projektSokvag" name="sokvag" required spellcheck="false" placeholder="mitt-projekt">

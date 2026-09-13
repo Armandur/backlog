@@ -4,6 +4,16 @@
 // att läsa förrän PM skapat mappen.
 function visaStartforslag() {
   const lage = document.querySelector('input[name="lage"]:checked').value;
+  const githubFalt = $("#projektGitHubFalt");
+  const githubRepo = $("#projektGitHubRepo");
+  if (githubFalt) githubFalt.hidden = lage !== "github";
+  if (githubRepo) githubRepo.required = lage === "github";
+  const tips = {
+    nytt: "PM skapar katalogen, ett Git-repo och README.md.",
+    befintligt: "PM kopplar katalogens befintliga Git-repo.",
+    github: "PM klonar GitHub-repot till den här katalogen.",
+  };
+  $("#projektSokvagTips").textContent = tips[lage] || tips.nytt;
   $("#foreslaStart").hidden = lage !== "befintligt";
 }
 document.querySelectorAll('input[name="lage"]').forEach((val) => val.addEventListener("change", visaStartforslag));
@@ -52,6 +62,7 @@ $("#projektform").addEventListener("submit", async (e) => {
         beskrivning: $("#projektBeskrivning").value,
         lage: document.querySelector('input[name="lage"]:checked').value,
         sokvag: $("#projektSokvag").value,
+        repo: $("#projektGitHubRepo")?.value || "",
         startkommando: $("#projektStart").value,
       }),
     });

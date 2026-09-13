@@ -33,8 +33,17 @@ type skapaProjektBody struct {
 	Beskrivning string `json:"beskrivning"`
 	Lage        string `json:"lage"`
 	Sokvag      string `json:"sokvag"`
+	Repo        string `json:"repo"`
 	// Startkommando är valfritt och blir projektets testserver.
 	Startkommando string `json:"startkommando"`
+}
+
+type githubRepoKlonare interface {
+	KlonaRepo(context.Context, string, string) (func() error, error)
+}
+
+var nyGitHubRepoKlonare = func(konfig pm.GitHubKonfig) githubRepoKlonare {
+	return pm.NewGitHubKlient(konfig)
 }
 
 func (s *Server) skapaProjekt(w http.ResponseWriter, r *http.Request) {
@@ -60,8 +69,15 @@ func (s *Server) skapaProjekt(w http.ResponseWriter, r *http.Request) {
 		stada, err = sattUppProjekt(r.Context(), sokvag, body.Namn)
 	case "befintligt":
 		err = kontrolleraBefintligtRepo(sokvag)
+	case "github":
+		konfig, konfigfel := pm.LasKonfig(konfigWorkDir())
+		if konfigfel != nil {
+			err = errors.New("PM kunde inte läsa GitHub-konfigurationen")
+			break
+		}
+		stada, err = nyGitHubRepoKlonare(konfig.GitHub).KlonaRepo(r.Context(), body.Repo, sokvag)
 	default:
-		err = errors.New("välj om PM ska skapa ett nytt projekt eller koppla ett befintligt repo")
+		err = errors.New("välj om PM ska skapa, klona eller koppla projektet")
 	}
 	if err != nil {
 		svaraFel(w, err, http.StatusBadRequest)
