@@ -10,7 +10,7 @@ const TASKFLIKAR = [
   { nyckel: "done", etikett: "Done" },
   { nyckel: "alla", etikett: "Alla" },
 ];
-const TASK_LAGE_NYCKEL = "pm-tasklage";
+const TASKLISTA_NYCKEL = "pm-tasklista";
 
 let tasklistlage = {
   flik: "todo",
@@ -23,15 +23,18 @@ let tasklistlage = {
 let senasteTaskdata = null;
 
 try {
-  const sparat = JSON.parse(localStorage.getItem(TASK_LAGE_NYCKEL) || "null");
+  const sparat = JSON.parse(localStorage.getItem(TASKLISTA_NYCKEL) || "null");
   if (sparat) tasklistlage = { ...tasklistlage, ...sparat };
 } catch {
   // Ett trasigt sparat läge ska inte stoppa vyn.
 }
 
-function sparaTasklage() {
+// Namnet är unikt för den här filen. pm-forslag.js har en egen sparaTasklage
+// för valet mellan auto och avancerat, och två globala funktioner med samma
+// namn skuggar varandra beroende på skriptordningen.
+function sparaTasklistlage() {
   try {
-    localStorage.setItem(TASK_LAGE_NYCKEL, JSON.stringify(tasklistlage));
+    localStorage.setItem(TASKLISTA_NYCKEL, JSON.stringify(tasklistlage));
   } catch {
     // Privat läge saknar lagring. Filtret gäller ändå den här sidan.
   }
@@ -178,37 +181,37 @@ $("#taskflikar").addEventListener("click", (event) => {
   const knapp = event.target.closest("[data-taskflik]");
   if (!knapp) return;
   tasklistlage.flik = knapp.dataset.taskflik;
-  sparaTasklage();
+  sparaTasklistlage();
   rittaOmTasklistan();
 });
 
 $("#taskSok").addEventListener("input", (event) => {
   tasklistlage.sok = event.target.value;
-  sparaTasklage();
+  sparaTasklistlage();
   rittaOmTasklistan();
 });
 
 $("#taskTypfilter").addEventListener("change", (event) => {
   tasklistlage.typ = event.target.value;
-  sparaTasklage();
+  sparaTasklistlage();
   rittaOmTasklistan();
 });
 
 $("#taskPriofilter").addEventListener("change", (event) => {
   tasklistlage.prioritet = event.target.value;
-  sparaTasklage();
+  sparaTasklistlage();
   rittaOmTasklistan();
 });
 
 $("#taskSortering").addEventListener("change", (event) => {
   tasklistlage.sortering = event.target.value;
-  sparaTasklage();
+  sparaTasklistlage();
   rittaOmTasklistan();
 });
 
 $("#taskVylage").addEventListener("click", () => {
   tasklistlage.kolumner = !tasklistlage.kolumner;
-  sparaTasklage();
+  sparaTasklistlage();
   rittaOmTasklistan();
 });
 
