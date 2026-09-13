@@ -24,6 +24,11 @@ func TestSkriptfilernaDelarIngaGlobalaNamn(t *testing.T) {
 	}
 	// Deklarationer i kolumn noll är globala. Allt indraget ligger i en
 	// funktion eller ett block och kan inte krocka.
+	//
+	// Vad provet inte ser: en indragen function eller var i ett toppnivåblock
+	// som ändå hissas globalt, en tilldelning till window.X, och andra namnet
+	// i en rad som "let a, b". De fallen finns inte i dag, men vakten täcker
+	// dem inte om de dyker upp.
 	deklaration := regexp.MustCompile(`(?m)^(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)`)
 	agare := map[string]string{}
 	for _, fil := range filer {
