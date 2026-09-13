@@ -70,16 +70,33 @@ function ritaAllaVantar(poster) {
   }, "Inget väntar på dig.");
 }
 
+// Nollställningen är det som avgör om en full kvot spelar roll. Har tiden
+// passerat är siffran inaktuell, och då säger raden det i stället för att
+// låtsas att kvoten fortfarande är tagen.
+function nollstallning(ns) {
+  const nar = Number(ns) / 1e6;
+  if (!nar) return "";
+  if (nar <= Date.now()) return ", nollställd";
+  const dygn = 24 * 60 * 60 * 1000;
+  if (nar - Date.now() < dygn) return `, nollställs ${klocka(ns)}`;
+  return `, nollställs ${new Date(nar).toLocaleString("sv-SE", { weekday: "short", hour: "2-digit", minute: "2-digit" })}`;
+}
+
 function kvotText(fonster) {
   if (!fonster) return "saknas";
-  return `${Math.round(fonster.andel * 100)} %`;
+  return `${Math.round(fonster.andel * 100)} %${nollstallning(fonster.nollstalls_at)}`;
 }
 
 function ritaAllaKvoter(poster) {
   fyll("#allaKvoter", poster, (a) => {
-    const text = a.saknas
-      ? "Inget kvotläge har lästs av ännu."
-      : `Fem timmar: ${kvotText(a.fem_timmar)} · sju dagar: ${kvotText(a.sju_dagar)}`;
+    let text = `Fem timmar: ${kvotText(a.fem_timmar)} · sju dagar: ${kvotText(a.sju_dagar)}`;
+    if (a.saknas) {
+      text = a.rapporterar
+        ? "Inget kvotläge har lästs av ännu."
+        : "Agenten rapporterar inget kvotläge.";
+    } else if (a.avlast_at) {
+      text += ` · avläst ${klocka(a.avlast_at)}`;
+    }
     const el = rad(`<span class="mono">${esc(a.agent)}</span><div class="t"><span class="meta">${esc(text)}</span></div>`);
     el.classList.add("kvotrad");
     return el;

@@ -19,14 +19,22 @@ type Kvotfonster struct {
 
 // Anvandning är PM:s senaste kända kvotläge för en agent.
 type Anvandning struct {
-	Agent     string       `json:"agent"`
-	Saknas    bool         `json:"saknas"`
-	Status    string       `json:"status,omitempty"`
-	Kvottyp   string       `json:"kvottyp,omitempty"`
-	FemTimmar *Kvotfonster `json:"fem_timmar,omitempty"`
-	SjuDagar  *Kvotfonster `json:"sju_dagar,omitempty"`
-	AvlastAt  int64        `json:"avlast_at,omitempty"`
+	Agent string `json:"agent"`
+	// Saknas betyder att PM inte läst av något ännu. Rapporterar säger om
+	// agenten alls kan leverera ett kvotläge, se KvotstromFinns.
+	Saknas      bool         `json:"saknas"`
+	Rapporterar bool         `json:"rapporterar"`
+	Status      string       `json:"status,omitempty"`
+	Kvottyp     string       `json:"kvottyp,omitempty"`
+	FemTimmar   *Kvotfonster `json:"fem_timmar,omitempty"`
+	SjuDagar    *Kvotfonster `json:"sju_dagar,omitempty"`
+	AvlastAt    int64        `json:"avlast_at,omitempty"`
 }
+
+// KvotstromFinns säger om agentens ström alls bär ett kvotläge. Bara claudes
+// strömmande json rapporterar det. Codex ström bär tokens men ingen kvot,
+// uppmätt mot codex-cli 0.153.2 den 2026-09-13.
+func KvotstromFinns(strom string) bool { return strom == "claude-json" }
 
 type AnvandningStore struct{ db *sql.DB }
 
