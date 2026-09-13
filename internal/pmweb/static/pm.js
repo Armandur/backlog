@@ -58,8 +58,12 @@ async function hamta(url, init) {
   if (!svar.ok) throw new Error(data.error || `fel från servern (${svar.status})`);
   return data;
 }
+// Agenternas filhändelser bär absoluta sökvägar. Filvyn tar relativa, så
+// länkningen behöver veta var repot ligger. Se filFranHandelse i pm-samtal.js.
+let projektRepo = "";
 async function laddaOversikt() {
   const o = await hamta(`/api/projects/${encodeURIComponent(alias)}/oversikt`);
+  projektRepo = o.projekt.repo_path || "";
   $("#ptitel").textContent = o.projekt.name;
   $("#pdesc").textContent = [o.projekt.description, o.projekt.repo_path && "Repo: " + o.projekt.repo_path].filter(Boolean).join(" ");
   visaProjektstad(o.projekt);

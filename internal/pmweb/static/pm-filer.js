@@ -1,6 +1,26 @@
 let oppnadFil = null;
 let soktraffar = [];
 let sokindex = -1;
+let djuplankadFil = filFranHash();
+if (djuplankadFil !== null) vy = "filer";
+
+function filFranHash() {
+  const [namn, fraga = ""] = location.hash.slice(1).split("?", 2);
+  if (namn !== "filer") return null;
+  const parametrar = new URLSearchParams(fraga);
+  return parametrar.has("fil") ? parametrar.get("fil") : null;
+}
+
+async function hamtaFilpost(sokvag) {
+  const svar = await fetch(`/api/projects/${encodeURIComponent(alias)}/filer?path=${encodeURIComponent(sokvag)}`);
+  const data = await svar.json().catch(() => ({}));
+  if (!svar.ok) {
+    const err = new Error(data.error || `fel från servern (${svar.status})`);
+    err.status = svar.status;
+    throw err;
+  }
+  return data;
+}
 
 function filstorlek(byte) {
   return new Intl.NumberFormat("sv-SE").format(byte) + " byte";
@@ -307,10 +327,17 @@ async function laddaGitDiff(sokvag) {
 }
 
 async function laddaFiler(sokvag) {
+  const franDjuplank = !sokvag && djuplankadFil !== null;
+  if (franDjuplank) {
+    sokvag = djuplankadFil;
+    djuplankadFil = null;
+    history.replaceState(null, "", `#filer?fil=${encodeURIComponent(sokvag)}`);
+  }
   if (!sokvag) laddaGitAndringar();
   $("#filfel").textContent = "";
   try {
-    const data = await hamta(`/api/projects/${encodeURIComponent(alias)}/filer?path=${encodeURIComponent(sokvag)}`);
+    const data = await hamtaFilpost(sokvag);
+    saknadeHandelsefiler.delete(sokvag);
     if (data.katalog) {
       visaFilsmulor(data.sokvag);
       visaFillista(data);
@@ -329,10 +356,36 @@ async function laddaFiler(sokvag) {
     $("#filtext").textContent = "";
     oppnadFil = null;
     stangMedia();
-    $("#filfel").textContent = err.message;
-    toast(err.message);
+    if (err.status === 404 && sokvag) {
+      markeraSaknadHandelsefil(sokvag);
+      $("#filfel").textContent = "Filen finns inte längre.";
+    } else {
+      $("#filfel").textContent = err.message;
+      toast(err.message);
+    }
   }
 }
+
+document.body.addEventListener("click", (event) => {
+  const lank = event.target.closest("a[data-handelsefil]");
+  if (!lank) return;
+  event.preventDefault();
+  const hash = `#filer?fil=${encodeURIComponent(lank.dataset.handelsefil)}`;
+  if (location.hash === hash) {
+    djuplankadFil = lank.dataset.handelsefil;
+    byt("filer");
+  } else {
+    location.hash = hash;
+  }
+});
+
+window.addEventListener("hashchange", () => {
+  const sokvag = filFranHash();
+  if (sokvag === null) return;
+  djuplankadFil = sokvag;
+  vy = "filer";
+  byt("filer");
+});
 
 $("#kopieraFil").addEventListener("click", () => {
   if (oppnadFil && !oppnadFil.medietyp) kopieraText(oppnadFil.innehall).catch((err) => toast(err.message));

@@ -5,7 +5,6 @@ let korningCursor = "";
 let korningStatus = "alla";
 let aktivaKorningar = [];
 let pollningPagar = false;
-
 function byggPagaendeKorning(k) {
   const el = rad(`${taskLank(k.task_ref)}
     <div class="t"><span class="mono">${esc(k.agent)}</span> ${esc(k.motivering)}

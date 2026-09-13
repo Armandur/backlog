@@ -163,6 +163,9 @@ textarea { resize: vertical; }
    kommando blev komman och do på två rader. */
 .handelsesort { color: var(--accent); font-size: .78rem; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
 .h-fel .handelsesort { color: var(--fel); }
+.handelsefil { font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+.handelsefil.saknas { color: var(--svag); }
+.filbesked { color: var(--svag); display: block; margin-top: 2px; }
 .logg { background: #0f1512; color: #cfe1d6; border-radius: 6px; padding: 12px 14px; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-x: auto; }
 .scrim { position: fixed; inset: 0; background: rgba(10,15,12,.45); display: none; z-index: 20; }
 .scrim.on { display: block; }

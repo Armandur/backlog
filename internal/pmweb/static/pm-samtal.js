@@ -2,13 +2,93 @@ const samtalskorningar = new Map();
 // Tråden ritas om vid varje pollning. Utan minne av vilka rutor användaren
 // fällt ut skulle de slå ihop sig var fjärde sekund.
 const utfalldaForlopp = new Set();
+const saknadeHandelsefiler = new Set();
 
+// Verben skrivs av PM i internal/pm/handelse.go, funktionerna kring raderna
+// 210 och 403. Listan måste spegla dem, annars länkas inte filen. Ett Go-prov
+// i handelsefil_test.go vaktar att de två listorna är lika.
+const FILVERB = ["ändrade", "skapade", "tog bort", "hanterade", "läste", "sökte i"];
+// En borttagen fil finns inte kvar att öppna. Den visas utan länk direkt,
+// i stället för att ge ett fel när någon klickar.
+const BORTTAGET_VERB = "tog bort";
 
-function samtalshandelseElement(h) {
+function filFranHandelse(h) {
+  if (h.sort !== "fil") return null;
+  const text = String(h.text || "").trim();
+  const verb = FILVERB.find((v) => text.toLowerCase().startsWith(v + " "));
+  const sokvag = relativSokvag((verb ? text.slice(verb.length) : text).trim());
+  if (!sokvag) return null;
+  return {
+    inledning: verb ? verb + " " : "",
+    sokvag: sokvag.text,
+    borttagen: verb === BORTTAGET_VERB,
+    utanfor: sokvag.utanfor,
+  };
+}
+
+// Agenterna skriver absoluta sökvägar, filvyn tar relativa mot repot. En fil
+// utanför repot kan filvyn inte visa, då står sökvägen kvar som text.
+function relativSokvag(sokvag) {
+  if (!sokvag) return null;
+  if (!sokvag.startsWith("/")) return { text: sokvag, utanfor: false };
+  const rot = projektRepo.replace(/\/+$/, "");
+  if (rot && sokvag.startsWith(rot + "/")) return { text: sokvag.slice(rot.length + 1), utanfor: false };
+  return { text: sokvag, utanfor: true };
+}
+
+function filhandelseinnehall(fil) {
+  const innehall = document.createElement("span");
+  if (fil.inledning) innehall.append(document.createTextNode(fil.inledning));
+  if (fil.utanfor) {
+    const sokvag = document.createElement("span");
+    sokvag.className = "handelsefil";
+    sokvag.textContent = fil.sokvag;
+    innehall.append(sokvag);
+    return innehall;
+  }
+  if (fil.borttagen || saknadeHandelsefiler.has(fil.sokvag)) {
+    const sokvag = document.createElement("span");
+    sokvag.className = "handelsefil saknas";
+    sokvag.textContent = fil.sokvag;
+    const besked = document.createElement("small");
+    besked.className = "filbesked";
+    besked.textContent = "Filen finns inte längre.";
+    innehall.append(sokvag, besked);
+    return innehall;
+  }
+  const lank = document.createElement("a");
+  lank.className = "handelsefil";
+  lank.dataset.handelsefil = fil.sokvag;
+  lank.href = `#filer?fil=${encodeURIComponent(fil.sokvag)}`;
+  lank.textContent = fil.sokvag;
+  innehall.append(lank);
+  return innehall;
+}
+
+function markeraSaknadHandelsefil(sokvag) {
+  saknadeHandelsefiler.add(sokvag);
+  document.querySelectorAll("a[data-handelsefil]").forEach((lank) => {
+    if (lank.dataset.handelsefil !== sokvag) return;
+    const ersattning = filhandelseinnehall({ inledning: "", sokvag });
+    lank.replaceWith(...ersattning.childNodes);
+  });
+}
+
+function samtalshandelseElement(h, seddaFiler) {
   const sort = ["text", "verktyg", "fil", "kommando", "fel"].includes(h.sort) ? h.sort : "text";
+  const fil = filFranHandelse(h);
+  if (fil && seddaFiler && seddaFiler.has(fil.sokvag)) return null;
+  if (fil && seddaFiler) seddaFiler.add(fil.sokvag);
   const li = document.createElement("li");
   li.className = `handelse h-${sort}`;
-  li.innerHTML = `<time>${esc(klocka(h.tid))}</time><span class="handelsesort">${esc(sort)}</span><span>${esc(h.text)}</span>`;
+  const tidpunkt = document.createElement("time");
+  tidpunkt.textContent = klocka(h.tid);
+  const etikett = document.createElement("span");
+  etikett.className = "handelsesort";
+  etikett.textContent = sort;
+  const innehall = fil ? filhandelseinnehall(fil) : document.createElement("span");
+  if (!fil) innehall.textContent = h.text;
+  li.append(tidpunkt, etikett, innehall);
   return li;
 }
 
@@ -100,7 +180,11 @@ function byggSamtalsforlopp(post, lista) {
   rubrik.textContent = "Visa stegen";
   const handelselista = document.createElement("ol");
   handelselista.className = "samtalshandelser";
-  lage.handelser.forEach((h) => handelselista.append(samtalshandelseElement(h)));
+  lage.filer = new Set();
+  lage.handelser.forEach((h) => {
+    const element = samtalshandelseElement(h, lage.filer);
+    if (element) handelselista.append(element);
+  });
   detaljer.append(rubrik, handelselista);
 
   li.append(rad, detaljer);
@@ -124,7 +208,11 @@ async function hamtaHistoriskaSteg(inlaggId, lista) {
       : alla.filter((h) => h.sort === "tokens").reduce((summa, h) => summa + (Number(h.text) || 0), 0);
     if (data.startad_at && data.slut_at) lage.varaktighet = (data.slut_at - data.startad_at) / 1e9;
     lista.replaceChildren();
-    lage.handelser.forEach((h) => lista.append(samtalshandelseElement(h)));
+    lage.filer = new Set();
+    lage.handelser.forEach((h) => {
+      const element = samtalshandelseElement(h, lage.filer);
+      if (element) lista.append(element);
+    });
     ritaArbetsrad(inlaggId, lista.closest(".arbetskort"));
   } catch (err) {
     lage.hamtad = false;
@@ -161,8 +249,9 @@ function laggSamtalshandelse(inlaggId, event) {
     // Läsningen måste ske före tillägget, annars har rutan redan vuxit.
     const trad = $("#trad");
     const foljMed = vidBotten(trad);
-    lista.append(samtalshandelseElement(handelse));
-    if (foljMed) skrollaNed(trad);
+    const element = samtalshandelseElement(handelse, lage.filer || (lage.filer = new Set()));
+    if (element) lista.append(element);
+    if (element && foljMed) skrollaNed(trad);
   } catch {
     toast("PM kunde inte läsa agentens händelse.");
   }
