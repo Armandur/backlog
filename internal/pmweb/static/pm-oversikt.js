@@ -64,7 +64,7 @@ function ritaAllaVantar(poster) {
     const hash = v.sort === "fraga" ? "samtal" : "projekt";
     const el = rad(`${oversiktsProjektLank(v.projekt, hash)}
       <div class="t">${ref}<span class="meta">${esc(v.text)}</span></div>
-      <div class="act">${pill(v.sort)}<a class="btn sm" href="/pm/${encodeURIComponent(v.projekt.alias)}#${hash}">Öppna</a></div>`);
+      <div class="act"><span class="pill p-${esc(v.sort)}">${esc(VANTAR_ETIKETT[v.sort] || v.sort)}</span><a class="btn sm" href="/pm/${encodeURIComponent(v.projekt.alias)}#${hash}">Öppna</a></div>`);
     el.classList.add("stripe", v.sort);
     return el;
   }, "Inget väntar på dig.");
