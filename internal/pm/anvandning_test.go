@@ -135,13 +135,15 @@ func TestSparaKvotlageSkriverPerAgentOchTalarOmNil(t *testing.T) {
 	}
 }
 
-// Bara claudes ström bär ett kvotläge. Codex ström har tokens men ingen kvot,
-// uppmätt mot codex-cli 0.153.2 den 2026-09-13.
-func TestKvotstromFinnsBaraForClaude(t *testing.T) {
-	if !KvotstromFinns("claude-json") {
-		t.Error("claude-json ska rapportera kvot")
+// Claude bär kvoten i strömmen, codex frågas via app-servern. Övriga agenter
+// har ingen kvot att visa, och deras rad ska säga det.
+func TestKvotstromFinnsForClaudeOchCodex(t *testing.T) {
+	for _, strom := range []string{"claude-json", "codex-json"} {
+		if !KvotstromFinns(strom) {
+			t.Errorf("strömmen %q ska kunna ge kvot", strom)
+		}
 	}
-	for _, strom := range []string{"codex-json", "", "annat"} {
+	for _, strom := range []string{"", "annat"} {
 		if KvotstromFinns(strom) {
 			t.Errorf("strömmen %q ska inte rapportera kvot", strom)
 		}

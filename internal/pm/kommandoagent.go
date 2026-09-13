@@ -235,6 +235,11 @@ func (a *KommandoAgent) Kor(ctx context.Context, in KorInput) (Resultat, error) 
 		res.Anvandning = AnvandningUrClaudeStrom(samladUtdata)
 		res.Tokens = TokensUrClaudeStrom(samladUtdata)
 	}
+	if a.konfig.Strom == "codex-json" {
+		// Codex ström bär tokens men ingen kvot. Den frågas separat, se
+		// CodexKvot och docen om codex kvotläge.
+		res.Anvandning = CodexKvot(context.WithoutCancel(ctx), a.konfig.Kommando)
+	}
 	if a.konfig.Svar == "fil" {
 		if data, err := os.ReadFile(in.Svarsfil); err == nil && strings.TrimSpace(string(data)) != "" {
 			res.Utdata = string(data)

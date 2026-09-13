@@ -82,14 +82,16 @@ function nollstallning(ns) {
   return `, nollställs ${new Date(nar).toLocaleString("sv-SE", { weekday: "short", hour: "2-digit", minute: "2-digit" })}`;
 }
 
-function kvotText(fonster) {
-  if (!fonster) return "saknas";
-  return `${Math.round(fonster.andel * 100)} %${nollstallning(fonster.nollstalls_at)}`;
+// Agenterna har olika fönster. Codex kontokvot bär bara sju dagar, så ett
+// fönster som saknas utelämnas i stället för att stå som ett tomt värde.
+function kvotText(etikett, fonster) {
+  if (!fonster) return "";
+  return `${etikett}: ${Math.round(fonster.andel * 100)} %${nollstallning(fonster.nollstalls_at)}`;
 }
 
 function ritaAllaKvoter(poster) {
   fyll("#allaKvoter", poster, (a) => {
-    let text = `5h: ${kvotText(a.fem_timmar)} · 7d: ${kvotText(a.sju_dagar)}`;
+    let text = [kvotText("5h", a.fem_timmar), kvotText("7d", a.sju_dagar)].filter(Boolean).join(" · ");
     if (a.saknas) {
       text = a.rapporterar
         ? "Inget kvotläge har lästs av ännu."

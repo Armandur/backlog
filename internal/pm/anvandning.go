@@ -32,18 +32,25 @@ type Anvandning struct {
 	AvlastAt    int64        `json:"avlast_at,omitempty"`
 }
 
-// KvotstromFinns säger om agentens ström alls bär ett kvotläge. Bara claudes
-// strömmande json rapporterar det. Codex ström bär tokens men ingen kvot,
-// uppmätt mot codex-cli 0.153.2 den 2026-09-13.
-func KvotstromFinns(strom string) bool { return strom == "claude-json" }
+// KvotstromFinns säger om PM alls kan få ett kvotläge från agenten. Claude bär
+// det i sin ström. Codex ström bär tokens men ingen kvot, så den frågas i
+// stället via app-servern, se CodexKvot. Övriga agenter har ingen kvot.
+func KvotstromFinns(strom string) bool {
+	return strom == "claude-json" || strom == "codex-json"
+}
 
 type AnvandningStore struct{ db *sql.DB }
 
 func NewAnvandningStore(db *sql.DB) *AnvandningStore { return &AnvandningStore{db: db} }
 
 func (s *AnvandningStore) Spara(ctx context.Context, lage Anvandning) error {
-	if strings.TrimSpace(lage.Agent) == "" || lage.FemTimmar == nil || lage.SjuDagar == nil {
-		return fmt.Errorf("kvotläget saknar agent eller tidsfönster")
+	if strings.TrimSpace(lage.Agent) == "" {
+		return fmt.Errorf("kvotläget saknar agent")
+	}
+	// Codex kvot bär inte alltid båda fönstren. Ett läge utan något fönster
+	// alls säger däremot ingenting, och sparas inte.
+	if lage.FemTimmar == nil && lage.SjuDagar == nil {
+		return fmt.Errorf("kvotläget saknar tidsfönster")
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO pm_anvandning(
 		agent, status, kvottyp, fem_timmar_andel, fem_timmar_nollstalls_at,
@@ -58,24 +65,40 @@ func (s *AnvandningStore) Spara(ctx context.Context, lage Anvandning) error {
 		avlast_at=excluded.avlast_at
 	WHERE excluded.avlast_at >= pm_anvandning.avlast_at`,
 		lage.Agent, lage.Status, lage.Kvottyp,
-		lage.FemTimmar.Andel, lage.FemTimmar.NollstallsAt,
-		lage.SjuDagar.Andel, lage.SjuDagar.NollstallsAt, lage.AvlastAt)
+		fonsterandel(lage.FemTimmar), fonstertid(lage.FemTimmar),
+		fonsterandel(lage.SjuDagar), fonstertid(lage.SjuDagar), lage.AvlastAt)
 	if err != nil {
 		return fmt.Errorf("spara kvotläge för %s: %w", lage.Agent, err)
 	}
 	return nil
 }
 
+// Ett fönster som agenten inte rapporterar skrivs som null, inte som noll.
+// En nolla hade sett ut som en oanvänd kvot.
+func fonsterandel(fonster *Kvotfonster) any {
+	if fonster == nil {
+		return nil
+	}
+	return fonster.Andel
+}
+
+func fonstertid(fonster *Kvotfonster) any {
+	if fonster == nil {
+		return nil
+	}
+	return fonster.NollstallsAt
+}
+
 func (s *AnvandningStore) Hamta(ctx context.Context, agent string) (Anvandning, error) {
 	lage := Anvandning{Agent: agent}
-	fem := &Kvotfonster{}
-	sju := &Kvotfonster{}
+	var femAndel, sjuAndel sql.NullFloat64
+	var femTid, sjuTid sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `SELECT status, kvottyp,
 		fem_timmar_andel, fem_timmar_nollstalls_at,
 		sju_dagar_andel, sju_dagar_nollstalls_at, avlast_at
 		FROM pm_anvandning WHERE agent=?`, agent).Scan(
-		&lage.Status, &lage.Kvottyp, &fem.Andel, &fem.NollstallsAt,
-		&sju.Andel, &sju.NollstallsAt, &lage.AvlastAt)
+		&lage.Status, &lage.Kvottyp, &femAndel, &femTid,
+		&sjuAndel, &sjuTid, &lage.AvlastAt)
 	if err == sql.ErrNoRows {
 		lage.Saknas = true
 		return lage, nil
@@ -83,8 +106,12 @@ func (s *AnvandningStore) Hamta(ctx context.Context, agent string) (Anvandning, 
 	if err != nil {
 		return Anvandning{}, fmt.Errorf("läs kvotläge för %s: %w", agent, err)
 	}
-	lage.FemTimmar = fem
-	lage.SjuDagar = sju
+	if femAndel.Valid {
+		lage.FemTimmar = &Kvotfonster{Andel: femAndel.Float64, NollstallsAt: femTid.Int64}
+	}
+	if sjuAndel.Valid {
+		lage.SjuDagar = &Kvotfonster{Andel: sjuAndel.Float64, NollstallsAt: sjuTid.Int64}
+	}
 	return lage, nil
 }
 
