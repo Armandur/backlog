@@ -3286,3 +3286,31 @@ func TestAllaOversiktFungerarUtanKonfigureradAgent(t *testing.T) {
 		}
 	}
 }
+
+func TestDelaUtNekarTaskFranAnnatProjekt(t *testing.T) {
+	srv, db := testServer(t)
+	nu := timeutil.Now()
+	annatID := ids.New()
+	if _, err := db.Exec(`INSERT INTO projects(id,alias,name,created_at,updated_at) VALUES(?,?,?,?,?)`,
+		annatID, "annat", "Annat projekt", nu, nu); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO tasks(id, project_id, title, description, type, status, priority, task_seq, created_at, updated_at)
+	                      VALUES(?,?,?,?,'task','todo',3,777,?,?)`,
+		ids.New(), annatID, "Task i annat projekt", "text", nu, nu); err != nil {
+		t.Fatal(err)
+	}
+	srv.MedUtdelare(func(taskID, agent, modell, anstrangning string) string {
+		t.Fatal("utdelaren startades trots att tasken hör till ett annat projekt")
+		return ""
+	})
+
+	// Aliaset i adressen är demo, men tasken ligger i projektet annat.
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/demo/dela-ut", bytes.NewBufferString(`{"task":"TASK-777"}`))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound && w.Code != http.StatusBadRequest {
+		t.Fatalf("utdelningen godtog en task från ett annat projekt: %d %s", w.Code, w.Body.String())
+	}
+}
