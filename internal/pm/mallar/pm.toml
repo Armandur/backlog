@@ -43,6 +43,8 @@ default_agent = "claude"
     args = ["-p", "{brief}"]
     brief = "arg"
     svar = "stdout"
+    # Strömmen ger PM agentens steg, tokens och kvotläge medan den arbetar.
+    strom = "claude-json"
     stdin = "devnull"
     timeout_sekunder = 900
     mcp = true
@@ -52,6 +54,7 @@ default_agent = "claude"
     args = ["exec", "-C", "{repo}", "-s", "workspace-write", "-c", "sandbox_workspace_write.network_access=true", "-o", "{svarsfil}", "{brief}"]
     brief = "arg"
     svar = "fil"
+    strom = "codex-json"
     stdin = "devnull"
     timeout_sekunder = 900
 
@@ -63,3 +66,12 @@ default_agent = "claude"
 #   args = ["run", "dev", "--", "--port", "{port}"]
 #   cwd = "/home/dittnamn/workspace/mitt-projekt"
 #   halsa = "/"
+
+# PM kan byta agent när kvoten börjar ta slut. Turordningen säger vilka
+# agenter som får ta varandras arbete, och taket när bytet sker. Utan
+# turordning bestämmer reglerna ensamma. Överstyrning med --agent gäller
+# alltid, full kvot eller inte.
+#
+# [kvot]
+#   tak = 0.9
+#   turordning = ["claude", "codex"]

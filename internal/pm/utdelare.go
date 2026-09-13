@@ -57,6 +57,9 @@ func (u *Utdelare) DelaUt(ctx context.Context, in UtdelInput) (*Korning, error) 
 	if err != nil {
 		return nil, err
 	}
+	// Kvoten väger efter reglerna, inte i stället för dem. En agent som är
+	// nästan slut lämnar över till en som har utrymme.
+	val = ValjAgentEfterKvot(u.konfig, val, in.Overstyrning != "", LasKvotlagen(ctx, u.db, u.konfig))
 	korare, err := u.register.HamtaKorare(val.Agent)
 	if err != nil {
 		return nil, err

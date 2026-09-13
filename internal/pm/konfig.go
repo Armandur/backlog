@@ -102,6 +102,7 @@ type Konfig struct {
 	Webb         WebbKonfig                  `toml:"webb" json:"webb"`
 	System       SystemKonfig                `toml:"system" json:"system"`
 	GitHub       GitHubKonfig                `toml:"github" json:"github"`
+	Kvot         KvotKonfig                  `toml:"kvot" json:"kvot"`
 	// Kalla är sökvägen konfigurationen kommer från, tom när PM använder defaulterna.
 	Kalla string `toml:"-" json:"-"`
 }
