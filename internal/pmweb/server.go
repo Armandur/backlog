@@ -85,6 +85,7 @@ func (s *Server) rutter(upstream http.Handler) {
 	s.mux.HandleFunc("GET /api/docs/{id}", s.hamtaDoc)
 	s.mux.HandleFunc("GET /api/projects/{alias}/minne", s.listaMinne)
 	s.mux.HandleFunc("GET /api/projects/{alias}/filer", s.hamtaFiler)
+	s.mux.HandleFunc("GET /api/projects/{alias}/filinnehall", s.hamtaFilinnehall)
 	s.mux.HandleFunc("GET /api/projects/{alias}/git-andringar", s.hamtaGitAndringar)
 	s.mux.HandleFunc("GET /api/projects/{alias}/git-diff", s.hamtaGitDiff)
 	endastLasning := func(w http.ResponseWriter, r *http.Request) {
@@ -96,6 +97,7 @@ func (s *Server) rutter(upstream http.Handler) {
 	s.mux.HandleFunc("/api/docs/{id}", endastLasning)
 	s.mux.HandleFunc("/api/projects/{alias}/minne", endastLasning)
 	s.mux.HandleFunc("/api/projects/{alias}/filer", endastLasning)
+	s.mux.HandleFunc("/api/projects/{alias}/filinnehall", endastLasning)
 	s.mux.HandleFunc("/api/projects/{alias}/git-andringar", endastLasning)
 	s.mux.HandleFunc("/api/projects/{alias}/git-diff", endastLasning)
 	s.mux.HandleFunc("POST /api/projects/{alias}/foresla-task", s.foreslaNyTask)

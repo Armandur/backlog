@@ -401,6 +401,7 @@ func TestLasrutterAvvisarSkrivmetoder(t *testing.T) {
 		"/api/docs/ett-id",
 		"/api/projects/demo/minne",
 		"/api/projects/demo/filer",
+		"/api/projects/demo/filinnehall",
 		"/api/projects/demo/git-andringar",
 		"/api/projects/demo/git-diff",
 	} {
@@ -419,7 +420,7 @@ func TestPMVyInnehallerKunskapOchKommentarspanel(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/pm/demo", nil))
 	body := w.Body.String()
-	for _, innehall := range []string{`data-v="oversikt"`, `id="v-oversikt"`, `pm-oversikt.js`, `data-v="kunskap"`, `data-v="filer"`, `id="fillista"`, `id="filtext"`, `pm-filer.js`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`, `id="testserverKnapp"`, `id="testserverLank"`, `id="testserverBadge"`, `id="testserverLoggruta"`, `id="testserverLogg"`} {
+	for _, innehall := range []string{`data-v="oversikt"`, `id="v-oversikt"`, `pm-oversikt.js`, `data-v="kunskap"`, `data-v="filer"`, `id="fillista"`, `id="filtext"`, `id="filbild"`, `id="filvideo"`, `id="filsok"`, `prism.min.js`, `pm-filer.js`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`, `id="testserverKnapp"`, `id="testserverLank"`, `id="testserverBadge"`, `id="testserverLoggruta"`, `id="testserverLogg"`} {
 		if !strings.Contains(body, innehall) {
 			t.Fatalf("PM-vyn saknar %s", innehall)
 		}
@@ -2783,6 +2784,11 @@ func TestFilroutenListarOchLaserText(t *testing.T) {
 		t.Fatalf("mappar ska ligga först: %+v", lista.Poster)
 	}
 	for _, post := range lista.Poster {
+		if post.Andrad == "" {
+			t.Fatalf("ändringstid saknas för %+v", post)
+		}
+	}
+	for _, post := range lista.Poster {
 		if post.Namn == ".git" {
 			t.Fatal("filbläddraren visade .git")
 		}
@@ -2799,6 +2805,80 @@ func TestFilroutenListarOchLaserText(t *testing.T) {
 	}
 	if fil.Innehall != innehall || fil.Namn != "README.md" {
 		t.Fatalf("filinnehållet är fel: %+v", fil)
+	}
+}
+
+func TestFilroutenVisarBildOchVideoMedSakraRubriker(t *testing.T) {
+	srv, db := testServer(t)
+	repo := t.TempDir()
+	filer := []struct {
+		namn     string
+		data     []byte
+		medietyp string
+		mime     string
+	}{
+		{"bild.fel-andelse", []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"), "bild", "image/png"},
+		{"klipp.fel-andelse", []byte{0, 0, 0, 24, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 0, 0, 2, 0, 'i', 's', 'o', 'm', 'm', 'p', '4', '2'}, "video", "video/mp4"},
+	}
+	for _, fil := range filer {
+		if err := os.WriteFile(filepath.Join(repo, fil.namn), fil.data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`UPDATE projects SET repo_path=? WHERE alias='demo'`, repo); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range filer {
+		t.Run(test.medietyp, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/filer?path="+test.namn, nil))
+			if w.Code != http.StatusOK {
+				t.Fatalf("metadata gav %d: %s", w.Code, w.Body.String())
+			}
+			var fil filsvar
+			if err := json.NewDecoder(w.Body).Decode(&fil); err != nil {
+				t.Fatal(err)
+			}
+			if fil.Medietyp != test.medietyp || fil.Innehall != "" {
+				t.Fatalf("fel mediemetadata: %+v", fil)
+			}
+
+			w = httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/filinnehall?path="+test.namn, nil))
+			if w.Code != http.StatusOK || w.Header().Get("Content-Type") != test.mime {
+				t.Fatalf("mediet gav %d och %q: %s", w.Code, w.Header().Get("Content-Type"), w.Body.String())
+			}
+			if !strings.HasPrefix(w.Header().Get("Content-Disposition"), "inline") {
+				t.Fatalf("inline-disposition saknas: %q", w.Header().Get("Content-Disposition"))
+			}
+			if w.Header().Get("Content-Security-Policy") != filSakerhetspolicy || w.Header().Get("X-Content-Type-Options") != "nosniff" {
+				t.Fatalf("säkerhetsrubriker saknas: %+v", w.Header())
+			}
+		})
+	}
+}
+
+func TestFilinnehallTvingarHTMLTillNedladdning(t *testing.T) {
+	srv, db := testServer(t)
+	repoForProjekt(t, db, map[string]string{"sida.html": `<script>window.top.angripen = true</script>`})
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/filinnehall?path=sida.html", nil))
+	if w.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("HTML-förhandsvisning gav %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/projects/demo/filinnehall?path=sida.html&download=1", nil))
+	if w.Code != http.StatusOK || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/html") {
+		t.Fatalf("HTML-nedladdning gav %d och %q", w.Code, w.Header().Get("Content-Type"))
+	}
+	if !strings.HasPrefix(w.Header().Get("Content-Disposition"), "attachment") {
+		t.Fatalf("HTML skickades inte som bilaga: %q", w.Header().Get("Content-Disposition"))
+	}
+	if w.Header().Get("Content-Security-Policy") != filSakerhetspolicy {
+		t.Fatalf("HTML saknar CSP: %+v", w.Header())
 	}
 }
 
@@ -2827,14 +2907,16 @@ func TestFilroutenAvvisarOsakraSokvagar(t *testing.T) {
 	}
 	for _, test := range fall {
 		t.Run(test.text, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			adress := "/api/projects/demo/filer?path=" + test.sokvag
-			srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, adress, nil))
-			if w.Code != http.StatusBadRequest {
-				t.Fatalf("%q gav %d: %s", test.sokvag, w.Code, w.Body.String())
-			}
-			if !strings.Contains(w.Body.String(), test.text) {
-				t.Fatalf("%q saknas i svaret: %s", test.text, w.Body.String())
+			for _, route := range []string{"filer", "filinnehall"} {
+				w := httptest.NewRecorder()
+				adress := "/api/projects/demo/" + route + "?path=" + test.sokvag
+				srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, adress, nil))
+				if w.Code != http.StatusBadRequest {
+					t.Fatalf("%s med %q gav %d: %s", route, test.sokvag, w.Code, w.Body.String())
+				}
+				if !strings.Contains(w.Body.String(), test.text) {
+					t.Fatalf("%q saknas i svaret: %s", test.text, w.Body.String())
+				}
 			}
 		})
 	}

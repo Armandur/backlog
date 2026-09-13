@@ -1,5 +1,143 @@
+let oppnadFil = null;
+let soktraffar = [];
+let sokindex = -1;
+
 function filstorlek(byte) {
   return new Intl.NumberFormat("sv-SE").format(byte) + " byte";
+}
+
+function filtid(varde) {
+  if (!varde) return "Okänd tid";
+  return new Intl.DateTimeFormat("sv-SE", { dateStyle: "short", timeStyle: "short" }).format(new Date(varde));
+}
+
+function filinnehallsadress(sokvag, nedladdning = false) {
+  const grund = `/api/projects/${encodeURIComponent(alias)}/filinnehall?path=${encodeURIComponent(sokvag)}`;
+  return nedladdning ? grund + "&download=1" : grund;
+}
+
+function filsprak(namn) {
+  const andelse = namn.includes(".") ? namn.split(".").pop().toLowerCase() : "";
+  return ({ html: "markup", xml: "markup", svg: "markup", css: "css", js: "javascript", mjs: "javascript",
+    ts: "typescript", json: "json", go: "go", py: "python", sh: "bash", bash: "bash",
+    sql: "sql", md: "markdown", yaml: "yaml", yml: "yaml", toml: "toml", rs: "rust" })[andelse] || "plain";
+}
+
+function stangMedia() {
+  $("#filbild").removeAttribute("src");
+  $("#filvideo").pause();
+  $("#filvideo").removeAttribute("src");
+  $("#filvideo").load();
+}
+
+function visaOppnadFil(data) {
+  oppnadFil = data;
+  $("#filnamn").textContent = data.namn;
+  $("#filmetadata").textContent = `${filstorlek(data.storlek || 0)} · Ändrad ${filtid(data.andrad)}`;
+  $("#laddaNerFil").href = filinnehallsadress(data.sokvag, true);
+  $("#laddaNerFil").download = data.namn;
+  $("#filinnehall").hidden = false;
+  $("#filsok").value = "";
+  $("#filsokstatus").textContent = "";
+  stangMedia();
+
+  const arMedia = Boolean(data.medietyp);
+  $("#filverktyg").hidden = arMedia;
+  $("#kopieraFil").hidden = arMedia;
+  $("#filkod").hidden = arMedia;
+  $("#filmedia").hidden = !arMedia;
+  if (arMedia) {
+    const element = data.medietyp === "bild" ? $("#filbild") : $("#filvideo");
+    $("#filbild").hidden = data.medietyp !== "bild";
+    $("#filvideo").hidden = data.medietyp !== "video";
+    $("#filbild").alt = data.medietyp === "bild" ? `Förhandsvisning av ${data.namn}` : "";
+    element.src = filinnehallsadress(data.sokvag);
+    return;
+  }
+
+  const sprak = filsprak(data.namn);
+  const kod = $("#filtext");
+  kod.className = `language-${sprak}`;
+  if (window.Prism && Prism.languages[sprak]) {
+    kod.innerHTML = Prism.highlight(data.innehall, Prism.languages[sprak], sprak);
+  } else {
+    kod.textContent = data.innehall;
+  }
+  $("#filradnummer").textContent = data.innehall.split("\n").map((_, index) => index + 1).join("\n");
+}
+
+async function kopieraText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    await navigator.clipboard.writeText(text);
+  } else {
+    const falt = document.createElement("textarea");
+    falt.value = text;
+    document.body.append(falt);
+    falt.select();
+    const lyckades = document.execCommand("copy");
+    falt.remove();
+    if (!lyckades) throw new Error("Webbläsaren kunde inte kopiera texten.");
+  }
+  toast("Kopierat.");
+}
+
+function markeraSoktraff(start, slut) {
+  const rot = $("#filtext");
+  const lasare = document.createTreeWalker(rot, NodeFilter.SHOW_TEXT);
+  let nod = lasare.nextNode();
+  let position = 0;
+  let startnod, slutnod, startoffset, slutoffset;
+  while (nod) {
+    const nasta = position + nod.data.length;
+    if (!startnod && start >= position && start <= nasta) {
+      startnod = nod;
+      startoffset = start - position;
+    }
+    if (slut >= position && slut <= nasta) {
+      slutnod = nod;
+      slutoffset = slut - position;
+      break;
+    }
+    position = nasta;
+    nod = lasare.nextNode();
+  }
+  if (!startnod || !slutnod) return;
+  const markering = document.createRange();
+  markering.setStart(startnod, startoffset);
+  markering.setEnd(slutnod, slutoffset);
+  const val = window.getSelection();
+  val.removeAllRanges();
+  val.addRange(markering);
+  const rad = oppnadFil.innehall.slice(0, start).split("\n").length - 1;
+  const radhöjd = parseFloat(getComputedStyle(rot).lineHeight) || 20;
+  $("#filkod").scrollTop = Math.max(0, rad * radhöjd - $("#filkod").clientHeight / 2);
+}
+
+function sokIFil(nasta) {
+  if (!oppnadFil || oppnadFil.medietyp) return;
+  const fraga = $("#filsok").value.toLocaleLowerCase("sv-SE");
+  if (!fraga) {
+    soktraffar = [];
+    sokindex = -1;
+    $("#filsokstatus").textContent = "";
+    window.getSelection().removeAllRanges();
+    return;
+  }
+  if (!nasta || !soktraffar.length) {
+    soktraffar = [];
+    const text = oppnadFil.innehall.toLocaleLowerCase("sv-SE");
+    for (let pos = text.indexOf(fraga); pos >= 0; pos = text.indexOf(fraga, pos + fraga.length)) soktraffar.push(pos);
+    sokindex = 0;
+  } else {
+    sokindex = (sokindex + 1) % soktraffar.length;
+  }
+  if (!soktraffar.length) {
+    $("#filsokstatus").textContent = "Ingen träff";
+    return;
+  }
+  const start = soktraffar[sokindex];
+  $("#filsokstatus").textContent = `${sokindex + 1} av ${soktraffar.length}`;
+  markeraSoktraff(start, start + fraga.length);
 }
 
 function visaFilsmulor(sokvag) {
@@ -34,17 +172,12 @@ function filrad(post) {
   sort.textContent = post.symlank ? "Länk" : post.katalog ? "Mapp" : "Fil";
   const namn = document.createElement("span");
   namn.textContent = post.namn;
-  knapp.append(sort, namn);
-
-  if (!post.katalog && !post.symlank) {
-    const storlek = document.createElement("span");
-    storlek.className = "filstorlek";
-    storlek.textContent = filstorlek(post.storlek || 0);
-    knapp.append(storlek);
-  }
-  if (!post.symlank) {
-    knapp.addEventListener("click", () => laddaFiler(post.sokvag));
-  }
+  const metadata = document.createElement("span");
+  metadata.className = "filmetadata";
+  metadata.textContent = post.katalog ? filtid(post.andrad) : `${filstorlek(post.storlek || 0)} · ${filtid(post.andrad)}`;
+  metadata.title = post.andrad || "";
+  knapp.append(sort, namn, metadata);
+  if (!post.symlank) knapp.addEventListener("click", () => laddaFiler(post.sokvag));
   return knapp;
 }
 
@@ -183,20 +316,40 @@ async function laddaFiler(sokvag) {
       visaFillista(data);
       $("#filinnehall").hidden = true;
       $("#filtext").textContent = "";
+      oppnadFil = null;
+      stangMedia();
       return;
     }
     const delar = data.sokvag.split("/");
     delar.pop();
     visaFilsmulor(delar.join("/"));
-    $("#filnamn").textContent = data.namn;
-    $("#filstorlek").textContent = filstorlek(data.storlek || 0);
-    // Klienten får aldrig tolka filen som HTML eller annan körbar markup.
-    $("#filtext").textContent = data.innehall;
-    $("#filinnehall").hidden = false;
+    visaOppnadFil(data);
   } catch (err) {
     $("#filinnehall").hidden = true;
     $("#filtext").textContent = "";
+    oppnadFil = null;
+    stangMedia();
     $("#filfel").textContent = err.message;
     toast(err.message);
   }
 }
+
+$("#kopieraFil").addEventListener("click", () => {
+  if (oppnadFil && !oppnadFil.medietyp) kopieraText(oppnadFil.innehall).catch((err) => toast(err.message));
+});
+$("#kopieraSokvag").addEventListener("click", () => {
+  if (oppnadFil) kopieraText(oppnadFil.sokvag).catch((err) => toast(err.message));
+});
+$("#filsok").addEventListener("input", () => sokIFil(false));
+$("#filsok").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    sokIFil(true);
+  }
+});
+$("#filsokNasta").addEventListener("click", () => sokIFil(true));
+$("#radbrytning").addEventListener("click", () => {
+  const aktiv = $("#filkod").classList.toggle("radbrytning");
+  $("#radbrytning").setAttribute("aria-pressed", String(aktiv));
+  $("#radbrytning").textContent = aktiv ? "Behåll långa rader" : "Bryt rader";
+});

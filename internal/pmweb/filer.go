@@ -6,17 +6,23 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/mazen160/backlog/internal/service"
 )
 
-const maxFilstorlek int64 = 1 << 20
+const (
+	maxFilstorlek      int64 = 1 << 20
+	maxMediastorlek    int64 = 100 << 20
+	filSakerhetspolicy       = "default-src 'none'; sandbox"
+)
 
 type filpost struct {
 	Namn    string `json:"namn"`
@@ -24,6 +30,7 @@ type filpost struct {
 	Katalog bool   `json:"katalog"`
 	Symlank bool   `json:"symlank,omitempty"`
 	Storlek int64  `json:"storlek,omitempty"`
+	Andrad  string `json:"andrad"`
 }
 
 type filsvar struct {
@@ -33,6 +40,8 @@ type filsvar struct {
 	Poster   []filpost `json:"poster,omitempty"`
 	Namn     string    `json:"namn,omitempty"`
 	Storlek  int64     `json:"storlek,omitempty"`
+	Andrad   string    `json:"andrad,omitempty"`
+	Medietyp string    `json:"medietyp,omitempty"`
 	Innehall string    `json:"innehall,omitempty"`
 }
 
@@ -141,6 +150,7 @@ func (s *Server) listaFiler(w http.ResponseWriter, rot *os.Root, relativ string)
 		svar.Poster = append(svar.Poster, filpost{
 			Namn: post.Name(), Sokvag: webbSokvag(filepath.Join(relativ, post.Name())),
 			Katalog: post.IsDir(), Symlank: post.Type()&os.ModeSymlink != 0, Storlek: info.Size(),
+			Andrad: info.ModTime().Format(time.RFC3339),
 		})
 	}
 	sort.Slice(svar.Poster, func(i, j int) bool {
@@ -154,11 +164,7 @@ func (s *Server) listaFiler(w http.ResponseWriter, rot *os.Root, relativ string)
 
 func (s *Server) lasFil(w http.ResponseWriter, rot *os.Root, relativ string, info fs.FileInfo) {
 	if !info.Mode().IsRegular() {
-		svaraFel(w, errors.New("filbläddraren kan bara läsa vanliga textfiler"), http.StatusBadRequest)
-		return
-	}
-	if info.Size() > maxFilstorlek {
-		svaraFel(w, errors.New("filen är "+formateraByte(info.Size())+" och överskrider gränsen 1 MiB"), http.StatusRequestEntityTooLarge)
+		svaraFel(w, errors.New("filbläddraren kan bara läsa vanliga filer"), http.StatusBadRequest)
 		return
 	}
 	fil, err := rot.Open(relativ)
@@ -174,6 +180,22 @@ func (s *Server) lasFil(w http.ResponseWriter, rot *os.Root, relativ string, inf
 		return
 	}
 	prov = prov[:antal]
+	medietyp, _ := identifieraMedia(prov)
+	if medietyp != "" {
+		if info.Size() > maxMediastorlek {
+			svaraFel(w, errors.New("filen är "+formateraByte(info.Size())+" och överskrider gränsen 100 MiB"), http.StatusRequestEntityTooLarge)
+			return
+		}
+		svaraJSON(w, http.StatusOK, filsvar{
+			Sokvag: webbSokvag(relativ), Namn: filepath.Base(relativ), Storlek: info.Size(),
+			Andrad: info.ModTime().Format(time.RFC3339), Medietyp: medietyp,
+		})
+		return
+	}
+	if info.Size() > maxFilstorlek {
+		svaraFel(w, errors.New("filen är "+formateraByte(info.Size())+" och överskrider gränsen 1 MiB"), http.StatusRequestEntityTooLarge)
+		return
+	}
 	if arBinarFil(prov) {
 		svaraFel(w, errors.New("filen är binär. PM kan inte visa den som text"), http.StatusUnsupportedMediaType)
 		return
@@ -192,8 +214,85 @@ func (s *Server) lasFil(w http.ResponseWriter, rot *os.Root, relativ string, inf
 		return
 	}
 	svaraJSON(w, http.StatusOK, filsvar{
-		Sokvag: webbSokvag(relativ), Namn: filepath.Base(relativ), Storlek: info.Size(), Innehall: string(data),
+		Sokvag: webbSokvag(relativ), Namn: filepath.Base(relativ), Storlek: info.Size(),
+		Andrad: info.ModTime().Format(time.RFC3339), Innehall: string(data),
 	})
+}
+
+func (s *Server) hamtaFilinnehall(w http.ResponseWriter, r *http.Request) {
+	projekt, err := service.NewProjectService(s.db).GetByAlias(r.Context(), r.PathValue("alias"))
+	if err != nil {
+		svaraFel(w, err, http.StatusNotFound)
+		return
+	}
+	repo, relativ, err := sakerReposokvag(projekt.RepoPath, r.URL.Query().Get("path"))
+	if err != nil {
+		svaraFel(w, err, http.StatusBadRequest)
+		return
+	}
+	rot, err := os.OpenRoot(repo)
+	if err != nil {
+		svaraFel(w, errors.New("PM kunde inte öppna projektets repo"), http.StatusInternalServerError)
+		return
+	}
+	defer rot.Close()
+	info, err := rot.Stat(relativ)
+	if err != nil || !info.Mode().IsRegular() {
+		svaraFel(w, errors.New("PM kunde inte läsa den valda filen"), http.StatusNotFound)
+		return
+	}
+	if info.Size() > maxMediastorlek {
+		svaraFel(w, errors.New("filen är "+formateraByte(info.Size())+" och överskrider gränsen 100 MiB"), http.StatusRequestEntityTooLarge)
+		return
+	}
+	fil, err := rot.Open(relativ)
+	if err != nil {
+		svaraFel(w, errors.New("PM kunde inte öppna filen"), http.StatusInternalServerError)
+		return
+	}
+	defer fil.Close()
+	prov := make([]byte, min(info.Size(), 512))
+	antal, lasfel := io.ReadFull(fil, prov)
+	if lasfel != nil && !errors.Is(lasfel, io.EOF) && !errors.Is(lasfel, io.ErrUnexpectedEOF) {
+		svaraFel(w, errors.New("PM kunde inte läsa filen"), http.StatusInternalServerError)
+		return
+	}
+	prov = prov[:antal]
+	medietyp, innehallstyp := identifieraMedia(prov)
+	nedladdning := r.URL.Query().Get("download") == "1"
+	if !nedladdning && medietyp == "" {
+		svaraFel(w, errors.New("PM visar bara bilder och video via medierouten"), http.StatusUnsupportedMediaType)
+		return
+	}
+	if nedladdning {
+		innehallstyp = http.DetectContentType(prov)
+	}
+	if _, err := fil.Seek(0, io.SeekStart); err != nil {
+		svaraFel(w, errors.New("PM kunde inte läsa filen"), http.StatusInternalServerError)
+		return
+	}
+	disposition := "inline"
+	if nedladdning {
+		disposition = "attachment"
+	}
+	w.Header().Set("Content-Type", innehallstyp)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": filepath.Base(relativ)}))
+	w.Header().Set("Content-Security-Policy", filSakerhetspolicy)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+	http.ServeContent(w, r, filepath.Base(relativ), info.ModTime(), fil)
+}
+
+func identifieraMedia(prov []byte) (string, string) {
+	innehallstyp := http.DetectContentType(prov)
+	switch innehallstyp {
+	case "image/gif", "image/jpeg", "image/png", "image/webp":
+		return "bild", innehallstyp
+	case "video/mp4", "video/webm", "video/ogg":
+		return "video", innehallstyp
+	default:
+		return "", ""
+	}
 }
 
 func arBinarFil(prov []byte) bool {

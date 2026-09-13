@@ -393,16 +393,34 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 .filrad:hover { background: var(--sankt); }
 .filrad:disabled { color: var(--svag); cursor: default; }
 .filrad .filikon { color: var(--svag); flex: 0 0 4.5rem; font-size: 12px; text-transform: uppercase; }
-.filrad .filstorlek { color: var(--svag); font-size: 12px; margin-left: auto; }
+.filrad .filmetadata { color: var(--svag); font-size: 12px; margin-left: auto; text-align: right; }
 .filinnehall { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; min-width: 0; overflow: hidden; }
-.filhuvud { align-items: center; border-bottom: 1px solid var(--kant); display: flex; gap: 12px; justify-content: space-between; padding: 10px 14px; }
+.filhuvud { align-items: center; border-bottom: 1px solid var(--kant); display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; padding: 10px 14px; }
 .filhuvud h2 { margin: 0; overflow-wrap: anywhere; text-transform: none; }
-.filinnehall pre { margin: 0; max-height: calc(100vh - 210px); overflow: auto; padding: 14px; white-space: pre; }
+.filatgarder, .filverktyg { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.filatgarder .btn, .filverktyg .btn { margin: 0; }
+.filverktyg { border-bottom: 1px solid var(--kant); padding: 8px 14px; }
+.filverktyg label { font-size: 13px; margin: 0; }
+.filverktyg input { margin: 0; max-width: 220px; padding: 5px 8px; }
+.filkod { display: grid; grid-template-columns: auto minmax(max-content, 1fr); margin: 0; max-height: calc(100vh - 280px); overflow: auto; padding: 14px 0; white-space: pre; }
+#filradnummer { border-right: 1px solid var(--kant); color: var(--svag); padding: 0 12px; text-align: right; user-select: none; }
+#filtext { display: block; min-width: 0; padding: 0 14px; }
+.filkod.radbrytning { grid-template-columns: auto minmax(0, 1fr); }
+.filkod.radbrytning #filtext { overflow-wrap: anywhere; white-space: pre-wrap; }
+.filmedia { max-height: calc(100vh - 220px); overflow: auto; padding: 14px; text-align: center; }
+.filmedia img, .filmedia video { display: block; height: auto; margin: auto; max-width: 100%; }
+.token.comment, .token.prolog, .token.doctype { color: var(--svag); }
+.token.keyword, .token.selector, .token.important { color: var(--fel); }
+.token.string, .token.attr-value { color: var(--accent); }
+.token.number, .token.boolean { color: var(--varn); }
+.token.function { color: var(--kor); }
 @media (max-width: 760px) {
   .rail { overflow-x: auto; }
   .rail button { flex: 0 0 88px; padding-inline: 6px; width: 88px; }
   .filvy { grid-template-columns: minmax(0, 1fr); }
-  .filinnehall pre { max-height: 60vh; }
+  .filkod, .filmedia { max-height: 60vh; }
+  .filatgarder { width: 100%; }
+  .filverktyg input { flex: 1; min-width: 120px; }
 }
 
 /* Körningslistan */
