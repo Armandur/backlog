@@ -85,6 +85,7 @@ func (s *Server) rutter(upstream http.Handler) {
 	s.mux.HandleFunc("GET /api/docs/{id}", s.hamtaDoc)
 	s.mux.HandleFunc("GET /api/projects/{alias}/minne", s.listaMinne)
 	s.mux.HandleFunc("GET /api/projects/{alias}/filer", s.hamtaFiler)
+	s.mux.HandleFunc("GET /api/projects/{alias}/filsok", s.sokFiler)
 	s.mux.HandleFunc("GET /api/projects/{alias}/filinnehall", s.hamtaFilinnehall)
 	s.mux.HandleFunc("GET /api/projects/{alias}/git-andringar", s.hamtaGitAndringar)
 	s.mux.HandleFunc("GET /api/projects/{alias}/git-diff", s.hamtaGitDiff)

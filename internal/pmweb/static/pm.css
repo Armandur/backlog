@@ -396,6 +396,9 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 .filrad:hover { background: var(--sankt); }
 .filrad:disabled { color: var(--svag); cursor: default; }
 .filrad .filikon { color: var(--svag); flex: 0 0 4.5rem; font-size: 12px; text-transform: uppercase; }
+.filtraff { min-width: 0; overflow-wrap: anywhere; }
+.filtraff strong, .filtraff span { display: block; }
+.filtraff span { color: var(--svag); font-family: ui-monospace, monospace; font-size: 12px; }
 .filrad .filmetadata { color: var(--svag); font-size: 12px; margin-left: auto; text-align: right; }
 .filinnehall { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; min-width: 0; overflow: hidden; }
 .filhuvud { align-items: center; border-bottom: 1px solid var(--kant); display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; padding: 10px 14px; }

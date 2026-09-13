@@ -175,6 +175,13 @@
     <section class="view" id="v-filer">
       <h1>Filer</h1>
       <p class="lead">Här kan du läsa text, bilder och video i projektets repo.</p>
+      <form class="filverktyg" id="filsokform" role="search">
+        <label for="projektfilsok">Sök i projektets filer</label>
+        <input id="projektfilsok" type="search" autocomplete="off" required>
+        <button class="btn sm" type="submit">Sök</button>
+        <span class="meta" id="projektfilsokstatus" role="status"></span>
+      </form>
+      <div class="fillista" id="filsokresultat" hidden></div>
       <nav class="filsmulor" id="filsmulor" aria-label="Sökväg"></nav>
       <p class="fel-text" id="filfel" role="alert"></p>
       <div class="filvy">
@@ -539,6 +546,7 @@
 <script src="/pm-static/pm-samtal.js"></script>
 <script src="/pm-static/prism.min.js"></script>
 <script src="/pm-static/pm-filer.js"></script>
+<script src="/pm-static/pm-filsok.js"></script>
 <script src="/pm-static/pm-testserver.js"></script>
 <script src="/pm-static/pm-konfig.js"></script>
 <script src="/pm-static/pm-strom.js"></script>
