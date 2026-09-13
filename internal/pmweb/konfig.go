@@ -176,7 +176,7 @@ func (s *Server) foreslaAgent(w http.ResponseWriter, r *http.Request) {
 		byggForslagsprompt(body.Beskrivning), func(_ context.Context, svar string, _ pm.Agent) (any, error) {
 			var forslag agentForslag
 			if err := json.Unmarshal([]byte(svar), &forslag); err != nil {
-				return nil, errors.New("agenten svarade inte med ett giltigt agentblock")
+				return nil, forslagsfel(err)
 			}
 			forslag.Namn = strings.TrimSpace(forslag.Namn)
 			if forslag.Namn == "" {
@@ -204,13 +204,38 @@ func (s *Server) foreslaAgent(w http.ResponseWriter, r *http.Request) {
 	svaraJSON(w, http.StatusAccepted, map[string]any{"korning": korning})
 }
 
+// forslagsfel översätter json-lagrets engelska typfel till ett besked som
+// säger vilket fält agenten fyllde fel. Utan det säger PM bara att svaret var
+// ogiltigt, och då syns inte att till exempel stdin blev true i stället för
+// en sträng.
+func forslagsfel(err error) error {
+	var typfel *json.UnmarshalTypeError
+	if errors.As(err, &typfel) && typfel.Field != "" {
+		// Fältet heter AgentKonfig.stdin på grund av inbäddningen. Användaren
+		// känner bara igen den sista delen.
+		falt := typfel.Field
+		if punkt := strings.LastIndex(falt, "."); punkt >= 0 {
+			falt = falt[punkt+1:]
+		}
+		return fmt.Errorf("fältet %s i agentens förslag har fel typ, PM väntade %s", falt, typfel.Type)
+	}
+	return errors.New("agenten svarade inte med ett giltigt agentblock")
+}
+
 func byggForslagsprompt(beskrivning string) string {
 	return fmt.Sprintf(`Du hjälper användaren att konfigurera ett agentverktyg i backlog-pm.
 Svara endast med ett JSON-objekt. Använd inga kodstaket eller förklaringar.
-Objektet ska ha fälten namn, kommando, args, brief, svar, stdin, timeout_sekunder, miljo och mcp.
+Objektet ska ha fälten namn, kommando, args, brief, svar, strom, stdin,
+timeout_sekunder, miljo och mcp. Alla fält är strängar utom args som är en
+lista, miljo som är ett objekt, timeout_sekunder som är ett heltal och mcp som
+är true eller false.
 args ska vara en lista med ett kommandoargument per post.
 brief ska vara arg eller stdin. Lägg {brief} i args när brief är arg.
 svar ska vara stdout eller fil. Lägg {svarsfil} i args när svar är fil.
+strom ska vara claude-json när verktyget är claude med strömmande json,
+codex-json när det är codex, annars tomt.
+stdin ska vara strängen devnull när verktyget inte får läsa stdin, annars en
+tom sträng. Codex hänger utan devnull. Skriv aldrig true eller false här.
 miljo ska vara ett objekt med miljövariabler. mcp ska vara true eller false.
 
 Verktygets beskrivning:

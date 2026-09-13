@@ -882,6 +882,33 @@ func TestKonfigprovetKorIEttGitRepo(t *testing.T) {
 	}
 }
 
+// Agenterna fyller ibland ett strängfält med true eller false. Utan fältnamnet
+// i felet syns det inte vad som gick fel, bara att svaret var ogiltigt.
+func TestForeslaAgentSagerVilketFaltSomHarFelTyp(t *testing.T) {
+	srv, _ := testServer(t)
+	srv.register = pm.NewAgentRegister()
+	srv.register.Registrera(fakeAgent{svar: `{"namn":"codex","kommando":"codex","stdin":false}`})
+	w := korForslagsanrop(t, srv, httptest.NewRequest(http.MethodPost, "/api/konfig/foresla",
+		bytes.NewBufferString(`{"beskrivning":"Ett eget verktyg"}`)))
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("fel typ i svaret gav %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "fältet stdin") {
+		t.Fatalf("felmeddelandet pekar inte ut fältet: %s", w.Body.String())
+	}
+}
+
+// Prompten måste säga vad stdin ska innehålla, annars gissar agenten på en
+// boolean och förslaget faller. Den incidenten inträffade 2026-09-13.
+func TestForslagspromptenBeskriverStdinOchStrom(t *testing.T) {
+	prompt := byggForslagsprompt("Ett eget verktyg")
+	for _, krav := range []string{"devnull", "codex-json", "Skriv aldrig true eller false"} {
+		if !strings.Contains(prompt, krav) {
+			t.Errorf("prompten saknar %q", krav)
+		}
+	}
+}
+
 func medProjektBas(t *testing.T, bas string) {
 	t.Helper()
 	gammal := projektBasDir
