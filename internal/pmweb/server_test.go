@@ -848,6 +848,40 @@ func TestForeslaAgentAvvisarSvarSomInteArJSON(t *testing.T) {
 	}
 }
 
+// Codex vägrar arbeta utanför ett git-repo. Provkatalogen måste därför vara
+// ett repo, annars faller konfigprovet av ett skäl som inte rör konfigurationen.
+func TestKonfigprovetKorIEttGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	medKonfigDir(t, dir)
+	srv, _ := testServer(t)
+	konfig := pm.Konfig{
+		DefaultAgent: "test",
+		Agenter: map[string]pm.AgentKonfig{
+			"test": {
+				Kommando: "/bin/sh",
+				Args:     []string{"-c", `test -d "$1/.git" && echo "repot finns" || echo "inget repo"`, "sh", "{repo}", "{brief}"},
+				Brief:    "arg", Svar: "stdout", TimeoutSekunder: 15,
+			},
+		},
+	}
+	if err := pm.SkrivKonfig(dir, konfig); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/konfig/prova",
+		bytes.NewBufferString(`{"agent":"test"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("provet gav %d: %s", w.Code, w.Body.String())
+	}
+	var svar konfigProvSvar
+	if err := json.NewDecoder(w.Body).Decode(&svar); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(svar.Svar, "repot finns") {
+		t.Fatalf("provkatalogen var inget git-repo: %q", svar.Svar)
+	}
+}
+
 func medProjektBas(t *testing.T, bas string) {
 	t.Helper()
 	gammal := projektBasDir

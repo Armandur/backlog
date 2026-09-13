@@ -36,6 +36,12 @@ func korKonfigprov(ctx context.Context, agentnamn string, agent pm.AgentKonfig) 
 		return konfigProvSvar{}, fmt.Errorf("kunde inte skapa provkatalogen: %w", err)
 	}
 	defer os.RemoveAll(katalog)
+	// Codex vägrar arbeta utanför ett git-repo utan --skip-git-repo-check.
+	// Provkatalogen får därför ett tomt repo, annars faller provet för codex
+	// med ett fel som inte har med konfigurationen att göra.
+	if err := gorProvkatalogTillRepo(ctx, katalog); err != nil {
+		return konfigProvSvar{}, err
+	}
 
 	databas := filepath.Join(katalog, "backlog.db")
 	db, err := repo.Open(databas)
@@ -185,4 +191,17 @@ func provFel(namn, meddelande string) konfigProvDelresultat {
 
 func provOverhoppad(namn, meddelande string) konfigProvDelresultat {
 	return konfigProvDelresultat{Namn: namn, Status: "overhoppad", Meddelande: meddelande}
+}
+
+// gorProvkatalogTillRepo skapar ett tomt git-repo i provkatalogen. Saknas git
+// på maskinen går provet vidare ändå, för alla agenter kräver inte ett repo.
+func gorProvkatalogTillRepo(ctx context.Context, katalog string) error {
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil
+	}
+	kommando := exec.CommandContext(ctx, "git", "init", "--quiet", katalog)
+	if ut, err := kommando.CombinedOutput(); err != nil {
+		return fmt.Errorf("kunde inte förbereda provkatalogen som git-repo: %s", strings.TrimSpace(string(ut)))
+	}
+	return nil
 }
