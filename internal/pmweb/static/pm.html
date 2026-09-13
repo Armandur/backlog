@@ -19,6 +19,7 @@
   </header>
 
   <nav class="rail" id="nav">
+    <button data-v="oversikt">Översikt</button>
     <button data-v="projekt" class="on">Projekt</button>
     <button data-v="projekt-nytt">Nytt projekt</button>
     <button data-v="samtal">Samtal</button>
@@ -29,6 +30,8 @@
   </nav>
 
   <main>
+    <section class="view" id="v-oversikt"></section>
+
     <section class="view" id="v-projekt-nytt">
       <h1>Lägg till projekt</h1>
       <p class="lead">PM kan skapa en ny arbetsmapp eller koppla ett Git-repo som redan finns.</p>
@@ -524,5 +527,6 @@
 <script src="/pm-static/pm-projektstad.js"></script>
 <script src="/pm-static/pm-taskredigering.js"></script>
 <script src="/pm-static/pm-projektform.js"></script>
+<script src="/pm-static/pm-oversikt.js"></script>
 </body>
 </html>

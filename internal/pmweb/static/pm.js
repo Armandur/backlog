@@ -1,7 +1,7 @@
 const alias = decodeURIComponent(location.pathname.replace(/^\/pm\/?/, "").split("/")[0] || "");
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-let vy = location.hash.replace("#", "") || (alias ? "projekt" : "projekt-nytt");
+let vy = location.hash.replace("#", "") || (alias ? "projekt" : "oversikt");
 let korningStrom = null;
 let agenter = [];
 function tid(ns) {
@@ -305,7 +305,7 @@ function uppdateraProjektlage() {
 }
 document.querySelectorAll('input[name="lage"]').forEach((val) => val.addEventListener("change", uppdateraProjektlage));
 function byt(ny, behallScroll) {
-  if (!alias && ny !== "projekt-nytt" && ny !== "konfig") ny = "projekt-nytt";
+  if (!alias && !["oversikt", "projekt-nytt", "konfig"].includes(ny)) ny = "oversikt";
   const bytteVy = vy !== ny;
   vy = ny;
   // replaceState i stället för location.hash: annars hoppar webbläsaren till
@@ -317,6 +317,7 @@ function byt(ny, behallScroll) {
   if (bytteVy && !behallScroll) window.scrollTo(0, 0);
   if (ny !== "korningar") stangKorningStrom();
   if (ny === "konfig") laddaKonfig();
+  if (ny === "oversikt") laddaAllaOversikt().catch((err) => toast(err.message));
   if (ny === "kunskap") laddaKunskap().catch((err) => toast(err.message));
   if (ny === "filer") laddaFiler("").catch((err) => toast(err.message));
 }
@@ -355,18 +356,23 @@ async function laddaProjektval() {
     // Arkiverade projekt följer med, annars går de inte att hitta tillbaka till.
     const data = await hamta("/api/projects?include_archived=true");
     const projekt = (data.projects || []).slice().sort((a, b) => a.name.localeCompare(b.name, "sv"));
-    valjare.innerHTML = `<option value="">Välj projekt</option>` +
+    valjare.innerHTML = `<option value="">Alla projekt</option>` +
       projekt.map((p) => `<option value="${esc(p.alias)}"${p.alias === alias ? " selected" : ""}>${esc(p.name)} (${esc(p.alias)})${p.archived_at ? " - arkiverat" : ""}</option>`).join("");
   } catch {
     valjare.innerHTML = `<option value="">Kunde inte läsa projekten</option>`;
   }
 }
 $("#projektval").addEventListener("change", (e) => {
-  if (e.target.value) window.location.href = `/pm/${encodeURIComponent(e.target.value)}${location.hash}`;
+  if (!e.target.value) {
+    window.location.href = "/pm/#oversikt";
+    return;
+  }
+  const hash = vy === "oversikt" ? "#projekt" : location.hash;
+  window.location.href = `/pm/${encodeURIComponent(e.target.value)}${hash}`;
 });
 async function ladda() {
   if (!alias) {
-    if (vy === "projekt") byt("projekt-nytt");
+    await laddaAllaOversikt();
     return;
   }
   try {

@@ -414,3 +414,23 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
 @keyframes korningSnurr { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .korningssnurra { animation: none; } }
 @media (max-width: 760px) { .visa-fler { width: 100%; } }
+
+/* Global översikt */
+.oversiktsutdelning { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; margin-bottom: 22px; padding: 14px; }
+.oversiktsutdelningsfalt { align-items: end; display: grid; gap: 10px; grid-template-columns: minmax(150px, 1fr) minmax(130px, 1fr) minmax(140px, .7fr) auto; }
+.oversiktsutdelning .fel-text { margin: 8px 0 0; }
+.oversiktsgrid { align-items: start; display: grid; gap: 22px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.oversiktsbred { grid-column: 1/-1; }
+.projektref { color: var(--accent); font-weight: 600; min-width: 0; overflow-wrap: anywhere; text-decoration: none; }
+.projektref:hover { text-decoration: underline; }
+.kvotrad { grid-template-columns: minmax(90px, auto) minmax(0, 1fr); }
+@media (max-width: 760px) {
+  .rail { overflow-x: auto; }
+  .rail button { flex: 0 0 auto; }
+  .oversiktsgrid { grid-template-columns: minmax(0, 1fr); }
+  .oversiktsbred { grid-column: auto; }
+  .oversiktsutdelningsfalt { grid-template-columns: minmax(0, 1fr); }
+  .oversiktsutdelningsfalt .btn { width: 100%; }
+  #v-oversikt .rad-post { grid-template-columns: minmax(90px, .45fr) minmax(0, 1fr); }
+  #v-oversikt .rad-post .act { justify-content: flex-start; }
+}

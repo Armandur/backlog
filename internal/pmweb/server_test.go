@@ -419,7 +419,7 @@ func TestPMVyInnehallerKunskapOchKommentarspanel(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/pm/demo", nil))
 	body := w.Body.String()
-	for _, innehall := range []string{`data-v="kunskap"`, `data-v="filer"`, `id="fillista"`, `id="filtext"`, `pm-filer.js`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`, `id="testserverKnapp"`, `id="testserverLank"`, `id="testserverBadge"`, `id="testserverLoggruta"`, `id="testserverLogg"`} {
+	for _, innehall := range []string{`data-v="oversikt"`, `id="v-oversikt"`, `pm-oversikt.js`, `data-v="kunskap"`, `data-v="filer"`, `id="fillista"`, `id="filtext"`, `pm-filer.js`, `id="docs"`, `id="minne"`, `id="kommentarsdrawer"`, `id="forloppruta"`, `id="forslagsdrawer"`, `pm-forslag.js`, `id="testserverKnapp"`, `id="testserverLank"`, `id="testserverBadge"`, `id="testserverLoggruta"`, `id="testserverLogg"`} {
 		if !strings.Contains(body, innehall) {
 			t.Fatalf("PM-vyn saknar %s", innehall)
 		}
@@ -3173,5 +3173,116 @@ func TestSamtalsfragaFarEgenSort(t *testing.T) {
 	}
 	if startat.Korning.Sort != pm.KorningSortFraga {
 		t.Fatalf("samtalsfrågan fick sorten %q", startat.Korning.Sort)
+	}
+}
+
+func TestAllaOversiktSamlarAktuelltLageFranFleraProjekt(t *testing.T) {
+	srv, db := testServer(t)
+	nu := timeutil.Now()
+	andraID := ids.New()
+	if _, err := db.Exec(`INSERT INTO projects(id,alias,name,repo_path,created_at,updated_at) VALUES(?,?,?,?,?,?)`,
+		andraID, "andra", "Andra", "/repo/andra", nu, nu); err != nil {
+		t.Fatal(err)
+	}
+	demo, err := service.NewProjectService(db).GetByAlias(t.Context(), "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skapaTask := func(projektID, titel string, prioritet int) *models.Task {
+		t.Helper()
+		task, skapafel := service.NewTaskService(db, service.NewPlanService(db), service.NewLabelService(db)).Create(
+			t.Context(), models.CreateTaskInput{
+				ProjectID: projektID, Title: titel, Type: models.TaskType("task"), Priority: prioritet,
+				Actor: models.Actor{Kind: models.ActorKindHuman, Name: "rasmus"},
+			},
+		)
+		if skapafel != nil {
+			t.Fatal(skapafel)
+		}
+		return task
+	}
+	demoTask := skapaTask(demo.ID, "Pågår i demo", 3)
+	andraTask := skapaTask(andraID, "Pågår i andra", 3)
+	koTask := skapaTask(demo.ID, "Väntar på repot", 3)
+	felTask := skapaTask(andraID, "Misslyckad", 3)
+	skapaTask(demo.ID, "Behöver beslut", 1)
+
+	laggKorning := func(task *models.Task, projektID, ref, status, repo string, skapad int64) string {
+		t.Helper()
+		id := ids.New()
+		_, korfel := db.Exec(`INSERT INTO pm_korningar(
+			id,project_id,task_id,task_ref,agent,motivering,status,repo_path,skapad_at
+		) VALUES(?,?,?,?,?,?,?,?,?)`, id, projektID, task.ID, ref, "testagent", "test", status, repo, skapad)
+		if korfel != nil {
+			t.Fatal(korfel)
+		}
+		return id
+	}
+	laggKorning(demoTask, demo.ID, fmt.Sprintf("TASK-%d", demoTask.Seq), pm.StatusKor, "/repo/demo", nu+1)
+	laggKorning(andraTask, andraID, fmt.Sprintf("TASK-%d", andraTask.Seq), pm.StatusKor, "/repo/andra", nu+2)
+	laggKorning(koTask, demo.ID, fmt.Sprintf("TASK-%d", koTask.Seq), pm.StatusKoad, "/repo/demo", nu+3)
+	felID := laggKorning(felTask, andraID, fmt.Sprintf("TASK-%d", felTask.Seq), pm.StatusFel, "/repo/andra", nu+4)
+	if _, err := db.Exec(`UPDATE pm_korningar SET exit_kod=7 WHERE id=?`, felID); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 25; i++ {
+		laggKorning(demoTask, demo.ID, fmt.Sprintf("TASK-%d", demoTask.Seq), pm.StatusKlar, "/repo/demo", nu-int64(i)-100)
+	}
+	if _, err := db.Exec(`INSERT INTO pm_samtal(
+		id,project_id,actor_kind,actor_name,text,created_at
+	) VALUES(?,?,?,?,?,?)`, ids.New(), andraID, "ai", "testagent", "Vilket alternativ ska jag välja?", nu+5); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/oversikt", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("översikten gav %d: %s", w.Code, w.Body.String())
+	}
+	var svar allaOversikt
+	if err := json.NewDecoder(w.Body).Decode(&svar); err != nil {
+		t.Fatal(err)
+	}
+	if len(svar.Korningar) != 3 {
+		t.Fatalf("översikten ska bara ge tre aktiva körningar, fick %d", len(svar.Korningar))
+	}
+	projekt := map[string]bool{}
+	koorsak := ""
+	for _, k := range svar.Korningar {
+		projekt[k.Projekt.Alias] = true
+		if k.Status == pm.StatusKoad {
+			koorsak = k.Koorsak
+		}
+		if k.Status == pm.StatusKlar || k.Status == pm.StatusFel {
+			t.Fatalf("historisk körning läckte in i pollningssvaret: %+v", k)
+		}
+	}
+	if !projekt["demo"] || !projekt["andra"] {
+		t.Fatalf("körningarna saknar ett projekt: %+v", projekt)
+	}
+	if !strings.Contains(koorsak, "Repot används") {
+		t.Fatalf("kön saknar konkret orsak: %q", koorsak)
+	}
+	vantar := map[string]bool{}
+	for _, v := range svar.Vantar {
+		vantar[v.Sort] = true
+	}
+	if !vantar["fel"] || !vantar["fraga"] || !vantar["beslut"] {
+		t.Fatalf("väntelägen saknas: %+v", svar.Vantar)
+	}
+	if len(svar.Testservrar) != 2 {
+		t.Fatalf("projekt utan testserver saknas: %+v", svar.Testservrar)
+	}
+}
+
+func TestAllaOversiktFungerarUtanKonfigureradAgent(t *testing.T) {
+	srv, _ := testServer(t)
+	srv.register = pm.NewAgentRegister()
+	for _, sokvag := range []string{"/api/oversikt", "/api/anvandning"} {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, sokvag, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s gav %d: %s", sokvag, w.Code, w.Body.String())
+		}
 	}
 }

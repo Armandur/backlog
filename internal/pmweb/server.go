@@ -100,6 +100,7 @@ func (s *Server) rutter(upstream http.Handler) {
 	s.mux.HandleFunc("/api/projects/{alias}/git-diff", endastLasning)
 	s.mux.HandleFunc("POST /api/projects/{alias}/foresla-task", s.foreslaNyTask)
 	s.mux.HandleFunc("POST /api/projects/{alias}/tasks", s.skapaTask)
+	s.mux.HandleFunc("GET /api/oversikt", s.hamtaAllaOversikt)
 	s.mux.HandleFunc("POST /api/tasks/{id}/foresla", s.foreslaTask)
 	s.mux.HandleFunc("PATCH /api/tasks/{id}", s.uppdateraTask)
 	s.mux.HandleFunc("DELETE /api/tasks/{id}", s.taBortTask)
@@ -159,7 +160,8 @@ type utdelBody struct {
 // statusen genom att polla översikten.
 func (s *Server) delaUt(w http.ResponseWriter, r *http.Request) {
 	alias := r.PathValue("alias")
-	if _, err := pm.NewSamtalStore(s.db).ProjectIDByAlias(r.Context(), alias); err != nil {
+	projektID, err := pm.NewSamtalStore(s.db).ProjectIDByAlias(r.Context(), alias)
+	if err != nil {
 		svaraFel(w, err, http.StatusNotFound)
 		return
 	}
@@ -181,6 +183,15 @@ func (s *Server) delaUt(w http.ResponseWriter, r *http.Request) {
 	taskID, err := tasks.ResolveRef(r.Context(), body.Task)
 	if err != nil {
 		svaraFel(w, fmt.Errorf("hittade inte tasken %q", body.Task), http.StatusNotFound)
+		return
+	}
+	var taskProjektID string
+	if err := s.db.QueryRowContext(r.Context(), `SELECT project_id FROM tasks WHERE id=?`, taskID).Scan(&taskProjektID); err != nil {
+		svaraFel(w, errors.New("PM kunde inte kontrollera taskens projekt"), http.StatusInternalServerError)
+		return
+	}
+	if taskProjektID != projektID {
+		svaraFel(w, fmt.Errorf("tasken %s hör inte till projektet %s", body.Task, alias), http.StatusBadRequest)
 		return
 	}
 	if body.Agent != "" {
