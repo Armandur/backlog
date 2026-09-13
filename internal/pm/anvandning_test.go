@@ -98,3 +98,52 @@ func TestAnvandningSparasPerAgentOchOverlevar(t *testing.T) {
 		t.Fatalf("väntade en rad per agent, fick %d", rader)
 	}
 }
+
+// Kvotläget kom länge bara från utdelade tasks. En fråga eller ett förslag
+// använder samma kvot, så siffran i vyn blev gammal så fort arbetet skedde i
+// samtalet. Provet vaktar att den delade funktionen skriver per agent.
+func TestSparaKvotlageSkriverPerAgentOchTalarOmNil(t *testing.T) {
+	db := testDB(t)
+	lage := &Anvandning{
+		Status: "allowed", Kvottyp: "five_hour",
+		FemTimmar: &Kvotfonster{Andel: 0.21, NollstallsAt: 1789141800},
+		SjuDagar:  &Kvotfonster{Andel: 0.35, NollstallsAt: 1789480800},
+		AvlastAt:  1789232000,
+	}
+	SparaKvotlage(context.Background(), db, "claude", lage)
+
+	last, err := NewAnvandningStore(db).Hamta(context.Background(), "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last.Saknas || last.FemTimmar == nil || last.FemTimmar.Andel != 0.21 {
+		t.Fatalf("kvotläget sparades inte: %+v", last)
+	}
+	// Agentnamnet sätts av funktionen, inte av anroparen.
+	if last.Agent != "claude" {
+		t.Fatalf("fel agent på kvotläget: %q", last.Agent)
+	}
+
+	// En agent utan kvotläge i strömmen skriver ingenting, och kraschar inte.
+	SparaKvotlage(context.Background(), db, "codex", nil)
+	tomt, err := NewAnvandningStore(db).Hamta(context.Background(), "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tomt.Saknas {
+		t.Fatalf("codex ska sakna kvotläge, fick %+v", tomt)
+	}
+}
+
+// Bara claudes ström bär ett kvotläge. Codex ström har tokens men ingen kvot,
+// uppmätt mot codex-cli 0.153.2 den 2026-09-13.
+func TestKvotstromFinnsBaraForClaude(t *testing.T) {
+	if !KvotstromFinns("claude-json") {
+		t.Error("claude-json ska rapportera kvot")
+	}
+	for _, strom := range []string{"codex-json", "", "annat"} {
+		if KvotstromFinns(strom) {
+			t.Errorf("strömmen %q ska inte rapportera kvot", strom)
+		}
+	}
+}

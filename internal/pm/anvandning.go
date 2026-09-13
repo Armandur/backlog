@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -178,4 +179,18 @@ func AnvandningUrClaudeStrom(utdata string) *Anvandning {
 		senaste = &kopia
 	}
 	return senaste
+}
+
+// SparaKvotlage lägger en körnings kvotläge på agenten. Alla körningssorter
+// går genom den, så en fråga eller ett förslag håller siffran lika färsk som
+// en utdelad task. Ett fel här får aldrig stoppa körningen som gått bra.
+func SparaKvotlage(ctx context.Context, db *sql.DB, agent string, lage *Anvandning) {
+	if lage == nil {
+		return
+	}
+	kopia := *lage
+	kopia.Agent = agent
+	if err := NewAnvandningStore(db).Spara(ctx, kopia); err != nil {
+		fmt.Fprintf(os.Stderr, "kunde inte spara kvotläget för %s: %v\n", agent, err)
+	}
 }

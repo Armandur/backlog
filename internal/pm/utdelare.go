@@ -179,15 +179,7 @@ func (u *Utdelare) kor(ctx context.Context, store *KorningStore, korare Korare, 
 		res.ExitKod = 1
 	}
 
-	if res.Anvandning != nil {
-		// Kvotläget hör till agenten, inte till körningen. Ett fel här får
-		// inte stoppa körningen som i övrigt gått bra.
-		lage := *res.Anvandning
-		lage.Agent = korare.Namn()
-		if err := NewAnvandningStore(u.db).Spara(ctx, lage); err != nil {
-			fmt.Fprintf(os.Stderr, "kunde inte spara kvotläget för %s: %v\n", korare.Namn(), err)
-		}
-	}
+	SparaKvotlage(ctx, u.db, korare.Namn(), res.Anvandning)
 
 	// Modellen som svarade är ärligare än agentens namn i konfigurationen.
 	svarsAktor := agentAktor

@@ -130,6 +130,7 @@ func korFraga(ctx context.Context, db *sql.DB, korare Korare, korning *Korning, 
 		avslutaFragaMedFel(ctx, db, korning, korare.Namn(), err, nil)
 		return
 	}
+	SparaKvotlage(ctx, db, korare.Namn(), res.Anvandning)
 	_ = NewKorningStore(db).SattTokens(ctx, korning.ID, res.Tokens)
 	_ = NewKorningStore(db).Avsluta(ctx, korning.ID, StatusKlar, res.ExitKod, korning.Logg)
 }

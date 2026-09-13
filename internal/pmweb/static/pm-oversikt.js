@@ -89,7 +89,7 @@ function kvotText(fonster) {
 
 function ritaAllaKvoter(poster) {
   fyll("#allaKvoter", poster, (a) => {
-    let text = `Fem timmar: ${kvotText(a.fem_timmar)} · sju dagar: ${kvotText(a.sju_dagar)}`;
+    let text = `5h: ${kvotText(a.fem_timmar)} · 7d: ${kvotText(a.sju_dagar)}`;
     if (a.saknas) {
       text = a.rapporterar
         ? "Inget kvotläge har lästs av ännu."

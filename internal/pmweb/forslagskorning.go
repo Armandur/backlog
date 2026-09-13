@@ -90,6 +90,7 @@ func (s *Server) korForslag(ctx context.Context, korare pm.Korare, agent pm.Agen
 		resultat, korfel = bearbeta(ctx, strings.TrimSpace(res.Utdata), agent)
 	}
 	avslutskontext := context.WithoutCancel(ctx)
+	pm.SparaKvotlage(avslutskontext, s.db, agent.Namn(), res.Anvandning)
 	_ = pm.NewKorningStore(s.db).SattTokens(avslutskontext, korning.ID, res.Tokens)
 	_ = handelsefil.Close()
 	s.avslutaForslag(avslutskontext, korning, korfel, resultat)
