@@ -161,7 +161,27 @@
                 <button type="submit" class="btn pri" id="skapaTask">Lägg till task</button>
               </div>
             </form>
+            <div class="taskverktyg" id="taskverktyg">
+              <div class="taskflikar" id="taskflikar" role="tablist" aria-label="Status"></div>
+              <div class="taskfilter">
+                <label class="dold" for="taskSok">Sök bland tasks</label>
+                <input id="taskSok" type="search" placeholder="Sök i titel och referens" autocomplete="off">
+                <label class="dold" for="taskTypfilter">Typ</label>
+                <select id="taskTypfilter"><option value="">Alla typer</option></select>
+                <label class="dold" for="taskPriofilter">Prioritet</label>
+                <select id="taskPriofilter"><option value="">Alla prioriteter</option></select>
+                <label class="dold" for="taskSortering">Sortering</label>
+                <select id="taskSortering">
+                  <option value="prioritet">Prioritet först</option>
+                  <option value="ref">Referens, nyast först</option>
+                  <option value="titel">Titel</option>
+                </select>
+                <button type="button" class="btn sm" id="taskVylage" aria-pressed="false">Kolumner</button>
+              </div>
+              <p class="meta" id="taskfiltertext" role="status"></p>
+            </div>
             <div class="list" id="tasks"></div>
+            <div class="taskkolumner" id="taskkolumner" hidden></div>
           </section>
         </div>
         <div class="stack">
@@ -552,6 +572,7 @@
 <script src="/pm-static/prism.min.js"></script>
 <script src="/pm-static/pm-filer.js"></script>
 <script src="/pm-static/pm-filsok.js"></script>
+<script src="/pm-static/pm-tasklista.js"></script>
 <script src="/pm-static/pm-testserver.js"></script>
 <script src="/pm-static/pm-konfig.js"></script>
 <script src="/pm-static/pm-strom.js"></script>

@@ -34,6 +34,19 @@ function taskLank(ref) {
   return `<a class="mono ref" href="/tasks/${encodeURIComponent(ref)}" title="Öppna i backlog-UI:t">${esc(ref)}</a>`;
 }
 function korningKnappar(id) { return `<button class="btn sm pri" data-forlopp="${id}">Förlopp</button><button class="btn sm" data-logg="${id}">Logg</button>`; }
+// byggTaskrad används av både listan och kolumnläget i pm-tasklista.js.
+function byggTaskrad(t, korningar) {
+  const kor = korningar.find((k) => k.task_ref === t.ref);
+  const status = kor ? pill(kor.status) : t.status === "done" ? pill("klar") : t.status === "doing" ? pill("kor") : "";
+  const knapp = t.status === "done" || kor ? "" : `<button class="btn sm pri" data-dela="${t.ref}">Dela ut</button>`;
+  const kommentarknapp = `<button class="btn sm" data-kommentarer="${esc(t.ref)}">Kommentarer</button>`;
+  const redigeraknapp = `<button class="btn sm" data-redigera="${esc(t.ref)}">Redigera</button>`;
+  const sista = t.sista_korning ? ` · senaste körning ${t.sista_korning.status}${t.sista_korning.exit_kod !== undefined ? " (exit " + t.sista_korning.exit_kod + ")" : ""}` : "";
+  return rad(`<a class="mono ref" href="/tasks/${encodeURIComponent(t.ref)}" title="Öppna i backlog-UI:t">${t.ref}</a>
+    <div class="t"><span class="prio">P${t.prioritet}</span> ${esc(t.titel)}
+      <span class="meta">${esc(t.typ)}${t.etiketter.length ? " · " + esc(t.etiketter.join(", ")) : ""}${sista}</span></div>
+    <div class="act">${status}${redigeraknapp}${kommentarknapp}<button class="btn sm" data-taskforslag="klassning" data-taskref="${esc(t.ref)}">Klassa</button><button class="btn sm" data-taskforslag="berikning" data-taskref="${esc(t.ref)}">Berika</button>${knapp}</div>`);
+}
 function rad(html) {
   const el = document.createElement("div");
   el.className = "rad-post";
@@ -77,21 +90,7 @@ async function laddaOversikt() {
     el.classList.add("stripe", "kor");
     return el;
   }, "Inga körningar just nu.");
-  const oppna = o.tasks.filter((t) => t.status !== "done");
-  // Listan visar alla tasks, så säg vad siffran räknar.
-  $("#nTasks").textContent = `${oppna.length} öppna av ${o.tasks.length}`;
-  fyll("#tasks", o.tasks, (t) => {
-    const kor = o.korningar.find((k) => k.task_ref === t.ref);
-    const status = kor ? pill(kor.status) : t.status === "done" ? pill("klar") : t.status === "doing" ? pill("kor") : "";
-    const knapp = t.status === "done" || kor ? "" : `<button class="btn sm pri" data-dela="${t.ref}">Dela ut</button>`;
-    const kommentarknapp = `<button class="btn sm" data-kommentarer="${esc(t.ref)}">Kommentarer</button>`;
-    const redigeraknapp = `<button class="btn sm" data-redigera="${esc(t.ref)}">Redigera</button>`;
-    const sista = t.sista_korning ? ` · senaste körning ${t.sista_korning.status}${t.sista_korning.exit_kod !== undefined ? " (exit " + t.sista_korning.exit_kod + ")" : ""}` : "";
-    return rad(`<a class="mono ref" href="/tasks/${encodeURIComponent(t.ref)}" title="Öppna i backlog-UI:t">${t.ref}</a>
-      <div class="t"><span class="prio">P${t.prioritet}</span> ${esc(t.titel)}
-        <span class="meta">${esc(t.typ)}${t.etiketter.length ? " · " + esc(t.etiketter.join(", ")) : ""}${sista}</span></div>
-      <div class="act">${status}${redigeraknapp}${kommentarknapp}<button class="btn sm" data-taskforslag="klassning" data-taskref="${esc(t.ref)}">Klassa</button><button class="btn sm" data-taskforslag="berikning" data-taskref="${esc(t.ref)}">Berika</button>${knapp}</div>`);
-  }, "Inga tasks i projektet.");
+  ritaTasklista(o);
   $("#nVantar").textContent = o.vantar.length;
   fyll("#vantar", o.vantar, (v) => {
     const frageknappar = `<button class="btn sm" data-vy="samtal">Öppna</button><button class="btn sm pri" data-kvittera="${esc(v.inlagg_id)}">Kvittera</button>`;

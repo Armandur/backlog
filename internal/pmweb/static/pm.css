@@ -463,3 +463,23 @@ code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--
   #v-oversikt .rad-post { grid-template-columns: minmax(90px, .45fr) minmax(0, 1fr); }
   #v-oversikt .rad-post .act { justify-content: flex-start; }
 }
+.taskverktyg { display: grid; gap: 8px; margin-bottom: 10px; }
+.taskflikar { display: flex; flex-wrap: wrap; gap: 6px; }
+.taskflik { background: var(--yta); border: 1px solid var(--kant); border-radius: 999px; color: var(--svag); cursor: pointer; font-size: 12.5px; font-weight: 600; margin: 0; padding: 5px 12px; }
+.taskflik:hover { background: var(--sankt); }
+.taskflik.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.taskfilter { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+/* Formelementen är hundra procent breda som standard. I verktygsraden ska de
+   dela på bredden, annars hamnar varje fält på egen rad. */
+.taskfilter input, .taskfilter select { font-size: 13px; margin: 0; padding: 5px 8px; width: auto; }
+.taskfilter input { flex: 1 1 160px; min-width: 0; }
+.taskfilter select { flex: 0 1 auto; max-width: 45%; }
+.taskfilter .btn { margin: 0; }
+.taskverktyg .meta { margin: 0; }
+/* Kolumnerna ligger sida vid sida på desktop och staplas på telefonen, där
+   tre kolumner inte får plats bredvid varandra. */
+.taskkolumner { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.taskkolumn { background: var(--yta); border: 1px solid var(--kant); border-radius: 8px; min-width: 0; overflow: hidden; }
+.taskkolumn h3 { border-bottom: 1px solid var(--kant); font-size: 12px; letter-spacing: .05em; margin: 0; padding: 9px 12px; text-transform: uppercase; }
+.taskkolumn .rad-post { grid-template-columns: minmax(0, 1fr); }
+.taskkolumn .rad-post .act { flex-wrap: wrap; }
