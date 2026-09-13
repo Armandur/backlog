@@ -127,6 +127,8 @@ h2 .n { font-weight: 500; background: var(--sankt); border-radius: 10px; padding
 }
 .inlagg .text > :first-child { margin-top: 0; }
 .inlagg .text > :last-child { margin-bottom: 0; }
+.upplasning { border-top: 1px solid var(--kant); display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 8px; }
+.upplasning .btn { margin: 0; }
 .minnesforslag { border-top: 1px solid var(--kant); margin-top: 12px; padding-top: 10px; }
 .minnesforslag label { display: block; font-size: .78rem; font-weight: 700; margin-bottom: 6px; }
 .minnesforslag textarea { min-height: 76px; width: 100%; }
