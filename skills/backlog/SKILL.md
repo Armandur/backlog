@@ -20,26 +20,6 @@ Ingen agentisk loop här - arbetsflödena ägs av andra skills:
 `review-to-backlog` (granskningsfynd till tasks).
 Den här skillen är enbart kommandoreferens.
 
-## Import findings (formatreferens)
-
-Bulkimport av fynd (arbetsflödet ägs av review-to-backlog):
-
-```sh
-backlog import-findings findings.json --dry-run --profile default
-backlog import-findings findings.json --as "ai:<modell>" --profile default
-```
-
-Findings file format:
-```json
-{
-  "version": 1,
-  "project": "<alias>",
-  "items": [
-    { "title": "...", "type": "bug", "priority": "P2", "source": "review" }
-  ]
-}
-```
-
 ## Memory workflow
 
 Använd den lokala backlog-memory-skillen (learn/store). Delningsregeln:
@@ -89,85 +69,6 @@ Use the `TASK-N` format in messages to users. Use the ULID from JSON output when
 --profile <n>   named workspace profile
 --quiet         suppress success messages
 ```
-
-## Environment
-
-```
-BACKLOG_DB=/path/to/backlog.db   # overrides profile resolution; use in MCP config
-```
-
-## DB resolution order
-
-1. `--db <path>` flag
-2. `$BACKLOG_DB` env var
-3. `--profile <name>` flag → sökvägen profilen registrerats med i `~/.config/backlog/config.toml` (lokalt: `default` → `~/.backlog/default/backlog.db`)
-4. Default profile from `~/.config/backlog/config.toml`
-5. Error: "no backlog workspace found - run `backlog init` to create one"
-
----
-
-## Init (workspace setup)
-
-`backlog init` creates a workspace and registers it as a profile. By default it lives at `~/.config/backlog/<profile>/`; use `--path` to put it inside a project directory or a separate git repo.
-
-```sh
-# Default profile, default location (~/.config/backlog/default/)
-backlog init
-
-# Named profile, default location (~/.config/backlog/work/)
-backlog init --profile work
-
-# Named profile at a custom path
-backlog init --profile myapp --path ~/code/myapp/.backlog
-
-# Set as the active profile after creation
-backlog init --profile work --set-default
-
-# Wipe and recreate an existing workspace
-backlog init --profile work --reset
-
-# Pre-fill workspace defaults
-backlog init --profile work --actor human:mazin --priority 2 --type bug --status doing
-```
-
-Flags:
-- `--profile <name>` - profile name (default: `default`)
-- `--path <dir>` - workspace directory (default: `~/.config/backlog/<profile>/`)
-- `--set-default` - make this the active profile
-- `--reset` - wipe and reinitialize an existing workspace
-- `--actor`, `--priority`, `--status`, `--type` - defaults written into workspace `config.toml`
-
-If no default profile exists yet, the new workspace becomes the default automatically.
-
----
-
-## Profiles
-
-```sh
-# Register an existing workspace dir as a profile
-backlog profile add work --path ~/projects/work-backlog
-
-# Show all profiles (* marks the active one)
-backlog profile list
-
-# Show a single profile's resolved path
-backlog profile show work
-
-# Show the active profile
-backlog profile current
-
-# Switch the active profile
-backlog profile use personal       # alias for set-default
-backlog profile set-default personal
-
-# Remove from registry (does not delete the workspace files)
-backlog profile remove old
-
-# Run a command against a non-default profile
-backlog task list --profile work --json
-```
-
----
 
 ## Projects
 
@@ -495,104 +396,6 @@ would have silently erased three versions of someone else's work.
 
 ---
 
-## Attachments
-
-Binary files attached to a task or a doc, stored inside the SQLite DB. The `attachment` command also has the alias `attach`.
-
-```sh
-# Attach a file to a task
-backlog attachment add ./report.pdf --task TASK-1 --as ai:claude-code
-
-# Attach to a doc
-backlog attachment add ./diagram.png --doc <doc-id>
-
-# List for a task or doc
-backlog attachment list --task TASK-1 --json
-backlog attachment list --doc <doc-id>
-
-# Fetch (defaults to the original filename)
-backlog attachment fetch <attachment-id>
-backlog attachment fetch <attachment-id> --out /tmp/report.pdf
-backlog attachment fetch <attachment-id> --out -          # stream to stdout
-
-# Delete
-backlog attachment delete <attachment-id>
-```
-
----
-
-## Import findings (bulk task creation)
-
-Write a findings JSON file, then import it. This is the primary agentic intake path.
-
-### File format
-
-```json
-{
-  "version": 1,
-  "project": "api",
-  "items": [
-    {
-      "title": "SQL injection in /search",
-      "type": "vulnerability",
-      "priority": "P1",
-      "source": "semgrep",
-      "external_ref": "SEMGREP-001",
-      "plans": [
-        { "title": "Remediation", "body": "Use parameterized queries." }
-      ]
-    },
-    {
-      "title": "Outdated dependency: lodash 4.17.20",
-      "type": "vulnerability",
-      "priority": "P3",
-      "source": "dependency-scan"
-    }
-  ]
-}
-```
-
-`priority` accepts `"P1"`–`"P5"` or integers `1`–`5`.
-
-### Run
-
-```sh
-backlog import-findings findings.json --dry-run            # count only, no writes
-backlog import-findings findings.json --as ai:scanner
-backlog import-findings findings.json --project web --as ai:scanner  # override project
-```
-
----
-
-## Cross-workspace import
-
-```sh
-backlog import /path/to/other/backlog.db --dry-run
-backlog import /path/to/other/backlog.db --as ai:importer
-backlog import /path/to/other/backlog.db --project api     # single project only
-```
-
----
-
-## Export
-
-```sh
-backlog export --format json   # full task objects → stdout
-backlog export --format csv
-backlog export --format md     # human-readable Markdown report
-backlog export --format json --project api --out tasks.json
-```
-
----
-
-## Sync (manifest → DB)
-
-```sh
-backlog sync    # reads backlog.json from the workspace, creates missing projects, idempotent
-```
-
----
-
 ## Activity log
 
 ```sh
@@ -600,82 +403,6 @@ backlog activity               # show last 50 events
 backlog activity --limit 20    # limit results
 backlog activity --json        # machine-readable
 ```
-
----
-
-## Web UI
-
-```sh
-backlog web                    # serves on http://localhost:8080, opens browser
-backlog web --port 3000        # custom port
-backlog web --no-browser       # don't auto-open
-```
-
-The web UI provides task list/detail, doc browser, memory browser, and project list. It reads/writes the same workspace as the CLI.
-
----
-
-## Schema (JSON Schema for payloads)
-
-```sh
-backlog schema --json     # JSON Schema for task, findings_file, manifest, actor
-```
-
-Useful when an agent needs a machine-readable contract for `--from-file` payloads.
-
----
-
-## Shell completion
-
-```sh
-backlog completion bash   > /etc/bash_completion.d/backlog
-backlog completion zsh    > ~/.zsh/completions/_backlog
-backlog completion fish   > ~/.config/fish/completions/backlog.fish
-backlog completion powershell
-```
-
----
-
-## Doctor / maintenance
-
-```sh
-backlog doctor check          # PRAGMA integrity_check
-backlog doctor backup --to /safe/backlog.backup.db   # atomic VACUUM INTO
-```
-
-If `--to` is omitted, backup is written to `<workspace>/backlog.backup.db`.
-
----
-
-## MCP server
-
-When running as an MCP server, the same operations are available as tools. Start the server:
-```sh
-backlog mcp serve --as ai:claude-code --db /path/to/backlog.db
-```
-
-### Available MCP tools
-
-| Tool | Required | Optional |
-|---|---|---|
-| `project_list` | - | - |
-| `task_create` | `project`, `title` | `description`, `type`, `status`, `priority`, `source`, `external_ref`, `due_date` |
-| `task_list` | - | `project`, `status`, `type`, `priority`, `search` |
-| `task_show` | `id` | - |
-| `task_update` | `id` | `title`, `description`, `status`, `priority`, `due_date` |
-| `task_move` | `id`, `status` | - |
-| `plan_add` | `task_id`, `title`, `body` | `source` |
-| `plan_update` | `plan_id`, `title`, `body` | `change_note` |
-| `plan_history` | `plan_id` | - |
-| `comment_add` | `task_id`, `body` | - |
-| `memory_add` | `project`, `body` | `tags` |
-| `memory_list` | `project` | `tag` |
-| `doc_add` | `project`, `title`, `body` | - |
-| `doc_list` | `project` | - |
-| `doc_show` | `id` | - |
-| `doc_update` | `id`, `body` | `title`, `change_note` |
-
-Note: `id` / `task_id` accept any of the three task ref forms (TASK-N, bare integer, ULID). `plan_id` and doc `id` are full ULIDs returned by the matching list/create response.
 
 ---
 
@@ -757,3 +484,11 @@ backlog plan add --task "$TASK_ID" --title "Plan" --content "..." --as ai:claude
 **actor.kind:** `human` · `ai`
 
 **sort (task list):** `priority` (default) · `created` · `updated` · `seq` · `title`
+
+## Sällan använda kommandon
+
+Init, profiler, bilagor, import-findings (format och bulkintag), import mellan
+arbetsytor, export, sync, webb-UI, schema, shell completion, doctor, MCP-server,
+miljövariabler och DB-upplösning står inte här. Kör `backlog <kommando> --help`,
+eller läs backlog-docen "backlog CLI: sällan använda kommandon" i projektet
+infra (`backlog doc list --project infra --profile default`).
