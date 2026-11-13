@@ -99,3 +99,39 @@ func TestDocTransfer(t *testing.T) {
 	_, err = docSvc.Transfer(ctx, d.ID, "dst", testActor)
 	require.ErrorContains(t, err, "already in project")
 }
+
+func TestMemoryTransfer(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	projSvc := service.NewProjectService(db)
+	memSvc := service.NewMemoryService(db)
+
+	src, _ := projSvc.Create(ctx, models.CreateProjectInput{Alias: "src", Name: "Src", Actor: testActor})
+	dst, _ := projSvc.Create(ctx, models.CreateProjectInput{Alias: "dst", Name: "Dst", Actor: testActor})
+	ai := models.Actor{Kind: models.ActorKindAI, Name: "writer"}
+	m, err := memSvc.Add(ctx, models.CreateMemoryInput{ProjectID: src.ID, Body: "fact", Tags: "decision", Actor: ai})
+	require.NoError(t, err)
+	_, err = memSvc.Add(ctx, models.CreateMemoryInput{ProjectID: src.ID, Body: "stays", Actor: ai})
+	require.NoError(t, err)
+
+	moved, err := memSvc.Transfer(ctx, m.ID, "dst", testActor)
+	require.NoError(t, err)
+	require.Equal(t, dst.ID, moved.ProjectID)
+
+	srcEntries, _ := memSvc.List(ctx, "src", "")
+	require.Len(t, srcEntries, 1)
+	require.Equal(t, "stays", srcEntries[0].Body)
+	dstEntries, _ := memSvc.List(ctx, "dst", "")
+	require.Len(t, dstEntries, 1)
+	got := dstEntries[0]
+	require.Equal(t, m.ID, got.ID)
+	require.Equal(t, "fact", got.Body)
+	require.Equal(t, "decision", got.Tags)
+	require.Equal(t, ai, got.Actor, "the mover must not replace the author")
+	require.Equal(t, m.CreatedAt, got.CreatedAt)
+
+	_, err = memSvc.Transfer(ctx, m.ID, "dst", testActor)
+	require.ErrorContains(t, err, "already in project")
+	_, err = memSvc.Transfer(ctx, "nope", "dst", testActor)
+	require.Error(t, err)
+}

@@ -75,3 +75,10 @@ func (r *DocRepo) SetProject(ctx context.Context, id, projectID string, updatedA
 		`UPDATE project_docs SET project_id=?,updated_at=? WHERE id=?`, projectID, updatedAt, id)
 	return err
 }
+
+// SetProject moves a memory entry to another project. The entry keeps its ID,
+// author and timestamp.
+func (r *MemoryRepo) SetProject(ctx context.Context, id, projectID string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE project_memory SET project_id=? WHERE id=?`, projectID, id)
+	return err
+}

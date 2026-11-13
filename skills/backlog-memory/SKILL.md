@@ -31,6 +31,9 @@ Vill Rasmus läsa minnet själv: `backlog memory export --project <alias>`
 skriver alla poster i klartext som markdown (`-o fil.md`, `--all` för alla
 projekt). Filen kan innehålla adresser och driftdetaljer - committa den inte.
 
+Hamnade en post i fel projekt: `backlog memory transfer <id>... --to <alias>`
+flyttar den med id, avsändare och tid i behåll.
+
 Lyft in relevanta poster som kontext innan du svarar - det förhindrar att
 redan fattade beslut härleds om. Tomt resultat är ett giltigt svar: hitta inte
 på kontext, och föreslå store efter passets första riktiga arbete.

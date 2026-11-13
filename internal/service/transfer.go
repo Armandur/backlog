@@ -75,3 +75,27 @@ func (s *DocService) Transfer(ctx context.Context, id, targetAlias string, actor
 	s.logActivity(ctx, target.ID, "doc", d.ID, "transferred", summary, actor)
 	return s.Get(ctx, d.ID)
 }
+
+// Transfer moves a memory entry to another project.
+func (s *MemoryService) Transfer(ctx context.Context, id, targetAlias string, actor models.Actor) (*models.Memory, error) {
+	m, err := s.memory.GetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("memory entry not found: %w", err)
+	}
+	target, err := transferTarget(ctx, s.projects, targetAlias, m.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	source, err := s.projects.GetByID(ctx, m.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.memory.SetProject(ctx, m.ID, target.ID); err != nil {
+		return nil, fmt.Errorf("transfer memory: %w", err)
+	}
+	summary := fmt.Sprintf("Moved memory entry from %s to %s", source.Alias, target.Alias)
+	s.logActivity(ctx, source.ID, "memory", m.ID, "transferred", summary, actor)
+	s.logActivity(ctx, target.ID, "memory", m.ID, "transferred", summary, actor)
+	m.ProjectID = target.ID
+	return m, nil
+}

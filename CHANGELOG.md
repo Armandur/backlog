@@ -8,6 +8,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## Unreleased
 
 - `backlog task transfer <id>... --to <alias>` and `backlog doc transfer <doc-id> --to <alias>` move tasks and docs between projects.
+- `backlog memory transfer <id>... --to <alias>` moves memory entries between projects.
 - `backlog memory export` writes memory entries in full as Markdown, for one project or `--all`.
 
 ## v1.0.4 — 2026-07-07

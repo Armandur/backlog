@@ -55,3 +55,28 @@ func docTransferCmd() *cobra.Command {
 	cmd.MarkFlagRequired("to")
 	return cmd
 }
+
+func memoryTransferCmd() *cobra.Command {
+	var to string
+	cmd := &cobra.Command{
+		Use:   "transfer <id>...",
+		Short: "Move memory entries to another project",
+		Long: "Move one or more memory entries to another project. Each entry keeps its\n" +
+			"ID, author and timestamp. Stops at the first entry that cannot be moved.",
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc := service.NewMemoryService(app.DB)
+			for _, id := range args {
+				m, err := svc.Transfer(cmd.Context(), id, to, app.Actor)
+				if err != nil {
+					return fmt.Errorf("%s: %w", id, err)
+				}
+				app.Out.CommandResult("transfer", "memory", m.ID, m.ID[:8], "memory entry moved: "+m.ID[:8]+" -> "+to)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&to, "to", "", "alias of the target project")
+	cmd.MarkFlagRequired("to")
+	return cmd
+}

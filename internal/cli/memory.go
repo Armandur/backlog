@@ -13,7 +13,7 @@ import (
 
 func newMemoryCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "memory", Short: "Manage project memory"}
-	cmd.AddCommand(memoryAddCmd(), memoryAppendCmd(), memoryListCmd(), memoryExportCmd(), memoryDeleteCmd())
+	cmd.AddCommand(memoryAddCmd(), memoryAppendCmd(), memoryListCmd(), memoryExportCmd(), memoryTransferCmd(), memoryDeleteCmd())
 	return cmd
 }
 
