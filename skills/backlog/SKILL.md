@@ -64,7 +64,7 @@ Use the `TASK-N` format in messages to users. Use the ULID from JSON output when
 
 ```
 --json          output machine-readable JSON (always use when parsing)
---as kind:name  actor attribution, e.g. --as ai:claude-code
+--as kind:name  actor attribution, e.g. --as ai:<modell>
 --db <path>     explicit path to backlog.db
 --profile <n>   named workspace profile
 --quiet         suppress success messages
@@ -115,7 +115,7 @@ backlog task add \
   --source "semgrep" \
   --external-ref "SEMGREP-042" \
   --label security \
-  --as ai:claude-code
+  --as ai:<modell>
 ```
 
 Flags:
@@ -142,7 +142,7 @@ backlog task list --status todo --json
 backlog task list --type vulnerability --priority P1 --json
 backlog task list --label security --json
 backlog task list --actor-kind ai --json
-backlog task list --actor-name claude-code --json
+backlog task list --actor-name <modell> --json
 backlog task list --source semgrep --json
 backlog task list --search "injection" --json    # FTS5
 backlog task list --search "sql*" --json         # prefix
@@ -167,7 +167,7 @@ JSON response shape (CLI):
       "type": "vulnerability",
       "status": "todo",
       "priority": 1,
-      "actor": { "kind": "ai", "name": "claude-code" },
+      "actor": { "kind": "ai", "name": "<modell>" },
       "source": "semgrep",
       "external_ref": "SEMGREP-042",
       "labels": [{ "name": "security", "color": "" }],
@@ -192,7 +192,7 @@ backlog task show TASK-1 --with-plans=false --with-comments=false --json   # dis
 
 Only provided flags are changed:
 ```sh
-backlog task update TASK-1 --title "New title" --priority P2 --as ai:claude-code
+backlog task update TASK-1 --title "New title" --priority P2 --as ai:<modell>
 backlog task update TASK-1 --assignee alice --source pentest-report
 backlog task update TASK-1 --due-date 2026-06-01
 ```
@@ -200,9 +200,9 @@ backlog task update TASK-1 --due-date 2026-06-01
 ### Move status
 
 ```sh
-backlog task move TASK-1 --status doing --as ai:claude-code
-backlog task move TASK-1 --status done  --as ai:claude-code
-backlog task move TASK-1 --status todo  --as ai:claude-code
+backlog task move TASK-1 --status doing --as ai:<modell>
+backlog task move TASK-1 --status done  --as ai:<modell>
+backlog task move TASK-1 --status todo  --as ai:<modell>
 backlog task transfer TASK-1 TASK-2 --to other-alias   # move to another project; TASK-N and labels follow
 ```
 
@@ -226,12 +226,12 @@ backlog plan add \
   --task TASK-1 \
   --title "Remediation plan" \
   --content "## Steps\n1. Replace string interpolation with parameterized queries\n2. Add regression test" \
-  --as ai:claude-code --json
+  --as ai:<modell> --json
 ```
 
 To load body from a file:
 ```sh
-backlog plan add --task TASK-1 --title "Plan" --from-file plan.md --as ai:claude-code
+backlog plan add --task TASK-1 --title "Plan" --from-file plan.md --as ai:<modell>
 ```
 
 JSON response:
@@ -243,7 +243,7 @@ JSON response:
   "version": {
     "id": "...", "version": 1,
     "title": "Remediation plan", "body": "## Steps\n...",
-    "actor": { "kind": "ai", "name": "claude-code" },
+    "actor": { "kind": "ai", "name": "<modell>" },
     "created_at": 0
   }
 }
@@ -278,7 +278,7 @@ backlog plan delete <plan-id>
 ## Comments
 
 ```sh
-backlog comment add "Verified fix in PR #142." --task TASK-1 --as ai:claude-code
+backlog comment add "Verified fix in PR #142." --task TASK-1 --as ai:<modell>
 backlog comment list --task TASK-1 --json
 backlog comment delete <comment-id>
 ```
@@ -310,7 +310,7 @@ Free-form text + optional comma-separated tags. Use this for decisions, context,
 ```sh
 # Add
 backlog memory add "Decided to use SQLite - single file, no server" \
-  --project api --tag "decision,arch" --as ai:claude-code
+  --project api --tag "decision,arch" --as ai:<modell>
 
 # Append text to an existing entry (newline-joined)
 backlog memory append <memory-id> "Confirmed at 2026-05-09 review meeting"
@@ -331,7 +331,7 @@ JSON entry shape:
   "project_id": "...",
   "body": "Decided to use SQLite - single file, no server",
   "tags": "decision,arch",
-  "actor": { "kind": "ai", "name": "claude-code" },
+  "actor": { "kind": "ai", "name": "<modell>" },
   "created_at": 1746724800000000000
 }
 ```
@@ -345,7 +345,7 @@ Like plans, but attached to a project and used for longer-form documentation (ar
 ```sh
 # Add (creates v1)
 backlog doc add --project api --title "Architecture Overview" \
-  --content "## Stack\n- Go 1.25\n- SQLite" --as ai:claude-code --json
+  --content "## Stack\n- Go 1.25\n- SQLite" --as ai:<modell> --json
 
 backlog doc add --project api --title "Runbook" --from-file runbook.md
 
@@ -357,7 +357,7 @@ backlog doc show <doc-id> --json
 
 # Update (creates a new version)
 backlog doc update <doc-id> --title "Architecture v2" \
-  --content "..." --change-note "added queue layer" --as ai:claude-code
+  --content "..." --change-note "added queue layer" --as ai:<modell>
 
 # Append (creates a new version with old body + new body joined)
 backlog doc append <doc-id> --content "## New section\n..." \
@@ -426,9 +426,9 @@ backlog task list --actor-name scanner --json
 ### Pick up a task and attach a plan
 
 ```sh
-backlog task move TASK-5 --status doing --as ai:claude-code
+backlog task move TASK-5 --status doing --as ai:<modell>
 backlog plan add --task TASK-5 --title "Implementation plan" \
-  --content "..." --as ai:claude-code --json
+  --content "..." --as ai:<modell> --json
 # → capture plan ID from response
 ```
 
@@ -439,23 +439,23 @@ backlog plan update <plan-id> \
   --title "Revised plan" \
   --content "..." \
   --change-note "incorporated Alice's review" \
-  --as ai:claude-code --json
+  --as ai:<modell> --json
 ```
 
 ### Capture a design decision as memory
 
 ```sh
 backlog memory add "Chose Cobra over urfave/cli - better completion + posix flag handling" \
-  --project api --tag "decision,deps" --as ai:claude-code
+  --project api --tag "decision,deps" --as ai:<modell>
 ```
 
 ### Maintain a versioned runbook
 
 ```sh
 backlog doc add --project api --title "Incident Runbook" \
-  --from-file runbook.md --as ai:claude-code
+  --from-file runbook.md --as ai:<modell>
 backlog doc append <doc-id> --content "## 2026-05 outage RCA\n..." \
-  --change-note "post-mortem section" --as ai:claude-code
+  --change-note "post-mortem section" --as ai:<modell>
 backlog doc history <doc-id> --json
 ```
 
@@ -468,10 +468,10 @@ backlog task list --type vulnerability --priority P1 --status todo --json \
 
 # Create a task and capture its ID
 TASK_ID=$(backlog task add -p api -t "Fix XSS" --type vulnerability --priority P2 \
-  --as ai:claude-code --json | jq -r '.id')
+  --as ai:<modell> --json | jq -r '.id')
 
 # Add a plan using the captured ID
-backlog plan add --task "$TASK_ID" --title "Plan" --content "..." --as ai:claude-code
+backlog plan add --task "$TASK_ID" --title "Plan" --content "..." --as ai:<modell>
 ```
 
 ---

@@ -96,10 +96,10 @@ backlog --profile default plan add \
 After writing back, show a summary:
 
 ```
-Enhanced TASK-N: <new title>
-  Title:       <old> → <new>
-  Description: <N lines added>
-  Plan:        <attached v1 | skipped>
+Berikade TASK-N: <ny titel>
+  Titel:       <gammal> → <ny>
+  Beskrivning: <N rader tillagda>
+  Plan:        <bifogad v1 | hoppades över>
 ```
 
 ## Notes

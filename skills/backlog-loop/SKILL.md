@@ -11,7 +11,7 @@ The name is a callback to the Ralph loop: the loop is on a single task - impleme
 
 ## Requires: the `backlog` skill
 
-Load `skills/backlog/skill.md` first. It is the canonical reference for every CLI flag, command, ID format (`TASK-N` / bare integer / ULID), JSON shape, and enum value. This skill assumes you know how to drive the CLI.
+Load `skills/backlog/SKILL.md` first. It is the canonical reference for every CLI flag, command, ID format (`TASK-N` / bare integer / ULID), JSON shape, and enum value. This skill assumes you know how to drive the CLI.
 
 Passera alltid `--profile default` och `--as "ai:<modell>"` (den körande modellens exakta ID) på varje skrivning.
 
@@ -238,7 +238,7 @@ backlog --profile default task move TASK-N --status done --as "ai:<modell>"
 Print a one-line summary to the user and **stop**:
 
 ```
-Worked TASK-N (<title>) → done. Judge passed on attempt <N>. Verified: <command> exit 0.
+TASK-N (<titel>) klar. Judge godkände på försök <N>. Verifierat: <kommando> exit 0.
 ```
 
 ### 7. Blocked (max attempts reached or hard blocker)
@@ -275,7 +275,7 @@ backlog --profile default task move TASK-N --status todo --as "ai:<modell>"
 Print:
 
 ```
-TASK-N (<title>) → blocked after <N> attempts. See comment for diagnosis.
+TASK-N (<titel>) blockerad efter <N> försök. Diagnosen står i kommentaren.
 ```
 
 Stop.
@@ -325,4 +325,4 @@ backlog --profile default comment add "..." --task TASK-N --as "ai:<modell>"
 backlog --profile default task add --project <project> --title "..." --description "..." --as "ai:<modell>" --json
 ```
 
-See `skills/backlog/skill.md` for the full CLI surface.
+See `skills/backlog/SKILL.md` for the full CLI surface.
