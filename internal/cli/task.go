@@ -24,6 +24,7 @@ func newTaskCmd() *cobra.Command {
 		taskShowCmd(),
 		taskUpdateCmd(),
 		taskMoveCmd(),
+		taskTransferCmd(),
 		taskArchiveCmd(),
 		taskDeleteCmd(),
 	)

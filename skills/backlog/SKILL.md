@@ -203,6 +203,7 @@ backlog task update TASK-1 --due-date 2026-06-01
 backlog task move TASK-1 --status doing --as ai:claude-code
 backlog task move TASK-1 --status done  --as ai:claude-code
 backlog task move TASK-1 --status todo  --as ai:claude-code
+backlog task transfer TASK-1 TASK-2 --to other-alias   # move to another project; TASK-N and labels follow
 ```
 
 ### Archive / Delete
@@ -365,6 +366,7 @@ backlog doc append <doc-id> --content "## New section\n..." \
 backlog doc history <doc-id> --json
 
 # Delete
+backlog doc transfer <doc-id> --to other-alias   # move doc with history to another project
 backlog doc delete <doc-id>
 ```
 

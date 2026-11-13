@@ -7,6 +7,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## Unreleased
 
+- `backlog task transfer <id>... --to <alias>` and `backlog doc transfer <doc-id> --to <alias>` move tasks and docs between projects.
+
 ## v1.0.4 — 2026-07-07
 
 Public release polish for Backlog's website, docs, embedded skills, and web UI.

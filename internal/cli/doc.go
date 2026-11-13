@@ -20,6 +20,7 @@ func newDocCmd() *cobra.Command {
 		docUpdateCmd(),
 		docAppendCmd(),
 		docHistoryCmd(),
+		docTransferCmd(),
 		docDeleteCmd(),
 	)
 	return cmd
