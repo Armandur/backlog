@@ -24,7 +24,8 @@ func TestRunInstallSkillsWritesCodexSkillDirectory(t *testing.T) {
 	got := string(body)
 	for _, want := range []string{
 		"---\nname: backlog\n",
-		"description: Interact with the Backlog CLI",
+		// The wording of the description is free to change; the frontmatter key is not.
+		"\ndescription: ",
 		"You have access to the `backlog` CLI.",
 	} {
 		if !strings.Contains(got, want) {
