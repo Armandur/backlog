@@ -318,6 +318,7 @@ backlog memory append <memory-id> "Confirmed at 2026-05-09 review meeting"
 # List
 backlog memory list --project api --json
 backlog memory list --project api --tag arch --json   # filter by tag
+backlog memory export --project api -o memory.md       # full text as Markdown; --all for every project
 
 # Delete
 backlog memory delete <memory-id>
