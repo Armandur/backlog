@@ -58,7 +58,7 @@ TASK-5          # canonical human-readable ref
 01KR4JA4754H... # full ULID (returned in JSON)
 ```
 
-Use the `TASK-N` format in messages to users. Use the ULID from JSON output when chaining commands. Plan IDs, doc IDs, attachment IDs, and memory IDs are always full or short ULIDs - there is no `PLAN-N` form.
+Use the `TASK-N` format in messages to users. Use the ULID from JSON output when chaining commands. Plan IDs, doc IDs, attachment IDs, and memory IDs have no `PLAN-N` form. Commands that take them require the **full** ULID. Table output and `add` confirmations print only the first 8 characters, and that short form gives `not found`. Take the full ID from `--json`.
 
 ## Global flags (apply to every command)
 
@@ -183,10 +183,9 @@ JSON response shape (CLI):
 
 ```sh
 backlog task show TASK-1 --json
-backlog task show TASK-1 --with-plans=false --with-comments=false --json   # disable defaults
 ```
 
-`--with-plans` and `--with-comments` are both `true` by default.
+`task show` always includes plans and comments. There are no flags to leave them out. The JSON omits the `plans` and `comments` keys when they are empty.
 
 ### Update
 
@@ -346,6 +345,7 @@ Like plans, but attached to a project and used for longer-form documentation (ar
 # Add (creates v1)
 backlog doc add --project api --title "Architecture Overview" \
   --content "## Stack\n- Go 1.25\n- SQLite" --as ai:<modell> --json
+# Use --json: without it, add prints only the short ID, which show/append reject.
 
 backlog doc add --project api --title "Runbook" --from-file runbook.md
 
