@@ -78,7 +78,8 @@ func (s *MemoryService) List(ctx context.Context, projectAlias, tag string) ([]*
 	return s.memory.ListForProject(ctx, p.ID, tag)
 }
 
-func (s *MemoryService) Update(ctx context.Context, id, body, tags string) (*models.Memory, error) {
+// Update replaces the body of a memory entry. A nil tags keeps the current tags.
+func (s *MemoryService) Update(ctx context.Context, id, body string, tags *string, actor models.Actor) (*models.Memory, error) {
 	id, err := s.memory.ResolveID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -90,11 +91,15 @@ func (s *MemoryService) Update(ctx context.Context, id, body, tags string) (*mod
 	if body == "" {
 		return nil, fmt.Errorf("body is required")
 	}
-	if err := s.memory.UpdateBodyAndTags(ctx, id, body, tags); err != nil {
+	if tags != nil {
+		m.Tags = *tags
+	}
+	if err := s.memory.UpdateBodyAndTags(ctx, id, body, m.Tags); err != nil {
 		return nil, fmt.Errorf("update memory: %w", err)
 	}
 	m.Body = body
-	m.Tags = tags
+	s.logActivity(ctx, m.ProjectID, "memory", id, "updated",
+		"Updated memory entry", actor)
 	return m, nil
 }
 

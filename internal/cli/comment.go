@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/mazen160/backlog/internal/models"
 	"github.com/mazen160/backlog/internal/service"
 	"github.com/spf13/cobra"
@@ -15,11 +17,22 @@ func newCommentCmd() *cobra.Command {
 func commentAddCmd() *cobra.Command {
 	var taskID string
 	cmd := &cobra.Command{
-		Use:   "add <body>",
-		Short: "Add a comment to a task",
-		Args:  cobra.ExactArgs(1),
+		Use:     "add [<task>] <body>",
+		Short:   "Add a comment to a task",
+		Example: "  backlog comment add TASK-12 \"Fixed in abc123\"\n  backlog comment add \"Fixed in abc123\" --task TASK-12",
+		Args:    cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			body := args[len(args)-1]
+			if len(args) == 2 {
+				if taskID != "" {
+					return fmt.Errorf("give the task either as the first argument or with --task, not both")
+				}
+				taskID = args[0]
+			}
+			if taskID == "" {
+				return fmt.Errorf("task is required: backlog comment add TASK-N <body>")
+			}
 			resolvedID, err := resolveTaskRef(ctx, taskID)
 			if err != nil {
 				return err
@@ -27,7 +40,7 @@ func commentAddCmd() *cobra.Command {
 			svc := service.NewCommentService(app.DB)
 			c, err := svc.Create(ctx, models.CreateCommentInput{
 				TaskID: resolvedID,
-				Body:   args[0],
+				Body:   body,
 				Actor:  app.Actor,
 			})
 			if err != nil {
@@ -41,8 +54,7 @@ func commentAddCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&taskID, "task", "", "task ID")
-	cmd.MarkFlagRequired("task")
+	cmd.Flags().StringVar(&taskID, "task", "", "task ID (alternative to the first argument)")
 	return cmd
 }
 

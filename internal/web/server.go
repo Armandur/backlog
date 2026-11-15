@@ -802,7 +802,7 @@ func (s *Server) handleMemoryByID(w http.ResponseWriter, r *http.Request) {
 			Tags string `json:"tags"`
 		}
 		json.NewDecoder(r.Body).Decode(&in)
-		m, err := svc.Update(r.Context(), id, in.Body, in.Tags)
+		m, err := svc.Update(r.Context(), id, in.Body, &in.Tags, s.actor)
 		if err != nil {
 			jsonError(w, err, 400)
 			return

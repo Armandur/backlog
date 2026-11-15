@@ -26,6 +26,7 @@ func newTaskCmd() *cobra.Command {
 		taskMoveCmd(),
 		taskTransferCmd(),
 		taskArchiveCmd(),
+		taskUnarchiveCmd(),
 		taskDeleteCmd(),
 	)
 	return cmd
@@ -383,6 +384,24 @@ func taskArchiveCmd() *cobra.Command {
 			}
 			ref := fmt.Sprintf("TASK-%d", t.Seq)
 			app.Out.CommandResult("archive", "task", t.ID, ref, "task archived: "+ref)
+			return nil
+		},
+	}
+}
+
+func taskUnarchiveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "unarchive <id>",
+		Short: "Restore an archived task",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc := newTaskSvc()
+			t, err := svc.Unarchive(cmd.Context(), args[0], app.Actor)
+			if err != nil {
+				return err
+			}
+			ref := fmt.Sprintf("TASK-%d", t.Seq)
+			app.Out.CommandResult("unarchive", "task", t.ID, ref, "task restored: "+ref)
 			return nil
 		},
 	}

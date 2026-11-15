@@ -13,7 +13,7 @@ import (
 
 func newMemoryCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "memory", Short: "Manage project memory"}
-	cmd.AddCommand(memoryAddCmd(), memoryAppendCmd(), memoryListCmd(), memoryExportCmd(), memoryTransferCmd(), memoryDeleteCmd())
+	cmd.AddCommand(memoryAddCmd(), memoryAppendCmd(), memoryUpdateCmd(), memoryListCmd(), memoryExportCmd(), memoryTransferCmd(), memoryDeleteCmd())
 	return cmd
 }
 
@@ -75,6 +75,34 @@ func memoryAppendCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+func memoryUpdateCmd() *cobra.Command {
+	var tags string
+	cmd := &cobra.Command{
+		Use:   "update <id> <body>",
+		Short: "Replace the body of a memory entry (keeps tags unless --tag is given)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc := service.NewMemoryService(app.DB)
+			var newTags *string
+			if cmd.Flags().Changed("tag") {
+				newTags = &tags
+			}
+			m, err := svc.Update(cmd.Context(), args[0], args[1], newTags, app.Actor)
+			if err != nil {
+				return err
+			}
+			if flagJSON {
+				app.Out.PrintJSON(m)
+			} else {
+				app.Out.Success(fmt.Sprintf("memory updated: %s", m.ID[:8]))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&tags, "tag", "", "comma-separated tags (replaces the current tags)")
 	return cmd
 }
 

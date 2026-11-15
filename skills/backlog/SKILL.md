@@ -209,6 +209,7 @@ backlog task transfer TASK-1 TASK-2 --to other-alias   # move to another project
 
 ```sh
 backlog task archive TASK-1   # soft - hidden from list, recoverable via --include-archived
+backlog task unarchive TASK-1 # restore an archived task
 backlog task delete  TASK-1   # hard - permanent
 ```
 
@@ -277,7 +278,8 @@ backlog plan delete <plan-id>
 ## Comments
 
 ```sh
-backlog comment add "Verified fix in PR #142." --task TASK-1 --as ai:<modell>
+backlog comment add TASK-1 "Verified fix in PR #142." --as ai:<modell>
+backlog comment add "Verified fix in PR #142." --task TASK-1 --as ai:<modell>   # same thing
 backlog comment list --task TASK-1 --json
 backlog comment delete <comment-id>
 ```
@@ -313,6 +315,10 @@ backlog memory add "Decided to use SQLite - single file, no server" \
 
 # Append text to an existing entry (newline-joined)
 backlog memory append <memory-id> "Confirmed at 2026-05-09 review meeting"
+
+# Correct an entry in place: same ID, tags kept unless --tag is given.
+# Replaces the WHOLE body and keeps no old version. Read it first with list --json.
+backlog memory update <memory-id> "Decided to use SQLite in WAL mode" --as ai:<modell>
 
 # List
 backlog memory list --project api --json
