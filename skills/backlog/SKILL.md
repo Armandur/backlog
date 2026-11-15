@@ -58,7 +58,7 @@ TASK-5          # canonical human-readable ref
 01KR4JA4754H... # full ULID (returned in JSON)
 ```
 
-Use the `TASK-N` format in messages to users. Use the ULID from JSON output when chaining commands. Plan IDs, doc IDs, attachment IDs, and memory IDs have no `PLAN-N` form. Commands that take them require the **full** ULID. Table output and `add` confirmations print only the first 8 characters, and that short form gives `not found`. Take the full ID from `--json`.
+Use the `TASK-N` format in messages to users. Use the ULID from JSON output when chaining commands. Plan IDs, doc IDs, attachment IDs, and memory IDs have no `PLAN-N` form. Commands that take them accept the full ULID or a prefix of at least 8 characters, such as the short ID that table output and `add` confirmations print. A prefix that matches more than one entry is an error: use the full ID from `--json` then.
 
 ## Global flags (apply to every command)
 
@@ -345,7 +345,6 @@ Like plans, but attached to a project and used for longer-form documentation (ar
 # Add (creates v1)
 backlog doc add --project api --title "Architecture Overview" \
   --content "## Stack\n- Go 1.25\n- SQLite" --as ai:<modell> --json
-# Use --json: without it, add prints only the short ID, which show/append reject.
 
 backlog doc add --project api --title "Runbook" --from-file runbook.md
 

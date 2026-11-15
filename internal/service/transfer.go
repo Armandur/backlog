@@ -55,6 +55,10 @@ func (s *TaskService) Transfer(ctx context.Context, ref, targetAlias string, act
 
 // Transfer moves a doc, with its version history, to another project.
 func (s *DocService) Transfer(ctx context.Context, id, targetAlias string, actor models.Actor) (*models.Doc, error) {
+	id, err := s.docs.ResolveID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	d, err := s.docs.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("doc not found: %w", err)
@@ -78,6 +82,10 @@ func (s *DocService) Transfer(ctx context.Context, id, targetAlias string, actor
 
 // Transfer moves a memory entry to another project.
 func (s *MemoryService) Transfer(ctx context.Context, id, targetAlias string, actor models.Actor) (*models.Memory, error) {
+	id, err := s.memory.ResolveID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	m, err := s.memory.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("memory entry not found: %w", err)

@@ -61,6 +61,10 @@ func (s *CommentService) ListForTask(ctx context.Context, taskID string) ([]*mod
 }
 
 func (s *CommentService) Delete(ctx context.Context, id string, actor models.Actor) error {
+	id, err := s.comments.ResolveID(ctx, id)
+	if err != nil {
+		return err
+	}
 	c, err := s.comments.GetByID(ctx, id)
 	if err != nil {
 		return err

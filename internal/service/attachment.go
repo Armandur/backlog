@@ -57,6 +57,10 @@ func (s *AttachmentService) Add(ctx context.Context, name string, data []byte, l
 }
 
 func (s *AttachmentService) Get(ctx context.Context, id string) (*models.AttachmentWithData, error) {
+	id, err := s.attachments.ResolveID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	a, err := s.attachments.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("attachment not found: %w", err)
@@ -73,6 +77,10 @@ func (s *AttachmentService) ListForProject(ctx context.Context, projectAlias str
 }
 
 func (s *AttachmentService) Delete(ctx context.Context, id string, actor models.Actor) error {
+	id, err := s.attachments.ResolveID(ctx, id)
+	if err != nil {
+		return err
+	}
 	a, err := s.attachments.GetMeta(ctx, id)
 	if err != nil {
 		return fmt.Errorf("attachment not found: %w", err)

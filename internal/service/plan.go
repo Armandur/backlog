@@ -73,6 +73,10 @@ func (s *PlanService) Create(ctx context.Context, in models.CreatePlanInput) (*m
 }
 
 func (s *PlanService) Update(ctx context.Context, planID string, in models.UpdatePlanInput) (*models.Plan, error) {
+	planID, err := s.plans.ResolveID(ctx, planID)
+	if err != nil {
+		return nil, err
+	}
 	p, err := s.plans.GetPlan(ctx, planID)
 	if err != nil {
 		return nil, err
@@ -115,6 +119,10 @@ func (s *PlanService) Update(ctx context.Context, planID string, in models.Updat
 }
 
 func (s *PlanService) Get(ctx context.Context, planID string, version int) (*models.Plan, error) {
+	planID, err := s.plans.ResolveID(ctx, planID)
+	if err != nil {
+		return nil, err
+	}
 	p, err := s.plans.GetPlan(ctx, planID)
 	if err != nil {
 		return nil, err
@@ -139,6 +147,10 @@ func (s *PlanService) ListForProject(ctx context.Context, projectAlias string) (
 }
 
 func (s *PlanService) History(ctx context.Context, planID string) ([]*models.PlanVersion, error) {
+	planID, err := s.plans.ResolveID(ctx, planID)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := s.plans.GetPlan(ctx, planID); err != nil {
 		return nil, err
 	}
@@ -146,6 +158,10 @@ func (s *PlanService) History(ctx context.Context, planID string) ([]*models.Pla
 }
 
 func (s *PlanService) Archive(ctx context.Context, planID string, actor models.Actor) error {
+	planID, err := s.plans.ResolveID(ctx, planID)
+	if err != nil {
+		return err
+	}
 	p, err := s.plans.GetPlan(ctx, planID)
 	if err != nil {
 		return err
@@ -163,6 +179,10 @@ func (s *PlanService) Archive(ctx context.Context, planID string, actor models.A
 }
 
 func (s *PlanService) Delete(ctx context.Context, planID string, actor models.Actor) error {
+	planID, err := s.plans.ResolveID(ctx, planID)
+	if err != nil {
+		return err
+	}
 	p, err := s.plans.GetPlan(ctx, planID)
 	if err != nil {
 		return err

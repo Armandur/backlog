@@ -65,6 +65,10 @@ func (s *DocService) Create(ctx context.Context, projectAlias string, in models.
 }
 
 func (s *DocService) Get(ctx context.Context, id string) (*models.Doc, error) {
+	id, err := s.docs.ResolveID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	d, err := s.docs.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("doc not found: %w", err)
@@ -89,6 +93,10 @@ func (s *DocService) List(ctx context.Context, projectAlias string) ([]*models.D
 }
 
 func (s *DocService) Update(ctx context.Context, id string, in models.UpdateDocInput) (*models.Doc, error) {
+	id, err := s.docs.ResolveID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	d, err := s.docs.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("doc not found: %w", err)
@@ -125,6 +133,10 @@ func (s *DocService) Update(ctx context.Context, id string, in models.UpdateDocI
 }
 
 func (s *DocService) Append(ctx context.Context, id, input, changeNote string, actor models.Actor) (*models.Doc, error) {
+	id, err := s.docs.ResolveID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	if input == "" {
 		return nil, fmt.Errorf("content is required")
 	}
@@ -144,6 +156,10 @@ func (s *DocService) Append(ctx context.Context, id, input, changeNote string, a
 }
 
 func (s *DocService) History(ctx context.Context, id string) ([]*models.DocVersion, error) {
+	id, err := s.docs.ResolveID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := s.docs.GetByID(ctx, id); err != nil {
 		return nil, fmt.Errorf("doc not found: %w", err)
 	}
@@ -151,6 +167,10 @@ func (s *DocService) History(ctx context.Context, id string) ([]*models.DocVersi
 }
 
 func (s *DocService) Delete(ctx context.Context, id string, actor models.Actor) error {
+	id, err := s.docs.ResolveID(ctx, id)
+	if err != nil {
+		return err
+	}
 	d, err := s.docs.GetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("doc not found: %w", err)

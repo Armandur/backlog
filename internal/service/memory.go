@@ -46,6 +46,10 @@ func (s *MemoryService) Add(ctx context.Context, in models.CreateMemoryInput) (*
 }
 
 func (s *MemoryService) Append(ctx context.Context, id, input string, actor models.Actor) (*models.Memory, error) {
+	id, err := s.memory.ResolveID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	m, err := s.memory.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("memory entry not found: %w", err)
@@ -75,6 +79,10 @@ func (s *MemoryService) List(ctx context.Context, projectAlias, tag string) ([]*
 }
 
 func (s *MemoryService) Update(ctx context.Context, id, body, tags string) (*models.Memory, error) {
+	id, err := s.memory.ResolveID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	m, err := s.memory.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("memory entry not found: %w", err)
@@ -91,6 +99,10 @@ func (s *MemoryService) Update(ctx context.Context, id, body, tags string) (*mod
 }
 
 func (s *MemoryService) Delete(ctx context.Context, id string) error {
+	id, err := s.memory.ResolveID(ctx, id)
+	if err != nil {
+		return err
+	}
 	m, err := s.memory.GetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("memory entry not found: %w", err)
