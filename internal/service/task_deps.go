@@ -2,12 +2,18 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/mazen160/backlog/internal/models"
 	"github.com/mazen160/backlog/internal/timeutil"
 )
+
+// ErrReadyNeedsTodo rejects a ready filter combined with another status than
+// todo. Only todo tasks can be ready.
+var ErrReadyNeedsTodo = errors.New("ready lists todo tasks only and cannot be combined with another status")
 
 // applyDependencies adds and removes depends-on edges for task t. All refs
 // are resolved and every edge is checked before anything is written, and the
@@ -109,6 +115,16 @@ func (s *TaskService) cycleText(ctx context.Context, taskSeq int, path []string)
 		}
 	}
 	return strings.Join(parts, " -> ")
+}
+
+// dependenciesOnly reports whether in changes nothing but dependencies.
+// applyDependencies already logs those, so Update skips its "updated" entry.
+func dependenciesOnly(in models.UpdateTaskInput) bool {
+	if len(in.AddDependsOn) == 0 && len(in.RemoveDependsOn) == 0 {
+		return false
+	}
+	in.AddDependsOn, in.RemoveDependsOn = nil, nil
+	return reflect.DeepEqual(in, models.UpdateTaskInput{})
 }
 
 // loadDependencies fills DependsOn and Blocks on t.

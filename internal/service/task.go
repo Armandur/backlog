@@ -244,6 +244,9 @@ func parseTaskSeqRef(s string) (int, bool) {
 }
 
 func (s *TaskService) List(ctx context.Context, f models.TaskFilter) ([]*models.Task, int, error) {
+	if f.Ready && f.Status != "" && f.Status != models.TaskStatusTodo {
+		return nil, 0, ErrReadyNeedsTodo
+	}
 	var tasks []*models.Task
 	var err error
 	if f.Search != "" {
@@ -368,7 +371,7 @@ func (s *TaskService) Update(ctx context.Context, ref string, in models.UpdateTa
 	if statusChanged {
 		s.logActivity(ctx, t.ProjectID, "task", t.ID, "status_changed",
 			fmt.Sprintf("Changed status of TASK-%d %q from %s to %s", t.Seq, t.Title, oldStatus, t.Status), actor)
-	} else {
+	} else if !dependenciesOnly(in) {
 		s.logActivity(ctx, t.ProjectID, "task", t.ID, "updated",
 			fmt.Sprintf("Updated task TASK-%d %q", t.Seq, t.Title), actor)
 	}
