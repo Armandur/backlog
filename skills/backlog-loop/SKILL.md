@@ -20,8 +20,14 @@ Passera alltid `--profile default` och `--as "ai:<modell>"` (den körande modell
 ```
 /backlog-loop <project>          # pull next todo task from <project>, iterate to done, exit
 /backlog-loop <project> <ref>    # work a specific task (TASK-N, bare integer, or ULID)
+/backlog-loop <project> [<ref>] --vantar-test   # testläge: Rasmus testar före done (se steg 6)
 /backlog-loop help               # print the headless-execution help and exit
 ```
+
+**Testläge** gäller när `--vantar-test` anges, och även utan flaggan när
+tasken ändrar synligt beteende: UI, en route, text eller utdata som en
+användare ser. Då går tasken till `done` först efter Rasmus ok, inte direkt
+efter Judge PASS. Är du osäker på om beteendet är synligt: kör testläge.
 
 If the user omits `<project>` (and didn't pass `help`), list available projects and ask which one - do not guess:
 
@@ -35,11 +41,50 @@ If the user passes `help`, point to the headless doc (see **Headless execution**
 
 - **One task only.** The skill never moves to a second task. The user invokes it again if they want more.
 - **Mandatory Judge gate.** The task only moves to `done` after a `[JUDGE RECEIPT]` says PASS. The implementing agent never self-marks `done`.
+- **Testläge: Rasmus ok före done.** I testläge räcker inte Judge PASS. Tasken står kvar i `doing` med etiketten `vantar-test` tills Rasmus testat (steg 6 och 6b).
+- **Main får bara testat.** Committa på taskens gren, aldrig direkt på main i testläge. Aldrig `git add -A`, bara taskens filer (se **Worktree, gren och arbetar**).
 - **Max 5 attempts.** Implement → verify → judge counts as one attempt. After 5 failed Judge verdicts, stop and mark the task blocked with a full diagnosis.
 - **Never expand scope silently.** Work discovered mid-execution that's outside the task → new task, not silent expansion of this one.
 - **Always attribute writes.** `--as "ai:<modell>"` on every write.
 - **Always `--profile default`**.
 - **The Judge never calls advisor.** The Judge sub-agent already *is* the critical-review step - advisor-ing the advisor just adds latency for no independent signal. See the Judge prompt template's hard rules.
+
+## Worktree, gren och arbetar
+
+Flera paneler kan köra `/backlog-loop` samtidigt i samma repo. Utan de här
+reglerna skriver de i varandras filer och committar varandras halvfärdiga
+arbete.
+
+- **En gren per task:** `task-<N>`. Alla commits för tasken hamnar där.
+- **En worktree per task när flera paneler kör** i samma repo. Skapa den
+  bredvid repot, inte i det:
+
+  ```sh
+  git -C <repo_path> worktree add ../<repo>-t<N> -b task-<N>
+  ```
+
+  Kör ensam panel räcker det med grenen i huvudcheckouten. Står den redan på
+  en annan tasks gren: ta en worktree.
+- **Bara taskens filer i commiten.** `git add <fil> ...`, aldrig `git add -A`
+  eller `git add .`. Visar `git status` filer som inte hör till tasken: rör
+  dem inte och ta inte med dem.
+- **`arbetar`-anspråk före försök 1.** Kör från huvudcheckouten
+  (projektets `repo_path`) med repo-relativa sökvägar, även när arbetet sker
+  i en worktree. Då jämför krockkontrollen samma sökvägar oavsett worktree:
+
+  ```sh
+  cd <repo_path> && arbetar TASK-N <fil> <fil> ... --agent "ai:<modell>"
+  ```
+
+  Krockar anspråket: starta inte. Rapportera krocken och avsluta, eller
+  vänta tills den andra tasken lämnat `doing`. Växer fillistan under arbetet:
+  kör `arbetar` igen med hela listan.
+- **Anspråket lever så länge tasken står i `doing`**, även under väntan på
+  test. Det upphör av sig självt när tasken går till `done` eller `todo`.
+  Kommandona i övrigt står i delegera-skillen.
+- **Städa worktreen** (`git worktree remove ../<repo>-t<N>`) när grenen är
+  mergad efter Rasmus ok, eller när tasken går tillbaka till `todo`. Grenen
+  får stå kvar tills Rasmus säger annat.
 
 ## Workflow
 
@@ -79,12 +124,18 @@ backlog --profile default comment add \
 
 This is non-negotiable. A loop without a Judge gate is the failure mode this skill exists to prevent; a Judge without criteria is theater.
 
-### 3. Move to doing
+### 3. Ta anspråk och flytta till doing
+
+Lista filerna tasken rör, ur beskrivningen och en snabb läsning av koden.
+`arbetar` gör anspråket och sätter tasken till `doing` i samma steg (se
+**Worktree, gren och arbetar**). Skapa grenen, och worktreen om flera
+paneler kör, innan försök 1.
 
 ```sh
-backlog --profile default task move TASK-N --status doing --as "ai:<modell>"
+cd <repo_path> && arbetar TASK-N <fil> ... --agent "ai:<modell>"
+git -C <repo_path> worktree add ../<repo>-t<N> -b task-<N>   # eller: git switch -c task-<N>
 backlog --profile default comment add \
-  "Upplockad via /backlog-loop. Startar försök 1 av max 5." \
+  "Upplockad via /backlog-loop<, testläge>. Gren task-<N>. Startar försök 1 av max 5." \
   --task TASK-N --as "ai:<modell>"
 ```
 
@@ -169,7 +220,8 @@ Your job:
    - "Lint clean" - orthogonal to the requirement
    - The implementing agent's own claim of done
 4. Look for adjacent breakage - things outside the criteria that a reasonable reviewer would flag (a broken test elsewhere, an obvious bug introduced). Note these as `judge_observations`. They do not fail the task on their own but must be reported.
-5. Return a verdict: PASS or FAIL.
+5. Account for EVERY point in the task, not only the acceptance criteria: each criterion, each verification line (commands and "manual:" checks) and each concrete requirement in Context or Implementation hints. Mark each one `covered` (you checked it, with evidence) or `skipped` (you did not check it, with the reason). A skipped acceptance criterion or verification line is a FAIL.
+6. Return a verdict: PASS or FAIL.
 
 Hard rules:
 - You are READ-ONLY. Do not edit files. Run only verification commands and read commands.
@@ -190,6 +242,9 @@ criteria:
 verification_commands:
   - `<command>` → exit <code>
     <relevant output snippet>
+  - ...
+coverage:
+  - [covered|skipped] <every point in the task, one line each> - <evidence, or why it was skipped>
   - ...
 judge_observations:
   - <optional: adjacent issues outside the criteria>
@@ -215,7 +270,43 @@ EOF
 
 ### 6. Complete
 
-When the Judge returns PASS:
+När Judge säger PASS: committa först på taskens gren, bara taskens filer.
+
+```sh
+git -C <worktree eller repo_path> add <taskens filer>
+git -C <worktree eller repo_path> commit -m "<svensk imperativ>"
+```
+
+**Testläge (se Invocation): tasken går inte till done här.** Sätt
+etiketten, skriv vad Rasmus ska testa och lämna tasken i `doing`.
+Anspråket och grenen står kvar.
+
+```sh
+backlog --profile default label attach vantar-test --task TASK-N --as "ai:<modell>"
+backlog --profile default comment add "$(cat <<'EOF'
+Väntar på test. Judge godkände på försök <N>. Gren task-<N>, commit <kort-sha>.
+
+Testa:
+1. <vad Rasmus ska se, och var (klickbar länk till vyn)>
+2. ...
+
+Säg ok eller beskriv felet. Tasken står i doing med etiketten vantar-test tills dess.
+EOF
+)" --task TASK-N --as "ai:<modell>"
+```
+
+Högst 3-4 testpunkter, var och en som vad Rasmus ska se. Fler än så: lägg
+dem i portalen med testlista-skillen och länka sessionen i kommentaren.
+Skriv sedan till användaren och **stoppa**:
+
+```
+TASK-N (<titel>) väntar på test. Judge godkände på försök <N>. Gren task-<N>.
+```
+
+Gå vidare till 6b först när Rasmus svarat.
+
+**Utan testläge:** merga grenen till main lokalt och städa worktreen, med
+samma kommandon som vid ok i 6b. Kommentera sedan och flytta till done.
 
 ```sh
 backlog --profile default comment add "$(cat <<'EOF'
@@ -240,6 +331,40 @@ Print a one-line summary to the user and **stop**:
 ```
 TASK-N (<titel>) klar. Judge godkände på försök <N>. Verifierat: <kommando> exit 0.
 ```
+
+### 6b. Efter Rasmus test (bara testläge)
+
+Rasmus svarar i panelen, eller med `/backlog-loop <projekt> TASK-N
+--vantar-test`. Läs svaret och välj väg.
+
+**Ok:** merga grenen till main lokalt, städa och flytta till done.
+Etiketten tas bort först, så ingen tasklista visar den som väntande.
+
+```sh
+git -C <repo_path> merge --no-ff task-<N>      # lokalt, ingen push
+git -C <repo_path> worktree remove ../<repo>-t<N>   # om en worktree fanns
+backlog --profile default label detach vantar-test --task TASK-N --as "ai:<modell>"
+backlog --profile default comment add \
+  "Rasmus testade och gav ok <datum>. Grenen task-<N> mergad till main." \
+  --task TASK-N --as "ai:<modell>"
+backlog --profile default task move TASK-N --status done --as "ai:<modell>"
+```
+
+Kräver mergen konfliktlösning: lös inte gissningsvis. Fråga Rasmus.
+
+**Fel:** ta bort etiketten, skriv ner felet och kör en ny loop på samma gren.
+
+```sh
+backlog --profile default label detach vantar-test --task TASK-N --as "ai:<modell>"
+backlog --profile default comment add \
+  "Rasmus test fallerade: <vad han såg>. Ny loop på task-<N>, försök 1 av max 5." \
+  --task TASK-N --as "ai:<modell>"
+```
+
+Den nya loopen börjar om på försök 1 och går genom steg 5 igen. Rasmus fel
+blir det första som ska rättas, som en failande punkt i ett Judge-kvitto.
+Judge kontrollerar att felet är borta, utöver taskens kriterier. Tasken står
+kvar i `doing`, och anspråket lever vidare.
 
 ### 7. Blocked (max attempts reached or hard blocker)
 
@@ -320,6 +445,8 @@ backlog --profile default task show TASK-N --json
 backlog --profile default task move TASK-N --status doing --as "ai:<modell>"
 backlog --profile default task move TASK-N --status done  --as "ai:<modell>"
 backlog --profile default task move TASK-N --status todo  --as "ai:<modell>"
+backlog --profile default label attach vantar-test --task TASK-N --as "ai:<modell>"
+backlog --profile default label detach vantar-test --task TASK-N --as "ai:<modell>"
 backlog --profile default plan add --task TASK-N --title "..." --content "..." --as "ai:<modell>" --json
 backlog --profile default comment add "..." --task TASK-N --as "ai:<modell>"
 backlog --profile default task add --project <project> --title "..." --description "..." --as "ai:<modell>" --json
