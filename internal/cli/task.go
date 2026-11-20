@@ -56,6 +56,7 @@ func taskAddCmd() *cobra.Command {
 		projectPath string
 		fromFile    string
 		dueDate     string
+		dependsOn   []string
 	)
 	cmd := &cobra.Command{
 		Use:   "add",
@@ -155,6 +156,9 @@ func taskAddCmd() *cobra.Command {
 				}
 				in.DueAt = &ts
 			}
+			if len(dependsOn) > 0 {
+				in.DependsOn = dependsOn
+			}
 			in.Actor = app.Actor
 
 			t, err := svc.Create(cmd.Context(), in)
@@ -178,6 +182,7 @@ func taskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&projectPath, "project-path", "", "file path or URL for relevant code location (e.g. internal/handlers/search.go:84)")
 	cmd.Flags().StringVar(&fromFile, "from-file", "", "read task from a .json or .md file")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "due date (YYYY-MM-DD or RFC3339)")
+	cmd.Flags().StringSliceVar(&dependsOn, "depends-on", nil, "task this one waits for (TASK-N; can repeat)")
 	return cmd
 }
 
@@ -197,6 +202,7 @@ func taskListCmd() *cobra.Command {
 		limit           int
 		offset          int
 		sort            string
+		ready           bool
 	)
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -218,6 +224,10 @@ func taskListCmd() *cobra.Command {
 				Limit:           limit,
 				Offset:          offset,
 				Sort:            sort,
+				Ready:           ready,
+			}
+			if ready && status != "" && status != string(models.TaskStatusTodo) {
+				return fmt.Errorf("--ready lists todo tasks only and cannot be combined with --status %s", status)
 			}
 			if priority != "" {
 				p, err := parsePriorityFlag(priority)
@@ -249,6 +259,7 @@ func taskListCmd() *cobra.Command {
 	cmd.Flags().IntVar(&limit, "limit", 50, "max results")
 	cmd.Flags().IntVar(&offset, "offset", 0, "offset for pagination")
 	cmd.Flags().StringVar(&sort, "sort", "", "sort order: priority (default), created, updated, seq, title")
+	cmd.Flags().BoolVar(&ready, "ready", false, "only todo tasks whose dependencies are all done")
 	return cmd
 }
 
@@ -281,6 +292,8 @@ func taskUpdateCmd() *cobra.Command {
 		externalRef string
 		projectPath string
 		dueDate     string
+		dependsOn   []string
+		noDependsOn []string
 	)
 	cmd := &cobra.Command{
 		Use:   "update <id>",
@@ -329,6 +342,8 @@ func taskUpdateCmd() *cobra.Command {
 				}
 				in.DueAt = &ts
 			}
+			in.AddDependsOn = dependsOn
+			in.RemoveDependsOn = noDependsOn
 			t, err := svc.Update(cmd.Context(), args[0], in, app.Actor)
 			if err != nil {
 				return err
@@ -347,6 +362,8 @@ func taskUpdateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&externalRef, "external-ref", "", "new external ref")
 	cmd.Flags().StringVar(&projectPath, "project-path", "", "file path or URL for relevant code location")
 	cmd.Flags().StringVar(&dueDate, "due-date", "", "due date (YYYY-MM-DD or RFC3339)")
+	cmd.Flags().StringSliceVar(&dependsOn, "depends-on", nil, "add a task this one waits for (TASK-N; can repeat)")
+	cmd.Flags().StringSliceVar(&noDependsOn, "no-depends-on", nil, "remove a dependency (TASK-N; can repeat)")
 	return cmd
 }
 

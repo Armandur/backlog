@@ -202,6 +202,11 @@ func buildTaskFilter(f models.TaskFilter) (string, []interface{}) {
 	if !f.IncludeArchived {
 		conds = append(conds, `t.archived_at IS NULL`)
 	}
+	if f.Ready {
+		conds = append(conds, `t.status='todo' AND NOT EXISTS (
+			SELECT 1 FROM task_dependencies d JOIN tasks dt ON dt.id = d.depends_on_id
+			WHERE d.task_id = t.id AND dt.status <> 'done')`)
+	}
 	if len(f.Labels) > 0 {
 		placeholders := strings.Repeat("?,", len(f.Labels))
 		placeholders = placeholders[:len(placeholders)-1]

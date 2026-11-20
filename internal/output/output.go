@@ -204,6 +204,8 @@ func (p *Printer) Task(task *models.Task) {
 	if len(task.Labels) > 0 {
 		fmt.Fprintf(p.w, "Labels:      %s\n", labelNames(task.Labels))
 	}
+	p.taskRefs("Depends on:", task.DependsOn)
+	p.taskRefs("Blocks:", task.Blocks)
 	fmt.Fprintf(p.w, "Created:     %s\n", formatTime(task.CreatedAt))
 	if task.Description != "" {
 		fmt.Fprintf(p.w, "\n--- Description ---\n%s\n", task.Description)
@@ -222,6 +224,16 @@ func (p *Printer) Task(task *models.Task) {
 		for _, c := range task.Comments {
 			fmt.Fprintf(p.w, "%s [%s:%s]: %s\n", formatTime(c.CreatedAt), c.Actor.Kind, c.Actor.Name, c.Body)
 		}
+	}
+}
+
+// taskRefs prints one line per task: "Depends on:  TASK-3 [done] Title".
+func (p *Printer) taskRefs(label string, refs []models.TaskRef) {
+	for i, r := range refs {
+		if i > 0 {
+			label = ""
+		}
+		fmt.Fprintf(p.w, "%-13sTASK-%d [%s] %s\n", label, r.Seq, colorStatus(string(r.Status)), r.Title)
 	}
 }
 

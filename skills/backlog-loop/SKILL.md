@@ -99,10 +99,10 @@ backlog --profile default task show <ref> --json
 Otherwise:
 
 ```sh
-backlog --profile default task list --project <project> --status todo --sort priority --json
+backlog --profile default task list --project <project> --ready --sort priority --json
 ```
 
-Pick the **first** task. Sort `priority` orders P1 → P5; within priority, lower `seq` first. If the result is empty, tell the user "no todo tasks in `<project>`", show what's `doing`, and exit. Do not invent work.
+`--ready` ger bara todo-tasks vars beroenden alla är `done`, så loopen tar aldrig ett paket före det som det bygger på. Pick the **first** task. Sort `priority` orders P1 → P5; within priority, lower `seq` first. Är listan tom: kör samma kommando med `--status todo` i stället för `--ready`. Finns det todo-tasks som väntar på beroenden: visa dem med `depends_on` och avsluta. Finns inga todo-tasks alls: säg "no todo tasks in `<project>`", visa vad som står i `doing` och avsluta. Do not invent work.
 
 Capture from the JSON: `id` (ULID), `seq` (`TASK-N`), `title`, `description`, `type`, `priority`, `labels`, any attached `plans`.
 
@@ -452,7 +452,7 @@ på "Blockerad efter", inte "Blocked after".
 
 ```sh
 backlog --profile default project list --json
-backlog --profile default task list --project <project> --status todo --sort priority --json
+backlog --profile default task list --project <project> --ready --sort priority --json
 backlog --profile default task show TASK-N --json
 backlog --profile default task move TASK-N --status doing --as "ai:<modell>"
 backlog --profile default task move TASK-N --status done  --as "ai:<modell>"

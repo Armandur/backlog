@@ -21,6 +21,7 @@ type TaskService struct {
 	plans    *repo.PlanRepo
 	comments *repo.CommentRepo
 	activity *repo.ActivityRepo
+	deps     *repo.DependencyRepo
 	plan     *PlanService
 	label    *LabelService
 }
@@ -33,6 +34,7 @@ func NewTaskService(db *sql.DB, ps *PlanService, ls *LabelService) *TaskService 
 		plans:    repo.NewPlanRepo(db),
 		comments: repo.NewCommentRepo(db),
 		activity: repo.NewActivityRepo(db),
+		deps:     repo.NewDependencyRepo(db),
 		plan:     ps,
 		label:    ls,
 	}
@@ -148,6 +150,13 @@ func (s *TaskService) Create(ctx context.Context, in models.CreateTaskInput) (*m
 		}
 	}
 
+	if err := s.applyDependencies(ctx, t, in.DependsOn, nil, in.Actor); err != nil {
+		return nil, rollback(err, "%w", err)
+	}
+	if err := s.loadDependencies(ctx, t); err != nil {
+		return nil, rollback(err, "%w", err)
+	}
+
 	s.logActivity(ctx, in.ProjectID, "task", t.ID, "created",
 		fmt.Sprintf("Created task %q (TASK-%d)", t.Title, t.Seq), in.Actor)
 	return t, nil
@@ -194,6 +203,9 @@ func (s *TaskService) Get(ctx context.Context, ref string, withPlans, withCommen
 		return nil, fmt.Errorf("load labels for task %s: %w", t.ID, err)
 	}
 	t.Labels = labels
+	if err := s.loadDependencies(ctx, t); err != nil {
+		return nil, err
+	}
 	if withPlans {
 		plans, err := s.plans.ListPlansForTask(ctx, t.ID, false)
 		if err != nil {
@@ -245,6 +257,9 @@ func (s *TaskService) List(ctx context.Context, f models.TaskFilter) ([]*models.
 			if proj, err := s.projects.GetByID(ctx, t.ProjectID); err == nil {
 				t.Project = proj
 			}
+			if err := s.loadDependencies(ctx, t); err != nil {
+				return nil, 0, err
+			}
 			return []*models.Task{t}, 1, nil
 		}
 		tasks, err = s.tasks.ListBySearch(ctx, f)
@@ -254,9 +269,12 @@ func (s *TaskService) List(ctx context.Context, f models.TaskFilter) ([]*models.
 	if err != nil {
 		return nil, 0, err
 	}
-	// Attach labels
+	// Attach labels and dependencies
 	for _, t := range tasks {
 		t.Labels, _ = s.labelsForTask(ctx, t.ID)
+		if err := s.loadDependencies(ctx, t); err != nil {
+			return nil, 0, err
+		}
 	}
 	// Always run a separate count when paginating so the total reflects the
 	// full result set, not just the current page.
@@ -336,9 +354,15 @@ func (s *TaskService) Update(ctx context.Context, ref string, in models.UpdateTa
 	if in.ProjectPath != nil {
 		t.ProjectPath = *in.ProjectPath
 	}
+	if err := s.applyDependencies(ctx, t, in.AddDependsOn, in.RemoveDependsOn, actor); err != nil {
+		return nil, err
+	}
 	t.UpdatedAt = timeutil.Now()
 	if err := s.tasks.Update(ctx, t); err != nil {
 		return nil, fmt.Errorf("update task: %w", err)
+	}
+	if err := s.loadDependencies(ctx, t); err != nil {
+		return nil, err
 	}
 
 	if statusChanged {
