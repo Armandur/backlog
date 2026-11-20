@@ -37,8 +37,11 @@ func newImportCmd() *cobra.Command {
 			if dryRun {
 				fmt.Print("[dry-run] ")
 			}
-			fmt.Printf("imported: %d projects, %d tasks, %d plans, %d comments, %d labels\n",
-				result.Projects, result.Tasks, result.Plans, result.Comments, result.Labels)
+			fmt.Printf("imported: %d projects, %d tasks, %d plans, %d comments, %d labels, %d dependencies\n",
+				result.Projects, result.Tasks, result.Plans, result.Comments, result.Labels, result.Dependencies)
+			if result.SkippedDependencies > 0 {
+				fmt.Printf("skipped %d dependencies on tasks outside the import\n", result.SkippedDependencies)
+			}
 			return nil
 		},
 	}

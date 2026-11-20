@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -185,6 +186,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			Sort:            q.Get("sort"),
 			Order:           q.Get("order"),
 			IncludeArchived: q.Get("include_archived") == "true" || q.Get("include_archived") == "1",
+			Ready:           q.Get("ready") == "true" || q.Get("ready") == "1",
 			Limit:           50,
 			Offset:          0,
 		}
@@ -209,6 +211,10 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 				jsonError(w, fmt.Errorf("invalid search syntax"), 400)
 				return
 			}
+			if errors.Is(err, service.ErrReadyNeedsTodo) {
+				jsonError(w, err, 400)
+				return
+			}
 			jsonError(w, err, 500)
 			return
 		}
@@ -229,6 +235,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			ExternalRef string   `json:"external_ref"`
 			ProjectPath string   `json:"project_path"`
 			Labels      []string `json:"labels"`
+			DependsOn   []string `json:"depends_on"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			jsonError(w, err, 400)
@@ -261,6 +268,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			ExternalRef: in.ExternalRef,
 			ProjectPath: in.ProjectPath,
 			Labels:      in.Labels,
+			DependsOn:   in.DependsOn,
 			Actor:       s.actor,
 		})
 		if err != nil {
@@ -301,23 +309,25 @@ func (s *Server) handleTaskByID(w http.ResponseWriter, r *http.Request) {
 
 	case r.Method == http.MethodPatch && sub == "":
 		var in struct {
-			Title       *string `json:"title"`
-			Description *string `json:"description"`
-			Type        *string `json:"type"`
-			Priority    *int    `json:"priority"`
-			Assignee    *string `json:"assignee"`
-			DueAt       *int64  `json:"due_at"`
-			DueDate     *string `json:"due_date"`
-			ClearDueAt  bool    `json:"clear_due_at"`
-			Source      *string `json:"source"`
-			ExternalRef *string `json:"external_ref"`
-			ProjectPath *string `json:"project_path"`
+			Title           *string  `json:"title"`
+			Description     *string  `json:"description"`
+			Type            *string  `json:"type"`
+			Priority        *int     `json:"priority"`
+			Assignee        *string  `json:"assignee"`
+			DueAt           *int64   `json:"due_at"`
+			DueDate         *string  `json:"due_date"`
+			ClearDueAt      bool     `json:"clear_due_at"`
+			Source          *string  `json:"source"`
+			ExternalRef     *string  `json:"external_ref"`
+			ProjectPath     *string  `json:"project_path"`
+			AddDependsOn    []string `json:"add_depends_on"`
+			RemoveDependsOn []string `json:"remove_depends_on"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			jsonError(w, err, 400)
 			return
 		}
-		inp := models.UpdateTaskInput{}
+		inp := models.UpdateTaskInput{AddDependsOn: in.AddDependsOn, RemoveDependsOn: in.RemoveDependsOn}
 		if in.Title != nil {
 			inp.Title = in.Title
 		}

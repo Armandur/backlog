@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -141,6 +142,26 @@ func (s *server) callTool(ctx context.Context, params json.RawMessage) (interfac
 		}
 		return ""
 	}
+	// strList accepts a JSON array of strings or one string with refs
+	// separated by commas or spaces.
+	strList := func(k string) []string {
+		var out []string
+		switch v := args[k].(type) {
+		case []interface{}:
+			for _, item := range v {
+				if sv, ok := item.(string); ok && strings.TrimSpace(sv) != "" {
+					out = append(out, strings.TrimSpace(sv))
+				}
+			}
+		case string:
+			out = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' })
+		}
+		return out
+	}
+	boolArg := func(k string) bool {
+		v, _ := args[k].(bool)
+		return v
+	}
 	intArg := func(k string) int {
 		if v, ok := args[k]; ok {
 			switch n := v.(type) {
@@ -179,6 +200,7 @@ func (s *server) callTool(ctx context.Context, params json.RawMessage) (interfac
 			Source:      str("source"),
 			ExternalRef: str("external_ref"),
 			ProjectPath: str("project_path"),
+			DependsOn:   strList("depends_on"),
 		}
 		if dd := str("due_date"); dd != "" {
 			ts, err := parseMCPDate(dd)
@@ -199,12 +221,16 @@ func (s *server) callTool(ctx context.Context, params json.RawMessage) (interfac
 			Status:       models.TaskStatus(str("status")),
 			Type:         models.TaskType(str("type")),
 			Priority:     intArg("priority"),
+			Ready:        boolArg("ready"),
 			Limit:        50,
 		}
 		if s := str("search"); s != "" {
 			f.Search = s
 		}
 		tasks, total, err := taskSvc.List(ctx, f)
+		if errors.Is(err, service.ErrReadyNeedsTodo) {
+			return nil, fmt.Errorf("ready lists todo tasks only and cannot be combined with status %s", f.Status)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -243,6 +269,8 @@ func (s *server) callTool(ctx context.Context, params json.RawMessage) (interfac
 		if v := str("project_path"); v != "" {
 			in.ProjectPath = &v
 		}
+		in.AddDependsOn = strList("depends_on")
+		in.RemoveDependsOn = strList("remove_depends_on")
 		t, err := taskSvc.Update(ctx, id, in, s.actor)
 		if err != nil {
 			return nil, err
@@ -397,6 +425,7 @@ func tools() []map[string]interface{} {
 			opt("external_ref", "string", "external reference URL or ID"),
 			opt("due_date", "string", "due date (YYYY-MM-DD or RFC3339)"),
 			opt("project_path", "string", "file path or URL for relevant code location (e.g. internal/handlers/search.go:84)"),
+			opt("depends_on", "array", "task refs this task waits for, e.g. [\"TASK-12\"]"),
 		)),
 		tool("task_list", "List tasks", props(
 			opt("project", "string", "filter by project alias"),
@@ -404,6 +433,7 @@ func tools() []map[string]interface{} {
 			opt("type", "string", "task type filter"),
 			opt("priority", "integer", "priority filter"),
 			opt("search", "string", "full-text search"),
+			opt("ready", "boolean", "only todo tasks whose dependencies are all done"),
 		)),
 		tool("task_show", "Show task details with plans and comments", props(req("id", "string", "task ref: TASK-N, bare integer, or ULID"))),
 		tool("task_update", "Update a task", props(
@@ -414,6 +444,8 @@ func tools() []map[string]interface{} {
 			opt("priority", "integer", "1-5"),
 			opt("due_date", "string", "due date (YYYY-MM-DD or RFC3339)"),
 			opt("project_path", "string", "file path or URL for relevant code location"),
+			opt("depends_on", "array", "task refs to add as dependencies; a cycle is refused"),
+			opt("remove_depends_on", "array", "task refs to remove as dependencies"),
 		)),
 		tool("task_move", "Move task to a status", props(
 			req("id", "string", "task ref: TASK-N, bare integer, or ULID"),
@@ -474,7 +506,11 @@ func props(fields ...map[string]interface{}) map[string]interface{} {
 	var required []string
 	for _, f := range fields {
 		n := f["name"].(string)
-		properties[n] = map[string]string{"type": f["type"].(string), "description": f["desc"].(string)}
+		p := map[string]interface{}{"type": f["type"].(string), "description": f["desc"].(string)}
+		if p["type"] == "array" {
+			p["items"] = map[string]string{"type": "string"}
+		}
+		properties[n] = p
 		if f["required"].(bool) {
 			required = append(required, n)
 		}

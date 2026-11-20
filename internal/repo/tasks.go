@@ -97,7 +97,13 @@ func (r *TaskRepo) Count(ctx context.Context, f models.TaskFilter) (int, error) 
 }
 
 func (r *TaskRepo) Update(ctx context.Context, t *models.Task) error {
-	_, err := r.db.ExecContext(ctx,
+	return r.UpdateWith(ctx, r.db, t)
+}
+
+// UpdateWith updates a task using the supplied Runner, so callers can run
+// the update inside a larger transaction.
+func (r *TaskRepo) UpdateWith(ctx context.Context, runner Runner, t *models.Task) error {
+	_, err := runner.ExecContext(ctx,
 		`UPDATE tasks SET title=?,description=?,type=?,status=?,priority=?,assignee=?,
 		due_at=?,source=?,external_ref=?,completed_at=?,archived_at=?,updated_at=?,project_path=? WHERE id=?`,
 		t.Title, t.Description, t.Type, t.Status, t.Priority, t.Assignee,
@@ -201,6 +207,11 @@ func buildTaskFilter(f models.TaskFilter) (string, []interface{}) {
 	}
 	if !f.IncludeArchived {
 		conds = append(conds, `t.archived_at IS NULL`)
+	}
+	if f.Ready {
+		conds = append(conds, `t.status='todo' AND NOT EXISTS (
+			SELECT 1 FROM task_dependencies d JOIN tasks dt ON dt.id = d.depends_on_id
+			WHERE d.task_id = t.id AND dt.status <> 'done')`)
 	}
 	if len(f.Labels) > 0 {
 		placeholders := strings.Repeat("?,", len(f.Labels))

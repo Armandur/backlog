@@ -132,6 +132,7 @@ Flags:
 - `--project-path` fil:rad eller URL till relevant kodställe (t.ex. `internal/handlers/search.go:84`)
 - `--from-file <file>` - `.json` is parsed as a full task payload, anything else is loaded as the description
 - `--due-date` YYYY-MM-DD or RFC3339
+- `--depends-on TASK-N` repeatable: tasken väntar på TASK-N (se **Dependencies**)
 
 ### List
 
@@ -152,6 +153,7 @@ backlog task list --sort seq --json           # sort by TASK-N order
 backlog task list --sort created --json       # newest first
 backlog task list --sort updated --json
 backlog task list --sort title --json
+backlog task list --project api --ready --json   # todo-tasks vars beroenden alla är done
 ```
 
 JSON response shape (CLI):
@@ -171,6 +173,8 @@ JSON response shape (CLI):
       "source": "semgrep",
       "external_ref": "SEMGREP-042",
       "labels": [{ "name": "security", "color": "" }],
+      "depends_on": [{ "id": "01KR...", "seq": 7, "title": "Bygg kärnan", "status": "done" }],
+      "blocks": [],
       "created_at": 1746724800000000000,
       "updated_at": 1746724800000000000
     }
@@ -195,6 +199,28 @@ backlog task update TASK-1 --title "New title" --priority P2 --as ai:<modell>
 backlog task update TASK-1 --assignee alice --source pentest-report
 backlog task update TASK-1 --due-date 2026-06-01
 ```
+
+### Dependencies
+
+En task kan vänta på andra tasks. `task show` visar båda riktningarna med
+status: `depends_on` (vad tasken väntar på) och `blocks` (vad som väntar på
+den). `task show`, `task list`, `task add` och `task update` har alltid båda
+fälten i JSON, som tom lista när inget finns.
+
+```sh
+backlog task update TASK-5 --depends-on TASK-3 --depends-on TASK-4 --as ai:<modell>
+backlog task update TASK-5 --no-depends-on TASK-4 --as ai:<modell>
+backlog task add -p api -t "Import" --depends-on TASK-3 --as ai:<modell>
+backlog task list --project api --ready --json
+```
+
+- `--ready` visar bara todo-tasks vars beroenden alla är `done`. Den går inte
+  att kombinera med `--status` annat än `todo`.
+- Ett beroende som skulle ge en cirkel nekas, och felet visar kedjan:
+  `TASK-1 cannot depend on TASK-2: that would create a cycle (TASK-1 -> TASK-2 -> TASK-1)`.
+- Ett beroende på tasken själv nekas. `--no-depends-on` på ett beroende som
+  inte finns ger fel.
+- Ändringarna i ett anrop sker helt eller inte alls.
 
 ### Move status
 

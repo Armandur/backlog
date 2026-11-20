@@ -99,10 +99,10 @@ backlog --profile default task show <ref> --json
 Otherwise:
 
 ```sh
-backlog --profile default task list --project <project> --status todo --sort priority --json
+backlog --profile default task list --project <project> --ready --sort priority --json
 ```
 
-Pick the **first** task. Sort `priority` orders P1 → P5; within priority, lower `seq` first. If the result is empty, tell the user "no todo tasks in `<project>`", show what's `doing`, and exit. Do not invent work.
+`--ready` ger bara todo-tasks vars beroenden alla är `done`, så loopen tar aldrig ett paket före det som det bygger på. Pick the **first** task. Sort `priority` orders P1 → P5; within priority, lower `seq` first. Är listan tom: kör samma kommando med `--status todo` i stället för `--ready`. Finns det todo-tasks som väntar på beroenden: visa dem med `depends_on` och avsluta. Finns inga todo-tasks alls: säg "no todo tasks in `<project>`", visa vad som står i `doing` och avsluta. Do not invent work.
 
 Capture from the JSON: `id` (ULID), `seq` (`TASK-N`), `title`, `description`, `type`, `priority`, `labels`, any attached `plans`.
 
@@ -343,18 +343,39 @@ Rasmus svarar i panelen, eller med `/backlog-loop <projekt> TASK-N
 --vantar-test`. Läs svaret och välj väg.
 
 **Ok:** merga grenen till main lokalt, städa och flytta till done.
-Mergen sker i huvudcheckouten, som måste stå på main. Står den på
-`task-<N>` (ensam panel): byt till main först. Står den på en annan tasks
-gren: byt inte, fråga Rasmus. Ocommittade filer som inte hör till tasken,
-till exempel en speglad `backlog.md`, får följa med vid bytet. Vägrar
-`git switch` för att lokala ändringar skulle skrivas över: tvinga inte,
-fråga Rasmus. Ta bort etiketten först när mergen gått igenom.
+Var mergen sker beror på var main kan stå utcheckad:
+
+- **Huvudcheckouten står på main:** merga där.
+- **Huvudcheckouten står på `task-<N>`** (ensam panel): byt till main
+  först och merga där.
+- **Tasken har en worktree och huvudcheckouten står på en annan gren**
+  (till exempel `pm` eller en annan tasks gren): byt inte i
+  huvudcheckouten. Byt till main i worktreen, merga där och ta sedan bort
+  worktreen. Den får inte stå kvar på main, för då vägrar nästa
+  `git checkout main` i huvudcheckouten, även i `bygg-backlog.sh`.
+- **Ingen worktree och huvudcheckouten står på en annan tasks gren:** byt
+  inte, fråga Rasmus.
+
+Ligger flera tasks som staplade grenar i samma worktree (`task-<M>` byggd
+på `task-<N>`): merga den översta grenen. Den bär alla under sig. Ta bort
+etiketten på varje task som följer med.
+
+Ocommittade filer som inte hör till tasken, till exempel en speglad
+`backlog.md`, får följa med vid bytet. Vägrar `git switch` för att lokala
+ändringar skulle skrivas över: tvinga inte, fråga Rasmus. Ta bort
+etiketten först när mergen gått igenom.
 
 ```sh
-git -C <repo_path> branch --show-current      # main, eller task-<N> vid ensam panel
+git -C <repo_path> branch --show-current      # main, task-<N> eller annan gren
 git -C <repo_path> switch main                 # om den står på task-<N>
 git -C <repo_path> merge --no-ff task-<N>      # lokalt, ingen push
-git -C <repo_path> worktree remove ../<repo>-t<N>   # om en worktree fanns
+git -C <repo_path> worktree remove <worktree>  # om en worktree fanns
+
+# Worktree och annan gren i huvudcheckouten:
+git -C <worktree> switch main
+git -C <worktree> merge --no-ff task-<N>       # översta grenen vid stapling
+git -C <repo_path> worktree remove <worktree>
+
 backlog --profile default label detach vantar-test --task TASK-N --as "ai:<modell>"
 backlog --profile default comment add \
   "Rasmus testade och gav ok <datum>. Grenen task-<N> mergad till main." \
@@ -452,7 +473,7 @@ på "Blockerad efter", inte "Blocked after".
 
 ```sh
 backlog --profile default project list --json
-backlog --profile default task list --project <project> --status todo --sort priority --json
+backlog --profile default task list --project <project> --ready --sort priority --json
 backlog --profile default task show TASK-N --json
 backlog --profile default task move TASK-N --status doing --as "ai:<modell>"
 backlog --profile default task move TASK-N --status done  --as "ai:<modell>"

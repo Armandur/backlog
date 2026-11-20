@@ -128,8 +128,20 @@ type Task struct {
 	UpdatedAt   int64      `json:"updated_at"`
 	ProjectPath string     `json:"project_path,omitempty"`
 	Labels      []Label    `json:"labels,omitempty"`
-	Plans       []Plan     `json:"plans,omitempty"`
-	Comments    []Comment  `json:"comments,omitempty"`
+	// DependsOn lists the tasks this one waits for, Blocks the tasks that
+	// wait for this one. Always present in JSON, empty when there are none.
+	DependsOn []TaskRef `json:"depends_on"`
+	Blocks    []TaskRef `json:"blocks"`
+	Plans     []Plan    `json:"plans,omitempty"`
+	Comments  []Comment `json:"comments,omitempty"`
+}
+
+// TaskRef is the short form of a task shown in dependency lists.
+type TaskRef struct {
+	ID     string     `json:"id"`
+	Seq    int        `json:"seq"`
+	Title  string     `json:"title"`
+	Status TaskStatus `json:"status"`
 }
 
 type TaskFilter struct {
@@ -148,6 +160,8 @@ type TaskFilter struct {
 	Offset          int
 	Sort            string // "priority", "created", "updated", "seq" (default: priority)
 	Order           string // "asc" or "desc"
+	// Ready keeps only todo tasks whose dependencies are all done.
+	Ready bool
 }
 
 type CreateTaskInput struct {
@@ -165,6 +179,7 @@ type CreateTaskInput struct {
 	ProjectPath string
 	Labels      []string
 	Plans       []CreatePlanInput
+	DependsOn   []string // task refs (TASK-N, N or ULID)
 }
 
 type UpdateTaskInput struct {
@@ -179,6 +194,9 @@ type UpdateTaskInput struct {
 	Source      *string
 	ExternalRef *string
 	ProjectPath *string
+	// AddDependsOn and RemoveDependsOn take task refs (TASK-N, N or ULID).
+	AddDependsOn    []string
+	RemoveDependsOn []string
 }
 
 // ---- Plan ----

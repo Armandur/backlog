@@ -1871,6 +1871,54 @@ function showTaskLabelPopover(anchorEl, task, suggestions = []) {
 }
 
 // ─── Task Detail ─────────────────────────────────────────────────────────────
+// depRefsHTML renders dependency refs as links with status. Only the
+// depends-on side can be removed here; a blocking edge belongs to the other task.
+function depRefsHTML(refs, removable) {
+  if (!refs || refs.length === 0) return '<span class="task-label-empty">-</span>';
+  return refs.map(r => `<span class="dep-ref">
+      <a href="#" class="dep-link mono" data-id="${escapeHtml(r.id)}" data-seq="${r.seq}">TASK-${r.seq}</a>
+      ${statusBadge(escapeHtml(r.status))}
+      <span class="dep-title" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</span>
+      ${removable ? `<button class="dep-remove" data-seq="${r.seq}" title="Remove dependency">×</button>` : ''}
+    </span>`).join('');
+}
+
+function bindDependencyControls(task) {
+  const reload = () => navigate('task-detail', { currentTaskId: task.id, currentTaskSeq: task.seq, _replace: true });
+  const patch = async (body, okMsg) => {
+    try {
+      await api.patch('/tasks/' + task.id, body);
+      toast(okMsg);
+      reload();
+    } catch (err) { toast(err.message, 'error'); }
+  };
+  $$('.dep-link').forEach(a => a.onclick = e => {
+    e.preventDefault();
+    navigate('task-detail', { currentTaskId: a.dataset.id, currentTaskSeq: parseInt(a.dataset.seq, 10) });
+  });
+  $$('.dep-remove').forEach(btn => btn.onclick = e => {
+    e.preventDefault();
+    patch({ remove_depends_on: ['TASK-' + btn.dataset.seq] }, 'Dependency removed');
+  });
+  const trigger = $('#btn-open-dep-add');
+  if (!trigger) return;
+  trigger.onclick = () => {
+    const form = document.createElement('form');
+    form.className = 'dep-add-form';
+    form.innerHTML = '<input class="form-control dep-input" id="dep-input" placeholder="TASK-N" autocomplete="off" aria-label="Task this one depends on"><button class="btn btn-primary btn-sm" type="submit">Add</button>';
+    trigger.replaceWith(form);
+    const input = form.querySelector('input');
+    input.focus();
+    input.onkeydown = e => { if (e.key === 'Escape') reload(); };
+    form.onsubmit = e => {
+      e.preventDefault();
+      const ref = input.value.trim();
+      if (!ref) return;
+      patch({ add_depends_on: [/^\d+$/.test(ref) ? 'TASK-' + ref : ref] }, 'Dependency added');
+    };
+  };
+}
+
 async function renderTaskDetail(el) {
   let task;
   try {
@@ -1993,6 +2041,19 @@ async function renderTaskDetail(el) {
               </div>
             </div>
           </div>
+          <div class="prop prop-readonly prop-label-manager">
+            <div class="prop-label">Depends on</div>
+            <div class="prop-value">
+              <div class="dep-list" id="dep-list">
+                ${depRefsHTML(task.depends_on, true)}
+                <button class="task-label-trigger" id="btn-open-dep-add" title="Add a task this one waits for">+ Dependency</button>
+              </div>
+            </div>
+          </div>
+          <div class="prop prop-readonly prop-label-manager">
+            <div class="prop-label">Blocks</div>
+            <div class="prop-value"><div class="dep-list">${depRefsHTML(task.blocks, false)}</div></div>
+          </div>
         </div>
       </aside>
     </div>`;
@@ -2038,6 +2099,8 @@ async function renderTaskDetail(el) {
   $('#btn-edit-task').onclick = () => showEditTaskModal(task);
 
   $('#btn-open-label-add').onclick = e => showTaskLabelPopover(e.currentTarget, task, unattachedLabels);
+
+  bindDependencyControls(task);
 
   $$('.label-detach').forEach(btn => btn.onclick = async e => {
     e.preventDefault();

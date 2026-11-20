@@ -13,11 +13,15 @@ import (
 
 // ImportResult summarises a cross-workspace import.
 type ImportResult struct {
-	Projects int
-	Tasks    int
-	Plans    int
-	Comments int
-	Labels   int
+	Projects     int
+	Tasks        int
+	Plans        int
+	Comments     int
+	Labels       int
+	Dependencies int
+	// SkippedDependencies counts imported tasks' dependencies on tasks that
+	// were left out of the import, e.g. in another project under --project.
+	SkippedDependencies int
 }
 
 // ImportFromDB copies tasks (and their plans/comments) from srcDB into dstDB.
@@ -33,6 +37,7 @@ func ImportFromDB(ctx context.Context, dstDB, srcDB *sql.DB, projectAlias string
 	dstTasks := extrepo.NewTaskRepo(dstDB)
 	dstPlans := extrepo.NewPlanRepo(dstDB)
 	dstComments := extrepo.NewCommentRepo(dstDB)
+	dstDeps := extrepo.NewDependencyRepo(dstDB)
 	dstLabelSvc := NewLabelService(dstDB)
 
 	result := &ImportResult{}
@@ -97,12 +102,16 @@ func ImportFromDB(ctx context.Context, dstDB, srcDB *sql.DB, projectAlias string
 		return nil, fmt.Errorf("import: list source tasks: %w", err)
 	}
 
+	// task ID remapping: srcID -> dstID, for dependencies
+	taskMap := map[string]string{}
+
 	for _, st := range allTasks {
 		dstProjID, ok := projMap[st.ProjectID]
 		if !ok {
 			continue
 		}
 		newID := ids.New()
+		taskMap[st.ID] = newID
 		now := timeutil.Now()
 		extRef := fmt.Sprintf("imported:%s", st.ID)
 		if st.ExternalRef != "" {
@@ -195,6 +204,29 @@ func ImportFromDB(ctx context.Context, dstDB, srcDB *sql.DB, projectAlias string
 			}
 			result.Comments++
 		}
+	}
+
+	// Dependencies, once every task exists. An edge to a task outside the
+	// import (another project under --project) is left out.
+	edges, err := extrepo.NewDependencyRepo(srcDB).Edges(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("import: list source dependencies: %w", err)
+	}
+	for _, e := range edges {
+		taskID, ok1 := taskMap[e[0]]
+		depID, ok2 := taskMap[e[1]]
+		if ok1 && !ok2 {
+			result.SkippedDependencies++
+		}
+		if !ok1 || !ok2 {
+			continue
+		}
+		if !dryRun {
+			if _, err := dstDeps.Add(ctx, dstDB, taskID, depID, timeutil.Now()); err != nil {
+				return nil, fmt.Errorf("import: insert dependency: %w", err)
+			}
+		}
+		result.Dependencies++
 	}
 
 	return result, nil
