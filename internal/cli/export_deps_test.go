@@ -104,3 +104,39 @@ func TestImportFromDatabaseWithoutDependencyTable(t *testing.T) {
 		t.Fatalf("import summary = %q", out)
 	}
 }
+
+// TestImportProjectReportsSkippedDependencies imports one project where a
+// task depends on a task in another project. The edge cannot come along,
+// and the summary must say so.
+func TestImportProjectReportsSkippedDependencies(t *testing.T) {
+	src := cliEnv(t)
+	for _, args := range [][]string{
+		{"project", "add", "Other", "--alias", "other"},
+		{"task", "add", "--title", "A", "--project", "other"},
+		{"task", "add", "--title", "B", "--project", "proj", "--depends-on", "TASK-1"},
+		{"task", "add", "--title", "C", "--project", "proj", "--depends-on", "TASK-2"},
+	} {
+		if _, err := runCLI(t, append(src, args...)...); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+
+	dst := []string{"--db", filepath.Join(t.TempDir(), "dst.db"), "--as", "ai:test"}
+	out, err := runCLI(t, append(dst, "import", src[1], "--project", "proj")...)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if !strings.Contains(out, "1 dependencies") || !strings.Contains(out, "skipped 1 dependencies on tasks outside the import") {
+		t.Fatalf("import summary = %q, want C->B kept and B->A reported as skipped", out)
+	}
+
+	// The whole database brings every edge, so nothing is skipped.
+	all := []string{"--db", filepath.Join(t.TempDir(), "all.db"), "--as", "ai:test"}
+	out, err = runCLI(t, append(all, "import", src[1])...)
+	if err != nil {
+		t.Fatalf("import all: %v", err)
+	}
+	if strings.Contains(out, "skipped") {
+		t.Fatalf("full import reports skipped dependencies: %q", out)
+	}
+}

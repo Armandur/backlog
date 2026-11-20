@@ -19,6 +19,9 @@ type ImportResult struct {
 	Comments     int
 	Labels       int
 	Dependencies int
+	// SkippedDependencies counts imported tasks' dependencies on tasks that
+	// were left out of the import, e.g. in another project under --project.
+	SkippedDependencies int
 }
 
 // ImportFromDB copies tasks (and their plans/comments) from srcDB into dstDB.
@@ -212,6 +215,9 @@ func ImportFromDB(ctx context.Context, dstDB, srcDB *sql.DB, projectAlias string
 	for _, e := range edges {
 		taskID, ok1 := taskMap[e[0]]
 		depID, ok2 := taskMap[e[1]]
+		if ok1 && !ok2 {
+			result.SkippedDependencies++
+		}
 		if !ok1 || !ok2 {
 			continue
 		}
