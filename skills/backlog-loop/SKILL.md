@@ -310,7 +310,8 @@ TASK-N (<titel>) väntar på test. Judge godkände på försök <N>. Gren task-<
 Gå vidare till 6b först när Rasmus svarat.
 
 **Utan testläge:** merga grenen till main lokalt och städa worktreen, med
-samma kommandon som vid ok i 6b. Kommentera sedan och flytta till done.
+git-kommandona från ok-vägen i 6b. Etiketten och ok-kommentaren därifrån
+hör inte hit. Kommentera i stället enligt mallen nedan och flytta till done.
 
 ```sh
 backlog --profile default comment add "$(cat <<'EOF'
@@ -343,12 +344,14 @@ Rasmus svarar i panelen, eller med `/backlog-loop <projekt> TASK-N
 
 **Ok:** merga grenen till main lokalt, städa och flytta till done.
 Mergen sker i huvudcheckouten, som måste stå på main. Står den på
-`task-<N>` (ensam panel): byt till main först. Byt bara när `git status
---porcelain` är tomt. Står den på en annan tasks gren, eller är den smutsig:
-byt inte, fråga Rasmus. Ta bort etiketten först när mergen gått igenom.
+`task-<N>` (ensam panel): byt till main först. Står den på en annan tasks
+gren: byt inte, fråga Rasmus. Ocommittade filer som inte hör till tasken,
+till exempel en speglad `backlog.md`, får följa med vid bytet. Vägrar
+`git switch` för att lokala ändringar skulle skrivas över: tvinga inte,
+fråga Rasmus. Ta bort etiketten först när mergen gått igenom.
 
 ```sh
-git -C <repo_path> status --porcelain          # måste vara tomt
+git -C <repo_path> branch --show-current      # main, eller task-<N> vid ensam panel
 git -C <repo_path> switch main                 # om den står på task-<N>
 git -C <repo_path> merge --no-ff task-<N>      # lokalt, ingen push
 git -C <repo_path> worktree remove ../<repo>-t<N>   # om en worktree fanns
