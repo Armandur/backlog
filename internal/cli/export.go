@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -70,7 +71,7 @@ func newExportCmd() *cobra.Command {
 
 func exportCSV(out *os.File, tasks []*models.Task) error {
 	w := csv.NewWriter(out)
-	w.Write([]string{"id", "project", "title", "type", "status", "priority", "assignee", "actor_kind", "actor_name", "source", "external_ref", "created_at"}) //nolint:errcheck
+	w.Write([]string{"id", "project", "title", "type", "status", "priority", "assignee", "actor_kind", "actor_name", "source", "external_ref", "created_at", "depends_on"}) //nolint:errcheck
 	for _, t := range tasks {
 		proj := ""
 		if t.Project != nil {
@@ -80,7 +81,7 @@ func exportCSV(out *os.File, tasks []*models.Task) error {
 			t.ID, proj, t.Title, string(t.Type), string(t.Status),
 			"P" + strconv.Itoa(t.Priority), t.Assignee,
 			string(t.Actor.Kind), t.Actor.Name, t.Source, t.ExternalRef,
-			timeutil.FormatNanoISO(t.CreatedAt),
+			timeutil.FormatNanoISO(t.CreatedAt), taskRefList(t.DependsOn),
 		})
 	}
 	w.Flush()
@@ -98,8 +99,20 @@ func exportMarkdown(out *os.File, tasks []*models.Task) error {
 		if t.Description != "" {
 			fmt.Fprintf(out, "%s\n\n", t.Description)
 		}
-		fmt.Fprintf(out, "- ID: `%s`\n- Type: %s\n- Actor: %s:%s\n\n---\n\n",
-			t.ID, t.Type, t.Actor.Kind, t.Actor.Name)
+		fmt.Fprintf(out, "- ID: `%s`\n- Type: %s\n- Actor: %s:%s\n", t.ID, t.Type, t.Actor.Kind, t.Actor.Name)
+		if len(t.DependsOn) > 0 {
+			fmt.Fprintf(out, "- Depends on: %s\n", taskRefList(t.DependsOn))
+		}
+		fmt.Fprintf(out, "\n---\n\n")
 	}
 	return nil
+}
+
+// taskRefList renders refs as "TASK-1 TASK-2".
+func taskRefList(refs []models.TaskRef) string {
+	parts := make([]string, len(refs))
+	for i, r := range refs {
+		parts[i] = "TASK-" + strconv.Itoa(r.Seq)
+	}
+	return strings.Join(parts, " ")
 }

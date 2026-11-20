@@ -67,6 +67,33 @@ func (r *DependencyRepo) Path(ctx context.Context, runner Runner, fromID, toID s
 	return strings.Split(path, ","), nil
 }
 
+// Edges returns every (task_id, depends_on_id) pair. A database from before
+// migration 0009 has no table and yields no edges.
+func (r *DependencyRepo) Edges(ctx context.Context) ([][2]string, error) {
+	var n int
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='task_dependencies'`).Scan(&n); err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT task_id, depends_on_id FROM task_dependencies`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out [][2]string
+	for rows.Next() {
+		var e [2]string
+		if err := rows.Scan(&e[0], &e[1]); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // DependsOn lists the tasks taskID waits for.
 func (r *DependencyRepo) DependsOn(ctx context.Context, taskID string) ([]models.TaskRef, error) {
 	return r.refs(ctx, `SELECT t.id, COALESCE(t.task_seq,0), t.title, t.status
