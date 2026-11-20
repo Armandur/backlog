@@ -65,3 +65,38 @@ func TestDependencyChangesAreAllOrNothing(t *testing.T) {
 	require.Len(t, ready, 1)
 	require.Equal(t, 2, total, "A and C are ready, B waits for A")
 }
+
+// TestFailedTaskUpdateKeepsDependencies makes the task row write fail after
+// a dependency change and expects the dependencies to be unchanged.
+func TestFailedTaskUpdateKeepsDependencies(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	proj, err := service.NewProjectService(db).Create(ctx, models.CreateProjectInput{
+		Alias: "deps", Name: "Deps", Actor: testActor,
+	})
+	require.NoError(t, err)
+	svc := service.NewTaskService(db, service.NewPlanService(db), service.NewLabelService(db))
+	for _, title := range []string{"A", "B", "C"} {
+		_, err := svc.Create(ctx, models.CreateTaskInput{ProjectID: proj.ID, Title: title, Actor: testActor})
+		require.NoError(t, err)
+	}
+	_, err = svc.Update(ctx, "TASK-2", models.UpdateTaskInput{AddDependsOn: []string{"TASK-1"}}, testActor)
+	require.NoError(t, err)
+
+	// The trigger fails the task row write only for this title.
+	_, err = db.Exec(`CREATE TRIGGER fail_boom BEFORE UPDATE ON tasks WHEN NEW.title = 'boom'
+		BEGIN SELECT RAISE(ABORT, 'boom refused'); END`)
+	require.NoError(t, err)
+
+	boom := "boom"
+	_, err = svc.Update(ctx, "TASK-2", models.UpdateTaskInput{
+		Title: &boom, AddDependsOn: []string{"TASK-3"}, RemoveDependsOn: []string{"TASK-1"},
+	}, testActor)
+	require.ErrorContains(t, err, "boom refused")
+
+	got, err := svc.Get(ctx, "TASK-2", false, false)
+	require.NoError(t, err)
+	require.Equal(t, "B", got.Title)
+	require.Len(t, got.DependsOn, 1, "the failed update must neither add TASK-3 nor remove TASK-1")
+	require.Equal(t, 1, got.DependsOn[0].Seq)
+}

@@ -97,7 +97,13 @@ func (r *TaskRepo) Count(ctx context.Context, f models.TaskFilter) (int, error) 
 }
 
 func (r *TaskRepo) Update(ctx context.Context, t *models.Task) error {
-	_, err := r.db.ExecContext(ctx,
+	return r.UpdateWith(ctx, r.db, t)
+}
+
+// UpdateWith updates a task using the supplied Runner, so callers can run
+// the update inside a larger transaction.
+func (r *TaskRepo) UpdateWith(ctx context.Context, runner Runner, t *models.Task) error {
+	_, err := runner.ExecContext(ctx,
 		`UPDATE tasks SET title=?,description=?,type=?,status=?,priority=?,assignee=?,
 		due_at=?,source=?,external_ref=?,completed_at=?,archived_at=?,updated_at=?,project_path=? WHERE id=?`,
 		t.Title, t.Description, t.Type, t.Status, t.Priority, t.Assignee,

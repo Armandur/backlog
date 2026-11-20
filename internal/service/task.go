@@ -150,7 +150,7 @@ func (s *TaskService) Create(ctx context.Context, in models.CreateTaskInput) (*m
 		}
 	}
 
-	if err := s.applyDependencies(ctx, t, in.DependsOn, nil, in.Actor); err != nil {
+	if err := s.applyDependencies(ctx, t, in.DependsOn, nil, in.Actor, nil); err != nil {
 		return nil, rollback(err, "%w", err)
 	}
 	if err := s.loadDependencies(ctx, t); err != nil {
@@ -357,11 +357,19 @@ func (s *TaskService) Update(ctx context.Context, ref string, in models.UpdateTa
 	if in.ProjectPath != nil {
 		t.ProjectPath = *in.ProjectPath
 	}
-	if err := s.applyDependencies(ctx, t, in.AddDependsOn, in.RemoveDependsOn, actor); err != nil {
-		return nil, err
-	}
 	t.UpdatedAt = timeutil.Now()
-	if err := s.tasks.Update(ctx, t); err != nil {
+	saveTask := func(r repo.Runner) error {
+		if err := s.tasks.UpdateWith(ctx, r, t); err != nil {
+			return fmt.Errorf("update task: %w", err)
+		}
+		return nil
+	}
+	if len(in.AddDependsOn) > 0 || len(in.RemoveDependsOn) > 0 {
+		// The task row and its edges are saved in one transaction.
+		if err := s.applyDependencies(ctx, t, in.AddDependsOn, in.RemoveDependsOn, actor, saveTask); err != nil {
+			return nil, err
+		}
+	} else if err := s.tasks.Update(ctx, t); err != nil {
 		return nil, fmt.Errorf("update task: %w", err)
 	}
 	if err := s.loadDependencies(ctx, t); err != nil {

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mazen160/backlog/internal/models"
+	"github.com/mazen160/backlog/internal/repo"
 	"github.com/mazen160/backlog/internal/timeutil"
 )
 
@@ -18,7 +19,9 @@ var ErrReadyNeedsTodo = errors.New("ready lists todo tasks only and cannot be co
 // applyDependencies adds and removes depends-on edges for task t. All refs
 // are resolved and every edge is checked before anything is written, and the
 // writes run in one transaction, so a rejected edge leaves no partial change.
-func (s *TaskService) applyDependencies(ctx context.Context, t *models.Task, add, remove []string, actor models.Actor) error {
+// inTx, when set, runs in the same transaction before the commit, so a
+// caller's own write and the edges succeed or fail together.
+func (s *TaskService) applyDependencies(ctx context.Context, t *models.Task, add, remove []string, actor models.Actor, inTx func(repo.Runner) error) error {
 	if len(add) == 0 && len(remove) == 0 {
 		return nil
 	}
@@ -67,6 +70,11 @@ func (s *TaskService) applyDependencies(ctx context.Context, t *models.Task, add
 		}
 		if ok {
 			added = append(added, fmt.Sprintf("TASK-%d", dep.Seq))
+		}
+	}
+	if inTx != nil {
+		if err := inTx(tx); err != nil {
+			return err
 		}
 	}
 	if err := tx.Commit(); err != nil {
