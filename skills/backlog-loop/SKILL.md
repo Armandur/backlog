@@ -106,6 +106,10 @@ Pick the **first** task. Sort `priority` orders P1 → P5; within priority, lowe
 
 Capture from the JSON: `id` (ULID), `seq` (`TASK-N`), `title`, `description`, `type`, `priority`, `labels`, any attached `plans`.
 
+**Väntar tasken på test?** Står den i `doing` med etiketten `vantar-test`:
+börja inte om. Hoppa över steg 2-5 och gå direkt till 6b, på den befintliga
+grenen `task-<N>` och med det anspråk som redan finns.
+
 ### 2. Check the description is judgeable
 
 The Judge needs verifiable acceptance criteria to do its job. Read the description fully and decide whether it contains them.
@@ -338,9 +342,14 @@ Rasmus svarar i panelen, eller med `/backlog-loop <projekt> TASK-N
 --vantar-test`. Läs svaret och välj väg.
 
 **Ok:** merga grenen till main lokalt, städa och flytta till done.
-Etiketten tas bort först, så ingen tasklista visar den som väntande.
+Mergen sker i huvudcheckouten, som måste stå på main. Står den på
+`task-<N>` (ensam panel): byt till main först. Byt bara när `git status
+--porcelain` är tomt. Står den på en annan tasks gren, eller är den smutsig:
+byt inte, fråga Rasmus. Ta bort etiketten först när mergen gått igenom.
 
 ```sh
+git -C <repo_path> status --porcelain          # måste vara tomt
+git -C <repo_path> switch main                 # om den står på task-<N>
 git -C <repo_path> merge --no-ff task-<N>      # lokalt, ingen push
 git -C <repo_path> worktree remove ../<repo>-t<N>   # om en worktree fanns
 backlog --profile default label detach vantar-test --task TASK-N --as "ai:<modell>"
