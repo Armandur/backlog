@@ -208,6 +208,12 @@ Run every verification command listed in the description. Capture stdout/stderr 
 
 Use the `Agent` tool with `subagent_type: "general-purpose"` and a fully self-contained prompt. The Judge has no memory of this session.
 
+Ber du Judge visa att ett prov faller utan ändringen: skriv inte "kopiera
+worktreen med `cp -r`" i briefen. I en worktree är `.git` en fil som pekar in
+i huvudrepot, så kopian delar grenar och HEAD med originalet. En `checkout`
+där flyttar riktiga grenar. 2026-11-21 hamnade en commit så direkt på main
+(friction TASK-3859). Regeln i mallen nedan anger rätt väg.
+
 Judge prompt template (paste verbatim with substitutions):
 
 ```
@@ -233,6 +239,7 @@ Your job:
 
 Hard rules:
 - You are READ-ONLY. Do not edit files. Run only verification commands and read commands.
+- To run code without the change (for example to show that a new test fails on the old code), never copy the repo or a worktree with `cp -r`: in a worktree `.git` is a file pointing into the main repo, so a checkout in the copy moves real branches. Clone instead, which holds only committed state: `git clone -q --no-local --branch task-<N> <repo_path> "$(mktemp -d)/repo"`, copy the new test files in, and run there. Never run checkout, switch, reset or commit in <repo_path> or the worktree.
 - Be skeptical by default. A criterion is FAIL until evidence convincingly shows PASS.
 - If a criterion is unverifiable as written, FAIL it and explain what the criterion would need to say to be verifiable.
 - Do not move the task on the board. Return only the receipt.
