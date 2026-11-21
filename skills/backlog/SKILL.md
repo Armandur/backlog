@@ -200,6 +200,11 @@ backlog task update TASK-1 --assignee alice --source pentest-report
 backlog task update TASK-1 --due-date 2026-06-01
 ```
 
+`-d` vägrar ett tomt värde eller bara blanktecken och ändrar då ingenting.
+Ett misslyckat `$(...)` ger annars en tom beskrivning, och den gamla texten
+går inte att få tillbaka. Tömma beskrivningen gör du med
+`--clear-description`.
+
 ### Dependencies
 
 En task kan vänta på andra tasks. `task show` visar båda riktningarna med

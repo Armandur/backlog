@@ -294,6 +294,7 @@ func taskUpdateCmd() *cobra.Command {
 		dueDate     string
 		dependsOn   []string
 		noDependsOn []string
+		clearDesc   bool
 	)
 	cmd := &cobra.Command{
 		Use:   "update <id>",
@@ -305,7 +306,18 @@ func taskUpdateCmd() *cobra.Command {
 			if cmd.Flags().Changed("title") {
 				in.Title = &title
 			}
-			if cmd.Flags().Changed("description") {
+			// An empty -d usually means a failed $(...) in the caller, and the
+			// old text cannot be recovered, so emptying needs its own flag.
+			if clearDesc {
+				if cmd.Flags().Changed("description") {
+					return fmt.Errorf("--clear-description cannot be combined with --description")
+				}
+				empty := ""
+				in.Description = &empty
+			} else if cmd.Flags().Changed("description") {
+				if strings.TrimSpace(description) == "" {
+					return fmt.Errorf("--description is empty; nothing was changed. Use --clear-description to remove the description")
+				}
 				in.Description = &description
 			}
 			if cmd.Flags().Changed("type") {
@@ -353,7 +365,8 @@ func taskUpdateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&title, "title", "t", "", "new title")
-	cmd.Flags().StringVarP(&description, "description", "d", "", "new description")
+	cmd.Flags().StringVarP(&description, "description", "d", "", "new description (refuses an empty value)")
+	cmd.Flags().BoolVar(&clearDesc, "clear-description", false, "remove the description")
 	cmd.Flags().StringVar(&taskType, "type", "", "new type")
 	cmd.Flags().StringVar(&status, "status", "", "new status")
 	cmd.Flags().StringVar(&priority, "priority", "", "new priority")
