@@ -65,6 +65,10 @@ arbete.
 
   Kör ensam panel räcker det med grenen i huvudcheckouten. Står den redan på
   en annan tasks gren: ta en worktree.
+- **En ny worktree saknar det git ignorerar**, till exempel `.venv`,
+  `node_modules` och `.env`. Peka verifieringskommandot på huvudcheckoutens
+  miljö med absolut sökväg (`<repo_path>/.venv/bin/pytest`), eller bygg en
+  egen i worktreen. Skriv i rapporten vilken du använde.
 - **Bara taskens filer i commiten.** `git add <fil> ...`, aldrig `git add -A`
   eller `git add .`. Visar `git status` filer som inte hör till tasken: rör
   dem inte och ta inte med dem.
