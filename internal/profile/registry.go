@@ -40,25 +40,6 @@ func Add(name, path string) error {
 	return config.SaveGlobal(g)
 }
 
-// Upsert registers a profile, overwriting any existing entry with the same name.
-func Upsert(name, path string) error {
-	g, err := config.LoadGlobal()
-	if err != nil {
-		return err
-	}
-	g.Profiles[name] = config.Profile{Path: filepath.Clean(path)}
-	return config.SaveGlobal(g)
-}
-
-// HasDefault reports whether a default profile is configured.
-func HasDefault() (bool, error) {
-	g, err := config.LoadGlobal()
-	if err != nil {
-		return false, err
-	}
-	return g.DefaultProfile != "", nil
-}
-
 // Remove deletes a profile from the registry (does not touch the DB).
 func Remove(name string) error {
 	g, err := config.LoadGlobal()

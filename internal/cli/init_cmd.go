@@ -50,6 +50,15 @@ Use --path to store it elsewhere (e.g. a project directory or a separate git rep
 				}
 			}
 
+			lock, err := profile.LockInit()
+			if err != nil {
+				return fmt.Errorf("lock profile registry: %w", err)
+			}
+			defer lock.Close()
+			if err := profile.CheckInitPath(profileName, workspaceDir); err != nil {
+				return err
+			}
+
 			dirExisted := false
 			if info, err := os.Stat(workspaceDir); err == nil {
 				if !info.IsDir() {
@@ -109,29 +118,9 @@ Use --path to store it elsewhere (e.g. a project directory or a separate git rep
 				return fmt.Errorf("write config: %w", err)
 			}
 
-			// Register profile (overwrite if exists)
-			if err := profile.Upsert(profileName, workspaceDir); err != nil {
+			isDefault, err := profile.RegisterInit(profileName, workspaceDir, setDefault)
+			if err != nil {
 				return fmt.Errorf("register profile: %w", err)
-			}
-
-			// Set as default if requested or if no default exists yet
-			isDefault := false
-			if setDefault {
-				if err := profile.SetDefault(profileName); err != nil {
-					return fmt.Errorf("set default profile: %w", err)
-				}
-				isDefault = true
-			} else {
-				hasDefault, err := profile.HasDefault()
-				if err != nil {
-					return fmt.Errorf("check default profile: %w", err)
-				}
-				if !hasDefault {
-					if err := profile.SetDefault(profileName); err != nil {
-						return fmt.Errorf("set default profile: %w", err)
-					}
-					isDefault = true
-				}
 			}
 
 			out := output.New(flagJSON, flagQuiet)
