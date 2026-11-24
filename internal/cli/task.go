@@ -297,9 +297,10 @@ func taskUpdateCmd() *cobra.Command {
 		clearDesc   bool
 	)
 	cmd := &cobra.Command{
-		Use:   "update <id>",
-		Short: "Update a task",
-		Args:  cobra.ExactArgs(1),
+		Use:     "update <id>",
+		Aliases: []string{"edit"},
+		Short:   "Update a task (alias: edit)",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			svc := newTaskSvc()
 			in := models.UpdateTaskInput{}

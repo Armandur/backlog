@@ -132,3 +132,29 @@ func TestTaskDependenciesThroughCLI(t *testing.T) {
 		t.Fatal("--ready --status doing was accepted")
 	}
 }
+
+// TestTaskEditAliasThroughCLI: task edit är alias för task update och tar
+// samma beroendeflaggor.
+func TestTaskEditAliasThroughCLI(t *testing.T) {
+	base := cliEnv(t)
+	for _, title := range []string{"A", "B"} {
+		if _, err := runCLI(t, append(base, "task", "add", "--title", title, "--project", "proj")...); err != nil {
+			t.Fatalf("task add %s: %v", title, err)
+		}
+	}
+	if _, err := runCLI(t, append(base, "task", "edit", "TASK-2", "--depends-on", "TASK-1")...); err != nil {
+		t.Fatalf("task edit --depends-on: %v", err)
+	}
+	var b depTask
+	runJSON(t, base, &b, "task", "show", "TASK-2")
+	if len(b.DependsOn) != 1 || b.DependsOn[0].Seq != 1 {
+		t.Fatalf("TASK-2 depends_on = %+v, want TASK-1", b.DependsOn)
+	}
+	if _, err := runCLI(t, append(base, "task", "edit", "TASK-2", "--no-depends-on", "TASK-1")...); err != nil {
+		t.Fatalf("task edit --no-depends-on: %v", err)
+	}
+	runJSON(t, base, &b, "task", "show", "TASK-2")
+	if len(b.DependsOn) != 0 {
+		t.Fatalf("TASK-2 depends_on = %+v, want empty", b.DependsOn)
+	}
+}
