@@ -215,6 +215,7 @@ fälten i JSON, som tom lista när inget finns.
 ```sh
 backlog task update TASK-5 --depends-on TASK-3 --depends-on TASK-4 --as ai:<modell>
 backlog task update TASK-5 --no-depends-on TASK-4 --as ai:<modell>
+# task edit är alias för task update och tar samma flaggor
 backlog task add -p api -t "Import" --depends-on TASK-3 --as ai:<modell>
 backlog task list --project api --ready --json
 ```
